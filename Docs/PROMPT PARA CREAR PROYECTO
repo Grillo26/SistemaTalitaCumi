@@ -1,0 +1,73 @@
+# ROL
+Eres un ingeniero DevOps/Full‑Stack senior. Debes crear desde cero el esqueleto completo del proyecto **sistema-talitacumi** (Laravel + Angular + PostgreSQL), dockerizarlo y dejarlo listo para ejecutarse con un solo comando en **Docker Desktop**.
+
+# RUTAS (obligatorias, no cambiar)
+- Raíz del proyecto: `/home/grilloportatil/Programing/TalitaCumi/`
+- Backend (Laravel): `/home/grilloportatil/Programing/TalitaCumi/backend/`
+- Frontend (Angular): `/home/grilloportatil/Programing/TalitaCumi/frontend/`
+
+
+# NOMBRE DEL PROYECTO EN DOCKER DESKTOP
+El stack debe aparecer en Docker Desktop (pestaña Containers) agrupado con el nombre **`sistema-talitacumi`**.
+- En el `docker-compose.yml` define al inicio: `name: sistema-talitacumi`
+- Nombres de contenedor: `sistema-talitacumi-backend`, `sistema-talitacumi-frontend`, `sistema-talitacumi-db`, `sistema-talitacumi-nginx` (si aplica), `sistema-talitacumi-pgadmin` (opcional, solo si lo pido).
+- Red: `sistema-talitacumi-net`. Volúmenes nombrados con el prefijo `sistema-talitacumi-`.
+
+# STACK
+- Backend: Laravel (última versión estable) con PHP 8.3 FPM, Composer 2.
+- Frontend: Angular (última versión estable), Node 20/22 LTS, Angular CLI.
+- Base de datos: PostgreSQL 16.
+- Servidor web: Nginx como reverse proxy (sirve la API de Laravel y el frontend).
+- Idioma de la app: español; zona horaria `America/La_Paz`; moneda Bs.
+
+# TAREAS
+
+## 1. Crear los proyectos
+1. En `backend/`: crear un proyecto Laravel con Composer (`composer create-project laravel/laravel .`). Instalar Laravel Sanctum para autenticación por token y `spatie/laravel-permission` para roles y permisos. Configurar `APP_LOCALE=es`, `APP_TIMEZONE=America/La_Paz`.
+2. En `frontend/`: crear un proyecto Angular con Angular CLI (`ng new` con routing y SCSS, sin SSR), standalone components. Configurar `environment` con la URL base de la API. Dejar una pantalla inicial que llame a un endpoint `/api/health` del backend y muestre "Backend conectado".
+3. En el backend, crear el endpoint `GET /api/health` que devuelva JSON con estado de la app y de la conexión a la BD. Configurar CORS para el origen del frontend.
+
+## 2. Dockerización
+Crear estos archivos:
+
+- `/home/grilloportatil/Programing/TalitaCumi/docker-compose.yml` (con `name: sistema-talitacumi`)
+- `/home/grilloportatil/Programing/TalitaCumi/.env` y `.env.example` (variables del stack)
+- `backend/Dockerfile` (multi‑stage: dependencias con Composer, imagen final php-fpm con extensiones `pdo_pgsql`, `pgsql`, `mbstring`, `bcmath`, `gd`, `zip`, `intl`, `opcache`)
+- `frontend/Dockerfile` (multi‑stage: build con Node y servir con Nginx para producción; stage `dev` con `ng serve --host 0.0.0.0` para desarrollo)
+- `docker/nginx/default.conf` (proxy `/api` → php-fpm del backend, resto → frontend)
+- `backend/.dockerignore` y `frontend/.dockerignore`
+- `backend/docker/entrypoint.sh`: espera a que Postgres esté listo, genera `APP_KEY` si falta, ejecuta `php artisan migrate --force`, `php artisan storage:link` y arranca php-fpm.
+
+Requisitos del compose:
+- Servicio `db` con PostgreSQL 16, volumen persistente, `healthcheck` (`pg_isready`) y los backends con `depends_on: condition: service_healthy`.
+- **Puerto de Postgres publicado en el host: `5433:5432`** (el 5432 de mi máquina ya está ocupado). Dentro de la red de Docker el backend se conecta a `db:5432`.
+- Puertos del host: frontend/nginx en `8080`, API accesible por `http://localhost:8080/api`. Si algún puerto está ocupado, hazlo configurable desde `.env`.
+- Montar el código como bind mount en desarrollo (hot reload en Angular, código vivo en Laravel) y usar volumen para `vendor` y `node_modules` para evitar problemas de permisos y rendimiento.
+- Resolver permisos de `storage/` y `bootstrap/cache` (usuario con UID/GID configurable por `.env`, ya que trabajo en Linux).
+- `restart: unless-stopped` en todos los servicios.
+
+## 3. Empaquetado
+- Crear un `Makefile` en la raíz con los comandos: `make up`, `make down`, `make build`, `make logs`, `make migrate`, `make seed`, `make shell-backend`, `make shell-frontend`, `make reset` (baja todo y borra volúmenes).
+- Crear un `README.md` en la raíz en español con: requisitos, cómo levantar (`docker compose up -d --build`), URLs, credenciales de BD de desarrollo, cómo ejecutar migraciones, y cómo ver el proyecto `sistema-talitacumi` en Docker Desktop.
+- Crear un `.gitignore` raíz adecuado (vendor, node_modules, .env, dist, storage logs).
+- Inicializar git en la raíz si no existe (sin hacer push).
+
+## 4. Verificación (obligatoria antes de terminar)
+Ejecuta y reporta el resultado real de cada paso:
+1. `docker compose config` sin errores.
+2. `docker compose up -d --build` termina correctamente.
+3. `docker compose ps` muestra todos los contenedores `running/healthy` bajo el proyecto `sistema-talitacumi`.
+4. `curl http://localhost:8080/api/health` devuelve JSON con la BD conectada.
+5. `http://localhost:8080` carga la app Angular y muestra "Backend conectado".
+6. `php artisan migrate:status` funciona dentro del contenedor.
+
+Si algo falla, diagnostica con `docker compose logs`, corrige y vuelve a probar hasta que todo pase.
+
+# REGLAS
+- No uses `latest` en las imágenes: fija versiones.
+- No pongas secretos reales en el repositorio; usa `.env.example` con valores de ejemplo.
+- No modifiques nada fuera de `/home/grilloportatil/Programing/TalitaCumi/`.
+- Explica brevemente cada decisión importante y al final entrega un resumen con: árbol de archivos creados, comandos para levantar/bajar el sistema, URLs y puertos.
+
+# ENTREGABLE FINAL
+estructura de carpetas, comandos para usar 

@@ -1,0 +1,138 @@
+name: sistema-talitacumi
+
+services:
+  db:
+    image: postgres:16.16-alpine3.24
+    container_name: sistema-talitacumi-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-talitacumi}
+      POSTGRES_USER: ${POSTGRES_USER:-talitacumi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-talitacumi_dev_password}
+      TZ: ${APP_TIMEZONE:-America/La_Paz}
+      PGTZ: ${APP_TIMEZONE:-America/La_Paz}
+    volumes:
+      - sistema-talitacumi-db-data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - sistema-talitacumi-net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    container_name: sistema-talitacumi-backend
+    user: "${UID:-1000}:${GID:-1000}"
+    working_dir: /var/www/html
+    volumes:
+      - ./backend:/var/www/html
+      - sistema-talitacumi-vendor:/var/www/html/vendor
+    environment:
+      APP_NAME: ${APP_NAME:-TalitaCumi}
+      APP_ENV: ${APP_ENV:-local}
+      APP_DEBUG: ${APP_DEBUG:-true}
+      APP_URL: ${APP_URL:-http://localhost:8080}
+      APP_LOCALE: ${APP_LOCALE:-es}
+      APP_FALLBACK_LOCALE: ${APP_FALLBACK_LOCALE:-en}
+      APP_TIMEZONE: ${APP_TIMEZONE:-America/La_Paz}
+      APP_CURRENCY: ${APP_CURRENCY:-BOB}
+      APP_CURRENCY_SYMBOL: ${APP_CURRENCY_SYMBOL:-Bs}
+      TZ: ${APP_TIMEZONE:-America/La_Paz}
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_DATABASE: ${POSTGRES_DB:-talitacumi}
+      DB_USERNAME: ${POSTGRES_USER:-talitacumi}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-talitacumi_dev_password}
+      SESSION_DRIVER: file
+      CACHE_STORE: file
+      QUEUE_CONNECTION: sync
+      LOG_CHANNEL: stderr
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8080,http://localhost:4200}
+      SANCTUM_STATEFUL_DOMAINS: ${SANCTUM_STATEFUL_DOMAINS:-localhost:8080,localhost:4200,127.0.0.1:8080}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "php -r 'exit(@fsockopen(\"127.0.0.1\", 9000) ? 0 : 1);'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
+    restart: unless-stopped
+    networks:
+      - sistema-talitacumi-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: dev
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    container_name: sistema-talitacumi-frontend
+    user: "${UID:-1000}:${GID:-1000}"
+    working_dir: /app
+    environment:
+      HOME: /tmp
+      NG_CLI_ANALYTICS: "false"
+    volumes:
+      - ./frontend:/app
+      - sistema-talitacumi-node-modules:/app/node_modules
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:4200/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - sistema-talitacumi-net
+
+  nginx:
+    image: nginx:1.30.7-alpine3.24-slim
+    container_name: sistema-talitacumi-nginx
+    ports:
+      - "${APP_PORT:-8080}:80"
+    volumes:
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - sistema-talitacumi-net
+
+networks:
+  sistema-talitacumi-net:
+    name: sistema-talitacumi-net
+    driver: bridge
+
+volumes:
+  sistema-talitacumi-db-data:
+    name: sistema-talitacumi-db-data
+  sistema-talitacumi-vendor:
+    name: sistema-talitacumi-vendor
+  sistema-talitacumi-node-modules:
+    name: sistema-talitacumi-node-modules
