@@ -23,9 +23,9 @@
       class="inline-flex"
     >
       @if (isVisible$ | async) {
-        <app-brand-logo size="sm" />
+        <app-brand-logo size="lg" />
       } @else {
-        <app-brand-logo size="sm" [compact]="true" [showTagline]="false" />
+        <app-brand-logo [compact]="true" />
       }
     </a>
   </div>

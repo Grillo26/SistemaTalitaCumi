@@ -129,7 +129,8 @@ No aparecen en el menú principal. Se acceden por URL y sirven como material de 
 ```text
 frontend/
 ├── public/
-│   ├── favicon.svg
+│   ├── favicon.ico
+│   ├── favicon.png
 │   └── images/
 │       ├── error/
 │       ├── shape/
@@ -228,19 +229,31 @@ frontend/
 **Selector:** `app-brand-logo`
 **Archivo:** `src/app/shared/components/common/brand-logo/brand-logo.component.ts`
 
+Muestra el logo oficial de TalitaCumi (`public/images/logos/`) dentro de una tarjeta blanca, para que se vea bien en modo claro, oscuro y en el panel morado del login.
+
 **Inputs:**
 
 | Input | Tipo | Default | Descripción |
 |---|---|---|---|
-| `variant` | `'default' \| 'light'` | `'default'` | Versión para fondos claros u oscuros |
-| `compact` | `boolean` | `false` | Muestra solo el isotipo |
-| `showTagline` | `boolean` | `true` | Muestra “Sistema de Gestión” |
-| `size` | `'sm' \| 'md'` | `'md'` | Tamaño del logo |
+| `compact` | `boolean` | `false` | Muestra solo el isotipo (sidebar colapsado) |
+| `size` | `'sm' \| 'md' \| 'lg'` | `'md'` | Altura del logo: 48, 72 o 104 px (isotipo: 32, 40 o 52 px) |
 
 ```html
-<app-brand-logo />
-<app-brand-logo variant="light" [compact]="true" />
+<app-brand-logo size="lg" />
+<app-brand-logo [compact]="true" />
 ```
+
+Archivos de imagen:
+
+| Archivo | Uso |
+|---|---|
+| `logo-talitacumi.png` | Original (no se usa en la web) |
+| `logo-talitacumi-web.png` | Logo completo para la web (800 px) |
+| `logo-talitaCumi-isotipo.png` | Isotipo original |
+| `logo-talitacumi-isotipo-web.png` | Isotipo para la web (256 px) |
+| `public/favicon.png` y `favicon.ico` | Favicon generado a partir del isotipo |
+
+Para cambiar el logo, reemplaza los archivos `-web.png` manteniendo el mismo nombre (o regenera los derivados desde los originales).
 
 ---
 
