@@ -46,10 +46,13 @@ No se dibujan las relaciones con `sucursal` ni con `usuario` en todas las tablas
 erDiagram
     sucursal {
         bigint id PK
+        varchar codigo UK
         varchar nombre
         varchar direccion
         varchar telefono
+        varchar email
         boolean activo
+        integer version
     }
     rol {
         bigint id PK
@@ -561,11 +564,15 @@ erDiagram
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `nombre` | `varchar(150)` |  |  |  |
+| `codigo` | `varchar(50)` |  | `UNIQUE` funcional | Único sin distinguir mayúsculas ni espacios externos |
+| `nombre` | `varchar(150)` |  | `UNIQUE` funcional | Único sin distinguir mayúsculas ni espacios externos |
 | `direccion` | `text` | sí |  |  |
 | `telefono` | `varchar(30)` | sí |  |  |
 | `email` | `varchar(150)` | sí |  |  |
-| `activo` | `boolean` |  | `DEFAULT true` |  |
+| `activo` | `boolean` |  | `DEFAULT true` | Estado vigente: activa/inactiva |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
+
+Índices: `UNIQUE ((lower(trim(codigo))))`, `UNIQUE ((lower(trim(nombre))))`. Los espacios internos se normalizan en la aplicación antes de guardar.
 
 Timestamps: `created_at`, `updated_at`.
 
@@ -672,6 +679,8 @@ Timestamps: solo `created_at`.
 | `created_at` | `timestamptz` |  | `DEFAULT now()` |  |
 
 Índices: `(usuario_id)`, `(created_at)`, `(entidad, entidad_id)`, `(accion)`. Trigger `BEFORE UPDATE OR DELETE` que lanza error. Sin `updated_at`.
+
+> **Implementación actual (módulo 01):** mientras el módulo 02 no cree la tabla `usuario`, la migración de `bitacora` referencia `users.id` (tabla real de autenticación de Laravel). Al implementar el módulo 02 se migrará la FK a `usuario`.
 
 #### `acceso_clinico_temporal` — Acceso especial a contenido clínico
 

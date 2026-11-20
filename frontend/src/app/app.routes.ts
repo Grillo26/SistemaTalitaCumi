@@ -79,6 +79,13 @@ export const routes: Routes = [
         component: ConfiguracionComponent,
         title: 'Configuración | TalitaCumi',
       },
+      {
+        path: 'organizacion/sucursales',
+        loadChildren: () =>
+          import('./pages/organizacion/sucursales/sucursales.routes').then(
+            (m) => m.SUCURSALES_ROUTES,
+          ),
+      },
 
       // Páginas de referencia de componentes reutilizables (fuera del menú).
       {

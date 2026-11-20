@@ -24,5 +24,7 @@ class DatabaseSeeder extends Seeder
                 'guard_name' => 'web',
             ]);
         }
+
+        $this->call(OrganizacionSucursalesPermissionSeeder::class);
     }
 }

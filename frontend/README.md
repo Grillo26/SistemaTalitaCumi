@@ -87,8 +87,9 @@ Todas las rutas están dentro del layout principal y protegidas por `authGuard`.
 | `/profesionales` | Profesionales |
 | `/inventario` | Inventario |
 | `/configuracion` | Configuración |
+| `/organizacion/sucursales` | Organización y sucursales |
 
-Los módulos muestran un estado vacío reutilizable (`app-module-placeholder`) hasta que se implementen.
+Los módulos sin implementar muestran un estado vacío reutilizable (`app-module-placeholder`). La ruta `/organizacion/sucursales` ya está implementada y consume la API real del backend.
 
 ### Páginas de referencia
 
@@ -170,6 +171,8 @@ frontend/
 │   │   │   ├── inscripciones/
 │   │   │   ├── inventario/
 │   │   │   ├── other-page/
+│   │   │   ├── organizacion/
+│   │   │   │   └── sucursales/
 │   │   │   ├── pacientes/
 │   │   │   ├── pagos/
 │   │   │   ├── profesionales/
@@ -600,6 +603,48 @@ Inputs: `title`, `description`. Estado vacío de los módulos pendientes.
 
 ---
 
+### 19. Organización y sucursales
+
+**Ruta:** `/organizacion/sucursales`
+**Entrada de sidebar:** `Organización`
+**Archivos:**
+
+- `src/app/pages/organizacion/sucursales/sucursales.page.ts`
+- `src/app/pages/organizacion/sucursales/sucursales.page.html`
+- `src/app/pages/organizacion/sucursales/sucursales.routes.ts`
+- `src/app/pages/organizacion/sucursales/sucursales.service.ts`
+- `src/app/pages/organizacion/sucursales/sucursales.models.ts`
+
+**API consumida:**
+
+| Método | Endpoint | Acción |
+|---|---|---|
+| GET | `/api/organizacion/sucursales` | Listado paginado con búsqueda, estado, orden y paginación |
+| GET | `/api/organizacion/sucursales/{id}` | Ficha de sucursal |
+| POST | `/api/organizacion/sucursales` | Alta |
+| PATCH | `/api/organizacion/sucursales/{id}` | Edición de datos/contacto |
+| POST | `/api/organizacion/sucursales/{id}/activar` | Activación con motivo |
+| POST | `/api/organizacion/sucursales/{id}/desactivar` | Desactivación con motivo |
+
+**Funcionalidad:**
+
+- Listado paginado con búsqueda por código o nombre, filtro por estado, orden por columnas y paginación.
+- Ficha con datos, estado, fecha de creación y última modificación.
+- Alta y edición en diálogo; el formulario conserva lo digitado si falla la red.
+- Activación/desactivación con motivo obligatorio y advertencia de RN-003.
+- Sin eliminación física ni exportación PDF/Excel (RF-008 y RF-012 pendientes).
+- Errores `422` resaltados por campo, `409` de edición concurrente con opción de recargar, y `403`/`503` con alerta.
+
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-pagination`, `TABLE_IMPORTS`, `input[app-input]`, `app-select-field`, `textarea[app-textarea]`, `app-switch` y `ToastService`. Los diálogos son overlays Tailwind dentro de la página; no se agregó una primitiva compartida de modal.
+
+**Permisos y alcance:** la API devuelve `can` (`create`, `update`, `update_contact`, `change_status`, `delete`) y la UI oculta las acciones no permitidas. No existe un guard de permisos en Angular; la seguridad real se valida en Laravel. Hasta que exista el módulo 02, Administración y Recepción reciben `503 MODULE_02_PENDING` por el contrato de alcance y la página muestra el error.
+
+**Autenticación:** `AuthService` sigue siendo simulado. Los endpoints requieren `auth:sanctum`; sin login real, la página mostrará `401` hasta el módulo 02. No se usan datos mock.
+
+**Estado:** RF-001 a RF-008, RF-011 y RF-013 implementados o parciales según el backend; RF-009, RF-010, RF-012 y el alcance por usuario quedan pendientes.
+
+---
+
 ## Paleta de colores
 
 Definida en `src/styles.css` dentro de `@theme`.
@@ -641,7 +686,7 @@ No se agregaron `swiper` ni `jsvectormap` porque sus componentes no forman parte
 - FAQs, Pricing Tables, File Manager.
 - Tasks y Kanban.
 - Coming Soon.
-- Carrusel, mapas vectoriales, avatares, modales, tabs, drawer, popovers y demás componentes no solicitados.
+- Carrusel, mapas vectoriales, avatares, modales compartidos, tabs, drawer, popovers y demás componentes no solicitados. La página de sucursales usa overlays Tailwind propios.
 - Registro, recuperación de contraseña y verificación en dos pasos.
 - Widget promocional del sidebar.
 
@@ -666,5 +711,7 @@ No se ejecutó `ng serve` ni se levantó el servidor.
 - Se usa la sintaxis moderna `@if` / `@for`.
 - El layout y las rutas están preparados para implementar cada módulo de forma independiente.
 - El login y la sesión son simulados; al conectar Laravel se debe reemplazar `AuthService` por una implementación real.
-- No se modificó Docker ni el backend.
+- La página `/organizacion/sucursales` ya consume la API real; mientras no exista login (módulo 02), la API responderá `401`. Administración y Recepción recibirán `503` por el contrato de alcance pendiente.
+- No se agregaron datos mock ni dependencias nuevas para sucursales.
+- `npm run build` se ejecutó correctamente después de implementar el módulo.
 - No se realizó commit.
