@@ -43,3 +43,15 @@ frontend/out-tsc/
 *.iml
 .DS_Store
 Thumbs.db
+
+# ============================================================
+# Documentación de base de datos (local)
+# ============================================================
+backend/database/databas.md
+backend/database/talitacumi_schema.sql
+
+# ============================================================
+# Documentación del proyecto
+# ============================================================
+docs/
+

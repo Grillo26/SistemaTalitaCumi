@@ -1,0 +1,102 @@
+<aside
+  class="fixed top-0 start-0 z-50 flex h-screen flex-col border-e border-gray-200 bg-white px-5 text-gray-900 transition-all duration-300 ease-in-out dark:border-gray-800 dark:bg-gray-900 xl:translate-x-0"
+  [ngClass]="{
+    'w-[290px]': (isVisible$ | async),
+    'w-[90px]': !(isVisible$ | async),
+    'translate-x-0': (isMobileOpen$ | async),
+    'max-xl:-translate-x-full max-xl:rtl:translate-x-full': !(isMobileOpen$ | async)
+  }"
+  (mouseenter)="onSidebarMouseEnter()"
+  (mouseleave)="sidebarService.setHovered(false)"
+>
+  <div
+    class="flex py-8"
+    [ngClass]="{
+      'xl:justify-center': !(isVisible$ | async),
+      'justify-start': (isVisible$ | async)
+    }"
+  >
+    <a
+      routerLink="/"
+      (click)="closeMobile()"
+      aria-label="TalitaCumi — Ir al inicio"
+      class="inline-flex"
+    >
+      @if (isVisible$ | async) {
+        <app-brand-logo size="sm" />
+      } @else {
+        <app-brand-logo size="sm" [compact]="true" [showTagline]="false" />
+      }
+    </a>
+  </div>
+
+  <div class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar">
+    <nav class="mb-6">
+      <div class="flex flex-col gap-4">
+        <div>
+          <h2
+            class="mb-4 flex text-xs uppercase leading-[20px] text-gray-400"
+            [ngClass]="{
+              'xl:justify-center': !(isVisible$ | async),
+              'justify-start': (isVisible$ | async)
+            }"
+          >
+            @if (isVisible$ | async) {
+              Menú
+            } @else {
+              <svg class="size-6" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  fill-rule="evenodd"
+                  clip-rule="evenodd"
+                  d="M5.999 10.245a1.75 1.75 0 1 1 0 3.51 1.75 1.75 0 0 1 0-3.51Zm6 0a1.75 1.75 0 1 1 0 3.51 1.75 1.75 0 0 1 0-3.51Zm6 0a1.75 1.75 0 1 1 0 3.51 1.75 1.75 0 0 1 0-3.51Z"
+                  fill="currentColor"
+                />
+              </svg>
+            }
+          </h2>
+
+          <ul class="flex flex-col gap-1">
+            @for (nav of navItems; track nav.path) {
+              <li>
+                <a
+                  [routerLink]="nav.path"
+                  (click)="closeMobile()"
+                  class="group menu-item"
+                  [class.menu-item-active]="isActive(nav.path)"
+                  [class.menu-item-inactive]="!isActive(nav.path)"
+                  [ngClass]="{
+                    'xl:justify-center': !(isVisible$ | async),
+                    'xl:justify-start': (isVisible$ | async)
+                  }"
+                  [attr.aria-current]="isActive(nav.path) ? 'page' : null"
+                >
+                  <span
+                    class="menu-item-icon-size"
+                    [class.menu-item-icon-active]="isActive(nav.path)"
+                    [class.menu-item-icon-inactive]="!isActive(nav.path)"
+                    [innerHTML]="nav.icon | safeHtml"
+                  ></span>
+
+                  @if (isVisible$ | async) {
+                    <span class="menu-item-text">{{ nav.name }}</span>
+                  }
+                </a>
+              </li>
+            }
+          </ul>
+        </div>
+      </div>
+    </nav>
+
+    @if (isVisible$ | async) {
+      <div class="mt-auto border-t border-gray-100 py-5 dark:border-gray-800">
+        <p class="text-xs text-gray-400 dark:text-gray-500">
+          TalitaCumi · Gestión infantil
+        </p>
+        <p class="mt-1 text-[11px] text-gray-400 dark:text-gray-600">
+          v0.1 · Demo
+        </p>
+      </div>
+    }
+  </div>
+</aside>

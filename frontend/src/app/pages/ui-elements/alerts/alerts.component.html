@@ -1,0 +1,59 @@
+<app-page-breadcrumb pageTitle="Alertas y toasts" />
+<div class="space-y-5 sm:space-y-6">
+  <div>
+    <app-component-card title="Alerta por defecto">
+      <app-default-alert />
+    </app-component-card>
+  </div>
+
+  <div>
+    <app-component-card title="Alerta de éxito">
+      <app-success-alert />
+    </app-component-card>
+  </div>
+
+  <div>
+    <app-component-card title="Alerta de advertencia">
+      <app-warning-alert />
+    </app-component-card>
+  </div>
+
+  <div>
+    <app-component-card title="Alerta de error">
+      <app-error-alert />
+    </app-component-card>
+  </div>
+
+  <div>
+    <app-component-card title="Alerta informativa">
+      <app-info-alert />
+    </app-component-card>
+  </div>
+
+  <div>
+    <app-component-card
+      title="Toasts"
+      desc="Notificaciones flotantes creadas con ToastService."
+    >
+      <div class="flex flex-wrap gap-3">
+        <button app-button type="button" (click)="showSuccess()">
+          Toast de éxito
+        </button>
+        <button app-button type="button" variant="outline" (click)="showInfo()">
+          Toast informativo
+        </button>
+        <button app-button type="button" variant="outline" (click)="showWarning()">
+          Toast de advertencia
+        </button>
+        <button
+          app-button
+          type="button"
+          variant="destructive"
+          (click)="showError()"
+        >
+          Toast de error
+        </button>
+      </div>
+    </app-component-card>
+  </div>
+</div>
