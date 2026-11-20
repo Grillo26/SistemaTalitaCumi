@@ -1,0 +1,626 @@
+<div>
+  <app-page-breadcrumb pageTitle="Configuración" />
+
+  <div class="space-y-5 sm:space-y-6">
+    @if (error(); as apiError) {
+      <app-alert
+        variant="error"
+        title="No se pudo completar la operación"
+        [message]="apiError.message"
+      />
+    }
+
+    <app-component-card
+      title="Configuración general y parámetros"
+      desc="Consultá y actualizá los valores globales que usan la agenda, los pagos, los comprobantes y los reportes."
+    >
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <div class="relative w-full sm:w-72">
+            <span
+              class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-gray-400"
+              aria-hidden="true"
+            >
+              <svg class="size-5" viewBox="0 0 20 20" fill="none">
+                <path
+                  d="M14.382 14.383l3.325 3.326m-1.249-8.334a7.082 7.082 0 01-7.083 7.081 7.082 7.082 0 110-14.163 7.082 7.082 0 017.083 7.082z"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
+            <input
+              app-input
+              type="text"
+              [formControl]="searchControl"
+              class="ps-10"
+              placeholder="Buscar por clave o descripción..."
+              aria-label="Buscar parámetros"
+            />
+          </div>
+
+          <div class="w-full sm:w-60">
+            <app-select-field
+              [options]="categoryOptions"
+              [value]="categoryFilter()"
+              placeholder="Todas las categorías"
+              ariaLabel="Filtrar por categoría"
+              (valueChange)="onCategoryChange($event)"
+            />
+          </div>
+        </div>
+
+        <p class="text-sm text-gray-500 dark:text-gray-400">
+          {{ totalParameters() }} {{ totalParameters() === 1 ? 'parámetro' : 'parámetros' }}
+        </p>
+      </div>
+
+      @if (loading()) {
+        <div class="rounded-xl border border-gray-200 px-4 py-12 text-center text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">
+          Cargando configuración...
+        </div>
+      } @else if (groupedParameters().length === 0) {
+        <div class="rounded-xl border border-gray-200 px-4 py-12 text-center dark:border-gray-800">
+          <p class="text-base font-semibold text-gray-800 dark:text-white/90">No se encontraron parámetros</p>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Ajustá la búsqueda o el filtro por categoría.</p>
+        </div>
+      } @else {
+        <div class="space-y-6">
+          @for (group of groupedParameters(); track group.categoria) {
+            <section class="space-y-3" [attr.aria-labelledby]="'grupo-' + group.categoria">
+              <div class="flex flex-wrap items-center gap-2">
+                <h3
+                  [id]="'grupo-' + group.categoria"
+                  class="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+                >
+                  {{ group.label }}
+                </h3>
+                <app-badge color="light" variant="light" size="sm">
+                  {{ group.items.length }} {{ group.items.length === 1 ? 'parámetro' : 'parámetros' }}
+                </app-badge>
+              </div>
+
+              <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+                <table app-table class="min-w-full">
+                  <thead
+                    app-table-header
+                    class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900"
+                  >
+                    <tr app-table-row>
+                      <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Clave</th>
+                      <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Descripción</th>
+                      <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Valor vigente</th>
+                      <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Por defecto</th>
+                      <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Marcas</th>
+                      <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+                    @for (parameter of group.items; track parameter.id) {
+                      <tr app-table-row class="hover:bg-gray-50/70 dark:hover:bg-white/[0.02]">
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                          <code class="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                            {{ parameter.clave }}
+                          </code>
+                        </td>
+                        <td app-table-cell class="max-w-md px-4 py-4 text-sm text-gray-600 dark:text-gray-300">
+                          {{ parameter.descripcion || '—' }}
+                        </td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm font-medium text-gray-800 dark:text-white/90">
+                          @if (parameter.clave === 'centro.logo') {
+                            {{ parameter.logo_url ? 'Logo cargado' : 'Sin logo' }}
+                          } @else {
+                            {{ valueWithUnit(parameter) }}
+                          }
+                        </td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                          {{ formatDefaultValue(parameter) }}
+                          @if (parameter.unidad && formatDefaultValue(parameter) !== '—') {
+                            <span class="text-xs">{{ parameter.unidad }}</span>
+                          }
+                        </td>
+                        <td app-table-cell class="px-4 py-4">
+                          <div class="flex flex-wrap gap-1">
+                            @if (parameter.sensible) {
+                              <app-badge color="warning" variant="light" size="sm">Sensible</app-badge>
+                            }
+                            @if (!parameter.editable) {
+                              <app-badge color="gray" variant="light" size="sm">Solo lectura</app-badge>
+                            }
+                            @if (parameter.visible_recepcion) {
+                              <app-badge color="info" variant="light" size="sm">Recepción</app-badge>
+                            }
+                          </div>
+                        </td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-end">
+                          <div class="flex flex-wrap items-center justify-end gap-1">
+                            <button app-button variant="ghost" size="sm" type="button" (click)="openDetail(parameter)">
+                              Ver
+                            </button>
+                            @if (canEdit(parameter)) {
+                              <button app-button variant="ghost" size="sm" type="button" (click)="openEdit(parameter)">
+                                Editar
+                              </button>
+                            }
+                            @if (canRestore(parameter)) {
+                              <button app-button variant="ghost" size="sm" type="button" (click)="openRestore(parameter)">
+                                Restaurar
+                              </button>
+                            }
+                            @if (abilities().view_all) {
+                              <button app-button variant="ghost" size="sm" type="button" (click)="openHistory(parameter)">
+                                Historial
+                              </button>
+                            }
+                          </div>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          }
+        </div>
+      }
+
+      @if (!abilities().export) {
+        <p class="text-xs text-gray-400 dark:text-gray-500">
+          La exportación a PDF y Excel queda pendiente de infraestructura (RF-015).
+        </p>
+      }
+    </app-component-card>
+  </div>
+</div>
+
+<!-- Ficha del parámetro -->
+@if (detailOpen()) {
+  @if (selected(); as parameter) {
+    <div class="fixed inset-0 z-40 flex justify-end bg-gray-900/50 p-0 sm:p-4" (click)="closeDetail()">
+      <aside
+        class="flex h-full w-full max-w-2xl flex-col overflow-y-auto border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-800 dark:bg-gray-900 sm:rounded-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="parametro-detail-title"
+        (click)="$event.stopPropagation()"
+      >
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-xs font-medium uppercase tracking-wide text-gray-400">{{ parameter.categoria_label }}</p>
+            <h3 id="parametro-detail-title" class="mt-1 break-all text-xl font-semibold text-gray-900 dark:text-white">
+              {{ parameter.clave }}
+            </h3>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ parameter.descripcion || 'Sin descripción' }}</p>
+            <div class="mt-3 flex flex-wrap gap-1">
+              @if (parameter.sensible) {
+                <app-badge color="warning" variant="light" size="sm">Sensible</app-badge>
+              }
+              @if (!parameter.editable) {
+                <app-badge color="gray" variant="light" size="sm">Solo lectura</app-badge>
+              }
+              @if (parameter.visible_recepcion) {
+                <app-badge color="info" variant="light" size="sm">Visible para Recepción</app-badge>
+              }
+            </div>
+          </div>
+          <button app-button variant="ghost" size="icon-sm" type="button" ariaLabel="Cerrar ficha" (click)="closeDetail()">✕</button>
+        </div>
+
+        @if (detailLoading()) {
+          <p class="mt-6 text-sm text-gray-500 dark:text-gray-400">Cargando ficha...</p>
+        } @else {
+          <dl class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Tipo</dt>
+              <dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ parameter.tipo_label }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Unidad</dt>
+              <dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ parameter.unidad || '—' }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Valor vigente</dt>
+              <dd class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ valueWithUnit(parameter) }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Valor por defecto</dt>
+              <dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">
+                {{ formatDefaultValue(parameter) }}
+                @if (parameter.unidad && formatDefaultValue(parameter) !== '—') {
+                  {{ parameter.unidad }}
+                }
+              </dd>
+            </div>
+            <div>
+              <dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Rango permitido</dt>
+              <dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ rangeLabel(parameter) }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Última modificación</dt>
+              <dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ formatDate(parameter.updated_at) }}</dd>
+            </div>
+            <div class="sm:col-span-2">
+              <dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Versión</dt>
+              <dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ parameter.version }}</dd>
+            </div>
+          </dl>
+
+          @if (parameter.clave === 'centro.logo') {
+            <div class="mt-6 rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+              <h4 class="text-sm font-semibold text-gray-800 dark:text-white/90">Logo del centro</h4>
+
+              @if (parameter.logo_url) {
+                <img
+                  [src]="parameter.logo_url"
+                  alt="Logo actual del centro"
+                  class="mt-3 h-24 w-auto max-w-full rounded-lg border border-gray-200 bg-white object-contain p-2 dark:border-gray-700"
+                />
+              } @else {
+                <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Todavía no se cargó un logo.</p>
+              }
+
+              @if (canUploadLogo()) {
+                @if (logoError(); as message) {
+                  <app-alert variant="error" [message]="message" class="mt-3" />
+                }
+
+                <div class="mt-3 space-y-3">
+                  <input
+                    #logoInput
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    (change)="onLogoSelected($event)"
+                    aria-label="Seleccionar logo del centro"
+                    class="block w-full cursor-pointer rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-600 file:me-3 file:rounded-md file:border-0 file:bg-brand-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-brand-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:file:bg-brand-500/10 dark:file:text-brand-400"
+                  />
+
+                  <input
+                    app-input
+                    type="text"
+                    [value]="logoMotivo()"
+                    (input)="logoMotivo.set($any($event.target).value)"
+                    placeholder="Motivo del cambio (opcional)"
+                    aria-label="Motivo del cambio de logo"
+                  />
+
+                  <button
+                    app-button
+                    type="button"
+                    [disabled]="logoFile() === null || logoUploading()"
+                    (click)="uploadLogo()"
+                  >
+                    {{ logoUploading() ? 'Subiendo...' : 'Subir logo' }}
+                  </button>
+                </div>
+              }
+            </div>
+          }
+
+          <div class="mt-auto flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+            @if (canEdit(parameter)) {
+              <button app-button variant="outline" type="button" (click)="openEdit(parameter)">Editar</button>
+            }
+            @if (canRestore(parameter)) {
+              <button app-button variant="outline" type="button" (click)="openRestore(parameter)">Restaurar valor por defecto</button>
+            }
+            @if (abilities().view_all) {
+              <button app-button variant="outline" type="button" (click)="openHistory(parameter)">Historial</button>
+            }
+            <button app-button variant="outline" type="button" (click)="closeDetail()">Cerrar</button>
+          </div>
+        }
+      </aside>
+    </div>
+  }
+}
+
+<!-- Edición -->
+@if (editOpen()) {
+  @if (editing(); as parameter) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 p-4" (click)="closeEdit()">
+      <div
+        class="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-800 dark:bg-gray-900"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="parametro-edit-title"
+        (click)="$event.stopPropagation()"
+      >
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h3 id="parametro-edit-title" class="text-xl font-semibold text-gray-900 dark:text-white">Editar parámetro</h3>
+            <p class="mt-1 break-all text-sm text-gray-500 dark:text-gray-400">{{ parameter.clave }}</p>
+          </div>
+          <button app-button variant="ghost" size="icon-sm" type="button" ariaLabel="Cerrar edición" (click)="closeEdit()">✕</button>
+        </div>
+
+        <form class="mt-5 space-y-4" [formGroup]="editForm" (ngSubmit)="saveEdit()">
+          @if (editError(); as message) {
+            <app-alert variant="error" [message]="message" />
+          }
+
+          @if (editConcurrency()) {
+            <app-alert
+              variant="warning"
+              title="Conflicto de edición"
+              message="Otro usuario modificó este parámetro. Recargá los datos antes de volver a guardar."
+            />
+            <button app-button variant="outline" type="button" (click)="reloadEditConflict()">Recargar datos</button>
+          }
+
+          @if (parameter.sensible) {
+            <app-alert
+              variant="warning"
+              title="Parámetro sensible"
+              message="Este cambio requiere confirmación explícita y un motivo. Quedará registrado en la bitácora."
+            />
+          }
+
+          <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+            <p class="text-xs font-medium uppercase tracking-wide text-gray-400">Tipo esperado</p>
+            <p class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ typeHint(parameter.tipo) }}</p>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Rango: {{ rangeLabel(parameter) }}</p>
+          </div>
+
+          <div>
+            <label for="parametro-valor" class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Valor vigente
+            </label>
+
+            @if (parameter.tipo === 'booleano') {
+              <div class="flex items-center justify-between gap-4 rounded-xl border border-gray-200 p-3 dark:border-gray-800">
+                <span class="text-sm text-gray-700 dark:text-gray-300">
+                  {{ editForm.controls.valor.value ? 'Activado' : 'Desactivado' }}
+                </span>
+                <app-switch
+                  [checked]="!!editForm.controls.valor.value"
+                  (checkedChange)="editForm.controls.valor.setValue($event)"
+                  ariaLabel="Valor booleano del parámetro"
+                />
+              </div>
+            } @else if (parameter.tipo === 'hora') {
+              <app-parameter-time-input formControlName="valor" ariaLabel="Valor del parámetro (hora)" />
+            } @else if (parameter.tipo === 'entero' || parameter.tipo === 'decimal') {
+              <input
+                app-input
+                id="parametro-valor"
+                type="number"
+                formControlName="valor"
+                [step]="parameter.tipo === 'decimal' ? '0.01' : '1'"
+                [attr.min]="parameter.minimo"
+                [attr.max]="parameter.maximo"
+                [error]="fieldError('edit', 'valor') !== null"
+              />
+            } @else if (isLongText(parameter)) {
+              <textarea
+                app-textarea
+                id="parametro-valor"
+                rows="4"
+                formControlName="valor"
+                [error]="fieldError('edit', 'valor') !== null"
+              ></textarea>
+            } @else {
+              <input
+                app-input
+                id="parametro-valor"
+                type="text"
+                formControlName="valor"
+                [error]="fieldError('edit', 'valor') !== null"
+              />
+            }
+
+            @if (fieldError('edit', 'valor'); as message) {
+              <p class="mt-1 text-sm text-error-500">{{ message }}</p>
+            }
+          </div>
+
+          @if (parameter.sensible) {
+            <div class="space-y-3 rounded-xl border border-highlight-500/40 bg-highlight-500/10 p-4 dark:border-highlight-500/30 dark:bg-highlight-500/5">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <p class="text-sm font-medium text-gray-800 dark:text-white/90">Confirmo el cambio</p>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">La confirmación se revalida en el backend.</p>
+                </div>
+                <app-switch
+                  [checked]="editForm.controls.confirmado.value"
+                  (checkedChange)="editForm.controls.confirmado.setValue($event)"
+                  ariaLabel="Confirmar cambio sensible"
+                />
+              </div>
+              @if (fieldError('edit', 'confirmado'); as message) {
+                <p class="text-sm text-error-500">{{ message }}</p>
+              }
+
+              <div>
+                <label for="parametro-motivo" class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Motivo del cambio *
+                </label>
+                <textarea
+                  app-textarea
+                  id="parametro-motivo"
+                  rows="3"
+                  formControlName="motivo"
+                  [error]="fieldError('edit', 'motivo') !== null"
+                ></textarea>
+                @if (fieldError('edit', 'motivo'); as message) {
+                  <p class="mt-1 text-sm text-error-500">{{ message }}</p>
+                }
+              </div>
+            </div>
+          }
+
+          <div class="flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+            <button app-button variant="outline" type="button" [disabled]="saving()" (click)="closeEdit()">Cancelar</button>
+            <button app-button type="button" [disabled]="saving()" (click)="saveEdit()">
+              {{ saving() ? 'Guardando...' : 'Guardar' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+}
+
+<!-- Restauración -->
+@if (restoreOpen()) {
+  @if (restoreTarget(); as parameter) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 p-4" (click)="closeRestore()">
+      <div
+        class="w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-800 dark:bg-gray-900"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="parametro-restore-title"
+        (click)="$event.stopPropagation()"
+      >
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h3 id="parametro-restore-title" class="text-xl font-semibold text-gray-900 dark:text-white">Restaurar valor por defecto</h3>
+            <p class="mt-1 break-all text-sm text-gray-500 dark:text-gray-400">{{ parameter.clave }}</p>
+          </div>
+          <button app-button variant="ghost" size="icon-sm" type="button" ariaLabel="Cerrar restauración" (click)="closeRestore()">✕</button>
+        </div>
+
+        <div class="mt-5 space-y-3">
+          <p class="text-sm text-gray-600 dark:text-gray-300">
+            El valor vigente es <strong>{{ valueWithUnit(parameter) }}</strong> y volverá a
+            <strong>{{ formatDefaultValue(parameter) }}</strong>.
+          </p>
+
+          @if (restoreError(); as message) {
+            <app-alert variant="error" [message]="message" />
+          }
+
+          @if (restoreConcurrency()) {
+            <app-alert
+              variant="warning"
+              title="Conflicto de edición"
+              message="Otro usuario modificó este parámetro. Recargá los datos antes de continuar."
+            />
+            <button app-button variant="outline" type="button" (click)="reloadRestoreConflict()">Recargar datos</button>
+          }
+
+          @if (parameter.sensible) {
+            <app-alert
+              variant="warning"
+              title="Parámetro sensible"
+              message="La restauración requiere confirmación y motivo. Quedará registrada en la bitácora."
+            />
+
+            <div class="flex items-center justify-between gap-4 rounded-xl border border-highlight-500/40 p-3 dark:border-highlight-500/30">
+              <span class="text-sm text-gray-700 dark:text-gray-300">Confirmo la restauración</span>
+              <app-switch
+                [checked]="restoreForm.controls.confirmado.value"
+                (checkedChange)="restoreForm.controls.confirmado.setValue($event)"
+                ariaLabel="Confirmar restauración sensible"
+              />
+            </div>
+            @if (fieldError('restore', 'confirmado'); as message) {
+              <p class="text-sm text-error-500">{{ message }}</p>
+            }
+
+            <div>
+              <label for="restore-motivo" class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Motivo de la restauración *
+              </label>
+              <textarea
+                app-textarea
+                id="restore-motivo"
+                rows="3"
+                [formControl]="restoreForm.controls.motivo"
+                [error]="fieldError('restore', 'motivo') !== null"
+              ></textarea>
+              @if (fieldError('restore', 'motivo'); as message) {
+                <p class="mt-1 text-sm text-error-500">{{ message }}</p>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="mt-5 flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+          <button app-button variant="outline" type="button" [disabled]="restoring()" (click)="closeRestore()">Cancelar</button>
+          <button app-button type="button" [disabled]="restoring()" (click)="saveRestore()">
+            {{ restoring() ? 'Restaurando...' : 'Restaurar' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+}
+
+<!-- Historial -->
+@if (historyOpen()) {
+  <div class="fixed inset-0 z-50 flex justify-end bg-gray-900/50 p-0 sm:p-4" (click)="closeHistory()">
+    <aside
+      class="flex h-full w-full max-w-2xl flex-col overflow-y-auto border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-800 dark:bg-gray-900 sm:rounded-2xl"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="parametro-history-title"
+      (click)="$event.stopPropagation()"
+    >
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="text-xs font-medium uppercase tracking-wide text-gray-400">Historial de cambios</p>
+          <h3 id="parametro-history-title" class="mt-1 break-all text-xl font-semibold text-gray-900 dark:text-white">
+            {{ historyTarget()?.clave }}
+          </h3>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ historyTotal() }} registros en la bitácora.</p>
+        </div>
+        <button app-button variant="ghost" size="icon-sm" type="button" ariaLabel="Cerrar historial" (click)="closeHistory()">✕</button>
+      </div>
+
+      @if (historyError(); as message) {
+        <app-alert variant="error" [message]="message" class="mt-4" />
+      }
+
+      <div class="mt-5 flex-1 space-y-3">
+        @if (historyLoading()) {
+          <p class="text-sm text-gray-500 dark:text-gray-400">Cargando historial...</p>
+        } @else if (historyEntries().length === 0) {
+          <p class="text-sm text-gray-500 dark:text-gray-400">No hay registros para este parámetro.</p>
+        } @else {
+          @for (entry of historyEntries(); track entry.id) {
+            <article class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                  <app-badge [color]="historyBadgeColor(entry.accion)" variant="light" size="sm">
+                    {{ historyActionLabel(entry.accion) }}
+                  </app-badge>
+                  <span class="text-sm text-gray-500 dark:text-gray-400">{{ historyUser(entry) }}</span>
+                </div>
+                <span class="text-xs text-gray-400 dark:text-gray-500">{{ formatDate(entry.created_at) }}</span>
+              </div>
+
+              <div class="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
+                <div>
+                  <p class="text-xs font-medium uppercase tracking-wide text-gray-400">Valor anterior</p>
+                  <p class="mt-1 break-all text-gray-800 dark:text-gray-200">{{ historyValue(entry, 'before') }}</p>
+                </div>
+                <div>
+                  <p class="text-xs font-medium uppercase tracking-wide text-gray-400">Valor nuevo</p>
+                  <p class="mt-1 break-all text-gray-800 dark:text-gray-200">{{ historyValue(entry, 'after') }}</p>
+                </div>
+                <div>
+                  <p class="text-xs font-medium uppercase tracking-wide text-gray-400">Motivo</p>
+                  <p class="mt-1 text-gray-800 dark:text-gray-200">{{ entry.motivo || '—' }}</p>
+                </div>
+              </div>
+            </article>
+          }
+        }
+      </div>
+
+      <div class="mt-4 flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800">
+        <p class="text-sm text-gray-500 dark:text-gray-400">Página {{ historyPage() }} de {{ historyLastPage() }}</p>
+        @if (historyLastPage() > 1) {
+          <app-pagination
+            [currentPage]="historyPage()"
+            [totalPages]="historyLastPage()"
+            variant="text-icon"
+            (pageChange)="goToHistoryPage($event)"
+          />
+        }
+      </div>
+    </aside>
+  </div>
+}

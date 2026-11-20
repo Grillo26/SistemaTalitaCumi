@@ -1,0 +1,793 @@
+<div>
+  <app-page-breadcrumb pageTitle="Sucursales" />
+
+  <div class="space-y-5 sm:space-y-6">
+    @if (error(); as apiError) {
+      <app-alert
+        variant="error"
+        title="No se pudo completar la operación"
+        [message]="apiError.message"
+      />
+    }
+
+    <app-component-card
+      title="Gestión de sucursales"
+      desc="Administrá las sedes del centro, sus datos de contacto y su estado operativo."
+    >
+      <!-- Barra de búsqueda y filtros -->
+      <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div class="relative w-full sm:w-72">
+            <span
+              class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-gray-400"
+              aria-hidden="true"
+            >
+              <svg
+                class="size-5"
+                viewBox="0 0 20 20"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M14.382 14.383l3.325 3.326m-1.249-8.334a7.082 7.082 0 01-7.083 7.081 7.082 7.082 0 110-14.163 7.082 7.082 0 017.083 7.082z"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
+
+            <input
+              app-input
+              type="text"
+              [formControl]="searchControl"
+              class="ps-10"
+              placeholder="Buscar por código o nombre..."
+              aria-label="Buscar sucursales"
+            />
+          </div>
+
+          <div class="w-full sm:w-52">
+            <app-select-field
+              [options]="estadoOptions"
+              [value]="estado()"
+              placeholder="Todos los estados"
+              ariaLabel="Filtrar por estado"
+              (valueChange)="onEstadoChange($event)"
+            />
+          </div>
+        </div>
+
+        @if (canCreate()) {
+          <button app-button type="button" (click)="openCreate()">
+            Nueva sucursal
+          </button>
+        }
+      </div>
+
+      <!-- Tabla -->
+      <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+        <table app-table class="min-w-full">
+          <thead
+            app-table-header
+            class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900"
+          >
+            <tr app-table-row>
+              <th app-table-cell class="px-4 py-3 text-start">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300"
+                  (click)="sortBy('codigo')"
+                  [attr.aria-sort]="ariaSort('codigo')"
+                >
+                  Código
+                  <span aria-hidden="true">{{ sortIndicator('codigo') }}</span>
+                </button>
+              </th>
+
+              <th app-table-cell class="px-4 py-3 text-start">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300"
+                  (click)="sortBy('nombre')"
+                  [attr.aria-sort]="ariaSort('nombre')"
+                >
+                  Nombre
+                  <span aria-hidden="true">{{ sortIndicator('nombre') }}</span>
+                </button>
+              </th>
+
+              <th
+                app-table-cell
+                class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400"
+              >
+                Dirección
+              </th>
+
+              <th
+                app-table-cell
+                class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400"
+              >
+                Teléfono
+              </th>
+
+              <th
+                app-table-cell
+                class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400"
+              >
+                Email
+              </th>
+
+              <th app-table-cell class="px-4 py-3 text-start">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300"
+                  (click)="sortBy('activo')"
+                  [attr.aria-sort]="ariaSort('activo')"
+                >
+                  Estado
+                  <span aria-hidden="true">{{ sortIndicator('activo') }}</span>
+                </button>
+              </th>
+
+              <th app-table-cell class="px-4 py-3 text-start">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300"
+                  (click)="sortBy('updated_at')"
+                  [attr.aria-sort]="ariaSort('updated_at')"
+                >
+                  Última modificación
+                  <span aria-hidden="true">{{ sortIndicator('updated_at') }}</span>
+                </button>
+              </th>
+
+              <th
+                app-table-cell
+                class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400"
+              >
+                Acciones
+              </th>
+            </tr>
+          </thead>
+
+          <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+            @if (loading()) {
+              <tr app-table-row>
+                <td
+                  app-table-cell
+                  colspan="8"
+                  class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400"
+                >
+                  Cargando sucursales...
+                </td>
+              </tr>
+            } @else {
+              @for (branch of branches(); track branch.id) {
+                <tr
+                  app-table-row
+                  class="transition-colors hover:bg-gray-50/70 dark:hover:bg-white/[0.02]"
+                >
+                  <td
+                    app-table-cell
+                    class="whitespace-nowrap px-4 py-4 text-sm font-medium text-gray-800 dark:text-white/90"
+                  >
+                    {{ branch.codigo }}
+                  </td>
+
+                  <td app-table-cell class="px-4 py-4 text-sm text-gray-700 dark:text-gray-300">
+                    {{ branch.nombre }}
+                  </td>
+
+                  <td app-table-cell class="max-w-56 px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                    <span class="line-clamp-2">{{ branch.direccion || '—' }}</span>
+                  </td>
+
+                  <td
+                    app-table-cell
+                    class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400"
+                  >
+                    {{ branch.telefono || '—' }}
+                  </td>
+
+                  <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                    {{ branch.email || '—' }}
+                  </td>
+
+                  <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                    <app-badge
+                      [color]="branch.activo ? 'success' : 'gray'"
+                      variant="light"
+                      size="sm"
+                    >
+                      {{ branch.estado === 'activa' ? 'Activa' : 'Inactiva' }}
+                    </app-badge>
+                  </td>
+
+                  <td
+                    app-table-cell
+                    class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400"
+                  >
+                    {{ formatDate(branch.updated_at) }}
+                  </td>
+
+                  <td app-table-cell class="whitespace-nowrap px-4 py-4 text-end">
+                    <div class="flex flex-wrap items-center justify-end gap-1">
+                      <button
+                        app-button
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        (click)="openDetail(branch)"
+                      >
+                        Ver
+                      </button>
+
+                      @if (canEditStructural() || canEditContact()) {
+                        <button
+                          app-button
+                          variant="ghost"
+                          size="sm"
+                          type="button"
+                          (click)="openEdit(branch)"
+                        >
+                          Editar
+                        </button>
+                      }
+
+                      @if (canChangeStatus()) {
+                        @if (branch.activo) {
+                          <button
+                            app-button
+                            variant="link"
+                            size="sm"
+                            type="button"
+                            className="text-error-500 hover:text-error-600"
+                            (click)="openStatusDialog(branch, 'deactivate')"
+                          >
+                            Desactivar
+                          </button>
+                        } @else {
+                          <button
+                            app-button
+                            variant="ghost"
+                            size="sm"
+                            type="button"
+                            (click)="openStatusDialog(branch, 'activate')"
+                          >
+                            Activar
+                          </button>
+                        }
+                      }
+                    </div>
+                  </td>
+                </tr>
+              } @empty {
+                <tr app-table-row>
+                  <td app-table-cell colspan="8" class="px-4 py-12 text-center">
+                    <p class="text-base font-semibold text-gray-800 dark:text-white/90">
+                      No se encontraron sucursales
+                    </p>
+                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                      Ajustá la búsqueda o el filtro para encontrar lo que buscás.
+                    </p>
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pie de tabla -->
+      <div
+        class="flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800"
+      >
+        <p class="text-sm text-gray-500 dark:text-gray-400">
+          Mostrando {{ from() ?? 0 }}–{{ to() ?? 0 }} de {{ total() }} sucursales
+        </p>
+
+        @if (total() > 0) {
+          <app-pagination
+            [currentPage]="page()"
+            [totalPages]="lastPage()"
+            variant="text-icon"
+            (pageChange)="goToPage($event)"
+          />
+        }
+      </div>
+    </app-component-card>
+  </div>
+</div>
+
+<!-- Ficha de sucursal -->
+@if (detailOpen()) {
+  @if (selectedBranch(); as branch) {
+    <div
+      class="fixed inset-0 z-40 flex justify-end bg-gray-900/50 p-0 sm:p-4"
+      (click)="closeDetail()"
+    >
+      <aside
+        class="flex h-full w-full max-w-xl flex-col overflow-y-auto border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-800 dark:bg-gray-900 sm:rounded-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="branch-detail-title"
+        (click)="$event.stopPropagation()"
+      >
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-xs font-medium uppercase tracking-wide text-gray-400">
+              {{ branch.codigo }}
+            </p>
+            <h3
+              id="branch-detail-title"
+              class="mt-1 text-xl font-semibold text-gray-900 dark:text-white"
+            >
+              {{ branch.nombre }}
+            </h3>
+            <div class="mt-3">
+              <app-badge
+                [color]="branch.activo ? 'success' : 'gray'"
+                variant="light"
+                size="sm"
+              >
+                {{ branch.estado === 'activa' ? 'Activa' : 'Inactiva' }}
+              </app-badge>
+            </div>
+          </div>
+
+          <button
+            app-button
+            variant="ghost"
+            size="icon-sm"
+            type="button"
+            ariaLabel="Cerrar ficha"
+            (click)="closeDetail()"
+          >
+            ✕
+          </button>
+        </div>
+
+        <dl class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div class="sm:col-span-2">
+            <dt class="text-xs font-medium uppercase tracking-wide text-gray-400">
+              Dirección
+            </dt>
+            <dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">
+              {{ branch.direccion || '—' }}
+            </dd>
+          </div>
+
+          <div>
+            <dt class="text-xs font-medium uppercase tracking-wide text-gray-400">
+              Teléfono principal
+            </dt>
+            <dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">
+              {{ branch.telefono || '—' }}
+            </dd>
+          </div>
+
+          <div>
+            <dt class="text-xs font-medium uppercase tracking-wide text-gray-400">
+              Email
+            </dt>
+            <dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">
+              {{ branch.email || '—' }}
+            </dd>
+          </div>
+
+          <div>
+            <dt class="text-xs font-medium uppercase tracking-wide text-gray-400">
+              Creada
+            </dt>
+            <dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">
+              {{ formatDate(branch.created_at) }}
+            </dd>
+          </div>
+
+          <div>
+            <dt class="text-xs font-medium uppercase tracking-wide text-gray-400">
+              Última modificación
+            </dt>
+            <dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">
+              {{ formatDate(branch.updated_at) }}
+            </dd>
+          </div>
+        </dl>
+
+        <div
+          class="mt-auto flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800"
+        >
+          @if (canEditStructural() || canEditContact()) {
+            <button
+              app-button
+              variant="outline"
+              type="button"
+              (click)="openEdit(branch)"
+            >
+              Editar
+            </button>
+          }
+
+          @if (canChangeStatus()) {
+            @if (branch.activo) {
+              <button
+                app-button
+                variant="destructive"
+                type="button"
+                (click)="openStatusDialog(branch, 'deactivate')"
+              >
+                Desactivar
+              </button>
+            } @else {
+              <button
+                app-button
+                type="button"
+                (click)="openStatusDialog(branch, 'activate')"
+              >
+                Activar
+              </button>
+            }
+          }
+
+          <button
+            app-button
+            variant="outline"
+            type="button"
+            (click)="closeDetail()"
+          >
+            Cerrar
+          </button>
+        </div>
+      </aside>
+    </div>
+  }
+}
+
+<!-- Formulario de alta/edición -->
+@if (formOpen()) {
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 p-4"
+    (click)="closeForm()"
+  >
+    <div
+      class="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-800 dark:bg-gray-900"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="branch-form-title"
+      (click)="$event.stopPropagation()"
+    >
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h3
+            id="branch-form-title"
+            class="text-xl font-semibold text-gray-900 dark:text-white"
+          >
+            {{ formMode() === 'create' ? 'Nueva sucursal' : 'Editar sucursal' }}
+          </h3>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Los campos marcados con * son obligatorios.
+          </p>
+        </div>
+
+        <button
+          app-button
+          variant="ghost"
+          size="icon-sm"
+          type="button"
+          ariaLabel="Cerrar formulario"
+          (click)="closeForm()"
+        >
+          ✕
+        </button>
+      </div>
+
+      <form class="mt-5 space-y-4" [formGroup]="branchForm" (ngSubmit)="saveBranch()">
+        @if (formErrorMessage(); as message) {
+          <app-alert variant="error" [message]="message" />
+        }
+
+        @if (concurrencyConflict()) {
+          <app-alert
+            variant="warning"
+            title="Conflicto de edición"
+            message="Otro usuario modificó esta sucursal. Recargá los datos antes de volver a guardar."
+          />
+          <button
+            app-button
+            variant="outline"
+            type="button"
+            (click)="reloadConflictTarget()"
+          >
+            Recargar datos
+          </button>
+        }
+
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label
+              for="branch-codigo"
+              class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
+              Código *
+            </label>
+            <input
+              app-input
+              id="branch-codigo"
+              type="text"
+              formControlName="codigo"
+              [error]="fieldError('codigo') !== null"
+              placeholder="Ej. YCB-01"
+            />
+            @if (fieldError('codigo'); as message) {
+              <p class="mt-1 text-sm text-error-500">{{ message }}</p>
+            }
+          </div>
+
+          <div>
+            <label
+              for="branch-nombre"
+              class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
+              Nombre *
+            </label>
+            <input
+              app-input
+              id="branch-nombre"
+              type="text"
+              formControlName="nombre"
+              [error]="fieldError('nombre') !== null"
+              placeholder="Ej. Yacuiba Centro"
+            />
+            @if (fieldError('nombre'); as message) {
+              <p class="mt-1 text-sm text-error-500">{{ message }}</p>
+            }
+          </div>
+        </div>
+
+        <div>
+          <label
+            for="branch-direccion"
+            class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+          >
+            Dirección
+          </label>
+          <textarea
+            app-textarea
+            id="branch-direccion"
+            rows="3"
+            formControlName="direccion"
+            [error]="fieldError('direccion') !== null"
+            placeholder="Dirección de la sede"
+          ></textarea>
+          @if (fieldError('direccion'); as message) {
+            <p class="mt-1 text-sm text-error-500">{{ message }}</p>
+          }
+        </div>
+
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label
+              for="branch-telefono"
+              class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
+              Teléfono principal
+            </label>
+            <input
+              app-input
+              id="branch-telefono"
+              type="tel"
+              formControlName="telefono"
+              [error]="fieldError('telefono') !== null"
+              placeholder="Ej. +591 70000000"
+            />
+            @if (fieldError('telefono'); as message) {
+              <p class="mt-1 text-sm text-error-500">{{ message }}</p>
+            }
+          </div>
+
+          <div>
+            <label
+              for="branch-email"
+              class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
+              Email
+            </label>
+            <input
+              app-input
+              id="branch-email"
+              type="email"
+              formControlName="email"
+              [error]="fieldError('email') !== null"
+              placeholder="Ej. sucursal@talitacumi.bo"
+            />
+            @if (fieldError('email'); as message) {
+              <p class="mt-1 text-sm text-error-500">{{ message }}</p>
+            }
+          </div>
+        </div>
+
+        @if (formMode() === 'create') {
+          <div
+            class="flex items-center justify-between gap-4 rounded-xl border border-gray-200 p-4 dark:border-gray-800"
+          >
+            <div>
+              <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+                Estado inicial
+              </p>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Por defecto, la sucursal se crea activa. Podés crearla inactiva de forma expresa.
+              </p>
+            </div>
+
+            <app-switch
+              [checked]="branchForm.controls.activo.value"
+              (checkedChange)="branchForm.controls.activo.setValue($event)"
+              ariaLabel="Estado inicial activo"
+            />
+          </div>
+        } @else {
+          <p class="text-sm text-gray-500 dark:text-gray-400">
+            El estado se cambia con las acciones Activar o Desactivar, indicando un motivo.
+          </p>
+        }
+
+        <div
+          class="flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800"
+        >
+          <button
+            app-button
+            variant="outline"
+            type="button"
+            [disabled]="saving()"
+            (click)="closeForm()"
+          >
+            Cancelar
+          </button>
+
+          <button
+            app-button
+            type="button"
+            [disabled]="saving()"
+            (click)="saveBranch()"
+          >
+            {{ saving() ? 'Guardando...' : 'Guardar' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- Diálogo de activar/desactivar -->
+@if (statusOpen()) {
+  @if (selectedBranch(); as branch) {
+    <div
+      class="fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/60 p-4"
+      (click)="closeStatus()"
+    >
+      <div
+        class="w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-800 dark:bg-gray-900"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="branch-status-title"
+        (click)="$event.stopPropagation()"
+      >
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h3
+              id="branch-status-title"
+              class="text-xl font-semibold text-gray-900 dark:text-white"
+            >
+              {{ statusMode() === 'deactivate' ? 'Desactivar sucursal' : 'Activar sucursal' }}
+            </h3>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {{ branch.nombre }} · {{ branch.codigo }}
+            </p>
+          </div>
+
+          <button
+            app-button
+            variant="ghost"
+            size="icon-sm"
+            type="button"
+            ariaLabel="Cerrar diálogo"
+            (click)="closeStatus()"
+          >
+            ✕
+          </button>
+        </div>
+
+        @if (statusMode() === 'deactivate') {
+          <div class="mt-4">
+            <app-alert
+              variant="warning"
+              title="Sucursal inactiva"
+              message="Una sucursal inactiva no podrá recibir nuevas inscripciones, turnos, pagos ni aperturas de caja (RN-003). Los datos históricos se conservan."
+            />
+          </div>
+        } @else {
+          <div class="mt-4">
+            <app-alert
+              variant="info"
+              title="Reactivar sucursal"
+              message="La sucursal volverá a estar disponible para nuevas operaciones. El motivo quedará registrado en la bitácora."
+            />
+          </div>
+        }
+
+        @if (statusErrorMessage(); as message) {
+          <div class="mt-4">
+            <app-alert variant="error" [message]="message" />
+          </div>
+        }
+
+        @if (statusConflict()) {
+          <div class="mt-3">
+            <button
+              app-button
+              variant="outline"
+              type="button"
+              (click)="reloadConflictTarget()"
+            >
+              Recargar datos
+            </button>
+          </div>
+        }
+
+        <form class="mt-5 space-y-4" [formGroup]="statusForm" (ngSubmit)="confirmStatus()">
+          <div>
+            <label
+              for="branch-status-motivo"
+              class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
+              Motivo *
+            </label>
+            <textarea
+              app-textarea
+              id="branch-status-motivo"
+              rows="4"
+              formControlName="motivo"
+              [error]="statusFieldError('motivo') !== null"
+              placeholder="Ingresá el motivo del cambio de estado"
+            ></textarea>
+            @if (statusFieldError('motivo'); as message) {
+              <p class="mt-1 text-sm text-error-500">{{ message }}</p>
+            }
+          </div>
+
+          <div
+            class="flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800"
+          >
+            <button
+              app-button
+              variant="outline"
+              type="button"
+              [disabled]="saving()"
+              (click)="closeStatus()"
+            >
+              Cancelar
+            </button>
+
+            <button
+              app-button
+              [variant]="statusMode() === 'deactivate' ? 'destructive' : 'default'"
+              type="button"
+              [disabled]="saving()"
+              (click)="confirmStatus()"
+            >
+              {{
+                saving()
+                  ? 'Guardando...'
+                  : statusMode() === 'deactivate'
+                    ? 'Desactivar'
+                    : 'Activar'
+              }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+}

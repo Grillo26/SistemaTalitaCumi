@@ -86,9 +86,12 @@ Todas las rutas están dentro del layout principal y protegidas por `authGuard`.
 | `/catalogo` | Catálogo |
 | `/profesionales` | Profesionales |
 | `/inventario` | Inventario |
-| `/configuracion` | Configuración |
+| `/configuracion` | Redirige a `/organizacion/configuracion` |
+| `/organizacion/sucursales` | Organización y sucursales |
+| `/organizacion/salas-ambientes` | Salas y ambientes |
+| `/organizacion/configuracion` | Configuración general y parámetros |
 
-Los módulos muestran un estado vacío reutilizable (`app-module-placeholder`) hasta que se implementen.
+Los módulos sin implementar muestran un estado vacío reutilizable (`app-module-placeholder`). Las rutas `/organizacion/sucursales`, `/organizacion/salas-ambientes` y `/organizacion/configuracion` ya están implementadas y consumen la API real del backend.
 
 ### Páginas de referencia
 
@@ -128,7 +131,8 @@ No aparecen en el menú principal. Se acceden por URL y sirven como material de 
 ```text
 frontend/
 ├── public/
-│   ├── favicon.svg
+│   ├── favicon.ico
+│   ├── favicon.png
 │   └── images/
 │       ├── error/
 │       ├── shape/
@@ -170,6 +174,10 @@ frontend/
 │   │   │   ├── inscripciones/
 │   │   │   ├── inventario/
 │   │   │   ├── other-page/
+│   │   │   ├── organizacion/
+│   │   │   │   ├── configuracion/
+│   │   │   │   ├── salas-ambientes/
+│   │   │   │   └── sucursales/
 │   │   │   ├── pacientes/
 │   │   │   ├── pagos/
 │   │   │   ├── profesionales/
@@ -225,19 +233,31 @@ frontend/
 **Selector:** `app-brand-logo`
 **Archivo:** `src/app/shared/components/common/brand-logo/brand-logo.component.ts`
 
+Muestra el logo oficial de TalitaCumi (`public/images/logos/`) dentro de una tarjeta blanca, para que se vea bien en modo claro, oscuro y en el panel morado del login.
+
 **Inputs:**
 
 | Input | Tipo | Default | Descripción |
 |---|---|---|---|
-| `variant` | `'default' \| 'light'` | `'default'` | Versión para fondos claros u oscuros |
-| `compact` | `boolean` | `false` | Muestra solo el isotipo |
-| `showTagline` | `boolean` | `true` | Muestra “Sistema de Gestión” |
-| `size` | `'sm' \| 'md'` | `'md'` | Tamaño del logo |
+| `compact` | `boolean` | `false` | Muestra solo el isotipo (sidebar colapsado) |
+| `size` | `'sm' \| 'md' \| 'lg'` | `'md'` | Altura del logo: 48, 72 o 104 px (isotipo: 32, 40 o 52 px) |
 
 ```html
-<app-brand-logo />
-<app-brand-logo variant="light" [compact]="true" />
+<app-brand-logo size="lg" />
+<app-brand-logo [compact]="true" />
 ```
+
+Archivos de imagen:
+
+| Archivo | Uso |
+|---|---|
+| `logo-talitacumi.png` | Original (no se usa en la web) |
+| `logo-talitacumi-web.png` | Logo completo para la web (800 px) |
+| `logo-talitaCumi-isotipo.png` | Isotipo original |
+| `logo-talitacumi-isotipo-web.png` | Isotipo para la web (256 px) |
+| `public/favicon.png` y `favicon.ico` | Favicon generado a partir del isotipo |
+
+Para cambiar el logo, reemplaza los archivos `-web.png` manteniendo el mismo nombre (o regenera los derivados desde los originales).
 
 ---
 
@@ -600,6 +620,139 @@ Inputs: `title`, `description`. Estado vacío de los módulos pendientes.
 
 ---
 
+### 19. Organización y sucursales
+
+**Ruta:** `/organizacion/sucursales`
+**Entrada de sidebar:** `Organización`
+**Archivos:**
+
+- `src/app/pages/organizacion/sucursales/sucursales.page.ts`
+- `src/app/pages/organizacion/sucursales/sucursales.page.html`
+- `src/app/pages/organizacion/sucursales/sucursales.routes.ts`
+- `src/app/pages/organizacion/sucursales/sucursales.service.ts`
+- `src/app/pages/organizacion/sucursales/sucursales.models.ts`
+
+**API consumida:**
+
+| Método | Endpoint | Acción |
+|---|---|---|
+| GET | `/api/organizacion/sucursales` | Listado paginado con búsqueda, estado, orden y paginación |
+| GET | `/api/organizacion/sucursales/{id}` | Ficha de sucursal |
+| POST | `/api/organizacion/sucursales` | Alta |
+| PATCH | `/api/organizacion/sucursales/{id}` | Edición de datos/contacto |
+| POST | `/api/organizacion/sucursales/{id}/activar` | Activación con motivo |
+| POST | `/api/organizacion/sucursales/{id}/desactivar` | Desactivación con motivo |
+
+**Funcionalidad:**
+
+- Listado paginado con búsqueda por código o nombre, filtro por estado, orden por columnas y paginación.
+- Ficha con datos, estado, fecha de creación y última modificación.
+- Alta y edición en diálogo; el formulario conserva lo digitado si falla la red.
+- Activación/desactivación con motivo obligatorio y advertencia de RN-003.
+- Sin eliminación física ni exportación PDF/Excel (RF-008 y RF-012 pendientes).
+- Errores `422` resaltados por campo, `409` de edición concurrente con opción de recargar, y `403`/`503` con alerta.
+
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-pagination`, `TABLE_IMPORTS`, `input[app-input]`, `app-select-field`, `textarea[app-textarea]`, `app-switch` y `ToastService`. Los diálogos son overlays Tailwind dentro de la página; no se agregó una primitiva compartida de modal.
+
+**Permisos y alcance:** la API devuelve `can` (`create`, `update`, `update_contact`, `change_status`, `delete`) y la UI oculta las acciones no permitidas. No existe un guard de permisos en Angular; la seguridad real se valida en Laravel. Hasta que exista el módulo 02, Administración y Recepción reciben `503 MODULE_02_PENDING` por el contrato de alcance y la página muestra el error.
+
+**Autenticación:** `AuthService` sigue siendo simulado. Los endpoints requieren `auth:sanctum`; sin login real, la página mostrará `401` hasta el módulo 02. No se usan datos mock.
+
+**Estado:** RF-001 a RF-008, RF-011 y RF-013 implementados o parciales según el backend; RF-009, RF-010, RF-012 y el alcance por usuario quedan pendientes.
+
+---
+
+### 20. Salas y ambientes
+
+**Ruta:** `/organizacion/salas-ambientes`
+**Entrada de sidebar:** `Salas y ambientes` (entrada plana, después de Organización)
+
+**Archivos:**
+
+- `src/app/pages/organizacion/salas-ambientes/salas-ambientes.page.ts`
+- `src/app/pages/organizacion/salas-ambientes/salas-ambientes.page.html`
+- `src/app/pages/organizacion/salas-ambientes/salas-ambientes.routes.ts`
+- `src/app/pages/organizacion/salas-ambientes/salas-ambientes.service.ts`
+- `src/app/pages/organizacion/salas-ambientes/salas-ambientes.models.ts`
+
+**API consumida:**
+
+| Entidad | Endpoints |
+|---|---|
+| Áreas | `GET /api/organizacion/salas-ambientes/areas` |
+| Tipos de sala | `GET/POST /tipos-sala`, `GET/PATCH /tipos-sala/{id}`, `POST /{id}/activar`, `POST /{id}/desactivar`, `DELETE /{id}` |
+| Turnos | `GET/POST /turnos-catalogo`, `GET/PATCH /turnos-catalogo/{id}`, `POST /{id}/activar`, `POST /{id}/desactivar`, `DELETE /{id}` |
+| Salas | `GET/POST /salas`, `GET/PATCH /salas/{id}`, `POST /{id}/activar`, `POST /{id}/desactivar`, `DELETE /{id}` |
+| Ambientes | `GET/POST /ambientes`, `GET/PATCH /ambientes/{id}`, `POST /{id}/activar`, `POST /{id}/desactivar`, `DELETE /{id}` |
+
+**Funcionalidad:**
+
+- Una sola página con cuatro secciones: **Salas grupales**, **Ambientes**, **Tipos de sala** y **Turnos**.
+- Salas: búsqueda, filtros por sucursal (solo alcance global), tipo, turno y estado; paginación; ficha; alta/edición; activar/desactivar con motivo al desactivar.
+- Ambientes: búsqueda, filtros por sucursal, uso y estado; paginación; ficha; alta/edición; activar/desactivar.
+- Tipos y turnos: listas con búsqueda/estado, alta/edición y cambio de estado.
+- Formularios con estado inicial explícito, tolerancia a errores de red y conservación de lo digitado.
+- Errores `422` por campo, duplicado de sala/ambiente con conflicto visible, `409` de concurrencia con recarga, y `403`/`503`/`401` con alerta.
+- Sin eliminación física y sin exportación PDF/Excel (RF-012 y RF-016 pendientes).
+
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-pagination`, `TABLE_IMPORTS`, `input[app-input]`, `app-select-field`, `textarea[app-textarea]`, `app-switch` y `ToastService`. Los diálogos son overlays Tailwind dentro de la página; no se agregó una primitiva compartida de modal ni tabs.
+
+**Permisos y alcance:** la API devuelve `can` para catálogos, salas y ambientes; la UI oculta las acciones no permitidas. No existe un guard de permisos en Angular. El selector de sucursales reutiliza `SucursalesService` en modo lectura. Hasta el módulo 02, Administración y Recepción reciben `503 MODULE_02_PENDING` por el contrato de alcance.
+
+**Autenticación:** `AuthService` sigue siendo simulado. Los endpoints requieren `auth:sanctum`; sin login real, la página mostrará `401` hasta el módulo 02. No se usan datos mock.
+
+**Estado:** RF-001 a RF-011, RF-015 y RF-017 implementados o parciales según el backend; RF-012 (chequeo de asociaciones), RF-013/RF-014 (consumidores 06/07), RF-016 y el alcance por usuario quedan pendientes. El contrato `AmbienteDirectoryContract` está listo, pero la agenda actual no tiene `ambiente_id`; el módulo 07 deberá agregarlo.
+
+---
+
+### 21. Configuración general y parámetros
+
+**Ruta:** `/organizacion/configuracion` (la ruta heredada `/configuracion` redirige aquí)
+**Entrada de sidebar:** `Configuración`
+
+**Archivos:**
+
+- `src/app/pages/organizacion/configuracion/configuracion.page.ts`
+- `src/app/pages/organizacion/configuracion/configuracion.page.html`
+- `src/app/pages/organizacion/configuracion/configuracion.routes.ts`
+- `src/app/pages/organizacion/configuracion/configuracion.service.ts`
+- `src/app/pages/organizacion/configuracion/configuracion.models.ts`
+- `src/app/pages/organizacion/configuracion/parameter-time-input.component.ts` (campo de hora con Flatpickr y `ControlValueAccessor`)
+
+**API consumida:**
+
+| Método | Endpoint | Acción |
+|---|---|---|
+| GET | `/api/organizacion/configuracion/parametros` | Listado con búsqueda y filtro por categoría |
+| GET | `/api/organizacion/configuracion/parametros/{id}` | Ficha del parámetro |
+| PATCH | `/api/organizacion/configuracion/parametros/{id}` | Edición con versión, confirmación y motivo |
+| POST | `/api/organizacion/configuracion/parametros/{id}/restaurar` | Restauración al valor por defecto |
+| GET | `/api/organizacion/configuracion/parametros/{id}/historial` | Historial paginado desde bitácora |
+| POST | `/api/organizacion/configuracion/logo` | Carga del logo del centro (multipart) |
+
+**Funcionalidad:**
+
+- Listado agrupado por categoría con clave, descripción, valor vigente, valor por defecto, unidad y marcas (`Sensible`, `Solo lectura`, `Recepción`).
+- Búsqueda por clave/descripción y filtro por categoría; ambas consultas se resuelven en el backend.
+- Ficha con tipo, unidad, rango permitido, versión y última modificación.
+- Edición con control adaptado al tipo: numérico para entero/decimal, Flatpickr para hora, input/textarea para texto y `app-switch` para booleano.
+- Parámetros sensibles: alerta, confirmación explícita y motivo obligatorio antes de guardar; el backend revalida.
+- Restauración con confirmación y motivo cuando el parámetro es sensible. La acción se oculta si el valor ya es el de defecto.
+- Historial con usuario, fecha, acción, motivo y valores anterior/nuevo, con paginación.
+- Logo del centro con vista previa y carga de JPG/PNG/WebP (máx. 2 MB) desde la ficha de `centro.logo`.
+- Errores `422` por campo, `409` de concurrencia con opción de recargar, `403`/`401` con alerta. El formulario conserva lo digitado si falla la red.
+- Sin botón de exportación: RF-015 queda pendiente de infraestructura.
+
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-pagination`, `TABLE_IMPORTS`, `input[app-input]`, `app-select-field`, `textarea[app-textarea]`, `app-switch`, Flatpickr y `ToastService`. Los diálogos son overlays Tailwind dentro de la página; no se agregó una primitiva compartida de modal.
+
+**Permisos:** la API devuelve `can` (`view`, `view_all`, `view_operatives`, `update`, `update_logo`, `restore`, `export`). Recepción solo ve parámetros operativos con `visible_recepcion = true`; Administración ve todo en modo lectura; Superadmin edita y restaura. No existe un guard de permisos en Angular; la seguridad real se valida en Laravel.
+
+**Autenticación:** `AuthService` sigue siendo simulado. Los endpoints requieren `auth:sanctum`; sin login real, la página mostrará `401` hasta el módulo 02. No se usan datos mock.
+
+**Estado:** RF-001 a RF-014 y RF-016 implementados en backend y frontend; RF-015 (PDF/Excel) pendiente y sin botón. El logo de RF-009 está implementado con el disco `public`.
+
+---
+
 ## Paleta de colores
 
 Definida en `src/styles.css` dentro de `@theme`.
@@ -641,7 +794,8 @@ No se agregaron `swiper` ni `jsvectormap` porque sus componentes no forman parte
 - FAQs, Pricing Tables, File Manager.
 - Tasks y Kanban.
 - Coming Soon.
-- Carrusel, mapas vectoriales, avatares, modales, tabs, drawer, popovers y demás componentes no solicitados.
+- Carrusel, mapas vectoriales, avatares, modales compartidos, tabs, drawer, popovers y demás componentes no solicitados. Las páginas de sucursales, salas/ambientes y configuración usan overlays Tailwind propios.
+- Exportación PDF/Excel de parámetros (RF-015): sin librerías instaladas y sin botón en la UI.
 - Registro, recuperación de contraseña y verificación en dos pasos.
 - Widget promocional del sidebar.
 
@@ -666,5 +820,9 @@ No se ejecutó `ng serve` ni se levantó el servidor.
 - Se usa la sintaxis moderna `@if` / `@for`.
 - El layout y las rutas están preparados para implementar cada módulo de forma independiente.
 - El login y la sesión son simulados; al conectar Laravel se debe reemplazar `AuthService` por una implementación real.
-- No se modificó Docker ni el backend.
+- La página `/organizacion/sucursales` ya consume la API real; mientras no exista login (módulo 02), la API responderá `401`. Administración y Recepción recibirán `503` por el contrato de alcance pendiente.
+- La página `/organizacion/salas-ambientes` también consume la API real, con cuatro secciones y overlays propios. No se agregaron dependencias nuevas.
+- La página `/organizacion/configuracion` consume la API real, agrupa parámetros por categoría y usa overlays propios para ficha, edición, restauración e historial. `/configuracion` redirige a la ruta canónica.
+- No se agregaron datos mock ni dependencias nuevas para sucursales, salas/ambientes o configuración. La exportación PDF/Excel (RF-015) sigue fuera de alcance y no se muestra el botón.
+- `npm run build` se ejecutó correctamente después de implementar el módulo.
 - No se realizó commit.

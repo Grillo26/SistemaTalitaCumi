@@ -1,0 +1,828 @@
+<div>
+  <app-page-breadcrumb pageTitle="Salas y ambientes" />
+
+  <div class="space-y-5 sm:space-y-6">
+    @if (error(); as apiError) {
+      <app-alert
+        variant="error"
+        title="No se pudo completar la operación"
+        [message]="apiError.message"
+      />
+    }
+
+    <app-component-card
+      title="Salas y ambientes"
+      desc="Administrá las salas grupales, los ambientes de atención individual, sus tipos y turnos."
+    >
+      <div class="flex flex-wrap gap-2" role="tablist" aria-label="Secciones de salas y ambientes">
+        @for (section of sectionOptions; track section.value) {
+          <button
+            app-button
+            type="button"
+            [variant]="activeSection() === section.value ? 'default' : 'outline'"
+            [attr.aria-pressed]="activeSection() === section.value"
+            (click)="setSection(section.value)"
+          >
+            {{ section.label }}
+          </button>
+        }
+      </div>
+
+      @switch (activeSection()) {
+        @case ('salas') {
+          <div class="space-y-4">
+            <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <div class="relative w-full sm:w-64">
+                  <span
+                    class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-gray-400"
+                    aria-hidden="true"
+                  >
+                    <svg class="size-5" viewBox="0 0 20 20" fill="none">
+                      <path
+                        d="M14.382 14.383l3.325 3.326m-1.249-8.334a7.082 7.082 0 01-7.083 7.081 7.082 7.082 0 110-14.163 7.082 7.082 0 017.083 7.082z"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </span>
+                  <input
+                    app-input
+                    type="text"
+                    [formControl]="salaSearchControl"
+                    class="ps-10"
+                    placeholder="Buscar sala..."
+                    aria-label="Buscar salas"
+                  />
+                </div>
+
+                @if (isGlobalScope()) {
+                  <div class="w-full sm:w-48">
+                    <app-select-field
+                      [options]="branchFilterOptions()"
+                      [value]="salaSucursalFilter()"
+                      placeholder="Todas las sucursales"
+                      ariaLabel="Filtrar por sucursal"
+                      (valueChange)="onSalaSucursalFilter($event)"
+                    />
+                  </div>
+                }
+
+                <div class="w-full sm:w-44">
+                  <app-select-field
+                    [options]="tipoFilterOptions()"
+                    [value]="salaTipoFilter()"
+                    placeholder="Todos los tipos"
+                    ariaLabel="Filtrar por tipo"
+                    (valueChange)="onSalaTipoFilter($event)"
+                  />
+                </div>
+
+                <div class="w-full sm:w-40">
+                  <app-select-field
+                    [options]="turnoFilterOptions()"
+                    [value]="salaTurnoFilter()"
+                    placeholder="Todos los turnos"
+                    ariaLabel="Filtrar por turno"
+                    (valueChange)="onSalaTurnoFilter($event)"
+                  />
+                </div>
+
+                <div class="w-full sm:w-40">
+                  <app-select-field
+                    [options]="estadoEspacioOptions"
+                    [value]="salaEstadoFilter()"
+                    placeholder="Todos los estados"
+                    ariaLabel="Filtrar por estado"
+                    (valueChange)="onSalaEstadoFilter($event)"
+                  />
+                </div>
+              </div>
+
+              @if (canCreateSala()) {
+                <button app-button type="button" (click)="openSalaCreate()">
+                  Nueva sala
+                </button>
+              }
+            </div>
+
+            <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+              <table app-table class="min-w-full">
+                <thead
+                  app-table-header
+                  class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900"
+                >
+                  <tr app-table-row>
+                    <th app-table-cell class="px-4 py-3 text-start">
+                      <button
+                        type="button"
+                        class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                        (click)="sortSalas('nombre')"
+                        [attr.aria-sort]="ariaSortSalas('nombre')"
+                      >
+                        Nombre <span aria-hidden="true">{{ sortIndicatorSalas('nombre') }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Sucursal</th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Tipo</th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Turno</th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Área</th>
+                    <th app-table-cell class="px-4 py-3 text-start">
+                      <button
+                        type="button"
+                        class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                        (click)="sortSalas('activo')"
+                        [attr.aria-sort]="ariaSortSalas('activo')"
+                      >
+                        Estado <span aria-hidden="true">{{ sortIndicatorSalas('activo') }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-start">
+                      <button
+                        type="button"
+                        class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                        (click)="sortSalas('updated_at')"
+                        [attr.aria-sort]="ariaSortSalas('updated_at')"
+                      >
+                        Última modificación
+                        <span aria-hidden="true">{{ sortIndicatorSalas('updated_at') }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+                  @if (salasLoading()) {
+                    <tr app-table-row>
+                      <td app-table-cell colspan="8" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                        Cargando salas...
+                      </td>
+                    </tr>
+                  } @else {
+                    @for (sala of salas(); track sala.id) {
+                      <tr app-table-row class="hover:bg-gray-50/70 dark:hover:bg-white/[0.02]">
+                        <td app-table-cell class="px-4 py-4 text-sm font-medium text-gray-800 dark:text-white/90">{{ sala.nombre }}</td>
+                        <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ sala.sucursal?.nombre || '—' }}</td>
+                        <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ sala.tipo_sala?.nombre || '—' }}</td>
+                        <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ sala.turno?.nombre || '—' }}</td>
+                        <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ sala.area?.nombre || '—' }}</td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                          <app-badge [color]="sala.activo ? 'success' : 'gray'" variant="light" size="sm">
+                            {{ sala.estado === 'activa' ? 'Activa' : 'Inactiva' }}
+                          </app-badge>
+                        </td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ formatDate(sala.updated_at) }}</td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-end">
+                          <div class="flex flex-wrap items-center justify-end gap-1">
+                            <button app-button variant="ghost" size="sm" type="button" (click)="openSalaDetail(sala)">Ver</button>
+                            @if (canEditSalaStructure() || canEditSalaData()) {
+                              <button app-button variant="ghost" size="sm" type="button" (click)="openSalaEdit(sala)">Editar</button>
+                            }
+                            @if (canChangeSalaStatus()) {
+                              @if (sala.activo) {
+                                <button
+                                  app-button
+                                  variant="link"
+                                  size="sm"
+                                  type="button"
+                                  className="text-error-500 hover:text-error-600"
+                                  (click)="openStatus('sala', sala, 'deactivate')"
+                                >
+                                  Desactivar
+                                </button>
+                              } @else {
+                                <button app-button variant="ghost" size="sm" type="button" (click)="openStatus('sala', sala, 'activate')">Activar</button>
+                              }
+                            }
+                          </div>
+                        </td>
+                      </tr>
+                    } @empty {
+                      <tr app-table-row>
+                        <td app-table-cell colspan="8" class="px-4 py-12 text-center">
+                          <p class="text-base font-semibold text-gray-800 dark:text-white/90">No se encontraron salas</p>
+                          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Ajustá la búsqueda o los filtros.</p>
+                        </td>
+                      </tr>
+                    }
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            <div class="flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800">
+              <p class="text-sm text-gray-500 dark:text-gray-400">
+                Mostrando {{ salasFrom() ?? 0 }}–{{ salasTo() ?? 0 }} de {{ salasTotal() }} salas
+              </p>
+              @if (salasTotal() > 0) {
+                <app-pagination [currentPage]="salasPage()" [totalPages]="salasLastPage()" variant="text-icon" (pageChange)="goToSalasPage($event)" />
+              }
+            </div>
+          </div>
+        }
+
+        @case ('ambientes') {
+          <div class="space-y-4">
+            <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <div class="relative w-full sm:w-64">
+                  <span class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-gray-400" aria-hidden="true">
+                    <svg class="size-5" viewBox="0 0 20 20" fill="none">
+                      <path d="M14.382 14.383l3.325 3.326m-1.249-8.334a7.082 7.082 0 01-7.083 7.081 7.082 7.082 0 110-14.163 7.082 7.082 0 017.083 7.082z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </span>
+                  <input app-input type="text" [formControl]="ambienteSearchControl" class="ps-10" placeholder="Buscar ambiente..." aria-label="Buscar ambientes" />
+                </div>
+
+                @if (isGlobalScope()) {
+                  <div class="w-full sm:w-48">
+                    <app-select-field [options]="branchFilterOptions()" [value]="ambienteSucursalFilter()" placeholder="Todas las sucursales" ariaLabel="Filtrar por sucursal" (valueChange)="onAmbienteSucursalFilter($event)" />
+                  </div>
+                }
+
+                <div class="w-full sm:w-48">
+                  <app-select-field [options]="usoFilterOptions()" [value]="ambienteUsoFilter()" placeholder="Todos los usos" ariaLabel="Filtrar por uso" (valueChange)="onAmbienteUsoFilter($event)" />
+                </div>
+
+                <div class="w-full sm:w-40">
+                  <app-select-field [options]="estadoEspacioOptions" [value]="ambienteEstadoFilter()" placeholder="Todos los estados" ariaLabel="Filtrar por estado" (valueChange)="onAmbienteEstadoFilter($event)" />
+                </div>
+              </div>
+
+              @if (canCreateAmbiente()) {
+                <button app-button type="button" (click)="openAmbienteCreate()">Nuevo ambiente</button>
+              }
+            </div>
+
+            <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+              <table app-table class="min-w-full">
+                <thead app-table-header class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
+                  <tr app-table-row>
+                    <th app-table-cell class="px-4 py-3 text-start">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400" (click)="sortAmbientes('nombre')" [attr.aria-sort]="ariaSortAmbientes('nombre')">
+                        Nombre <span aria-hidden="true">{{ sortIndicatorAmbientes('nombre') }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Sucursal</th>
+                    <th app-table-cell class="px-4 py-3 text-start">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400" (click)="sortAmbientes('uso')" [attr.aria-sort]="ariaSortAmbientes('uso')">
+                        Uso <span aria-hidden="true">{{ sortIndicatorAmbientes('uso') }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-start">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400" (click)="sortAmbientes('activo')" [attr.aria-sort]="ariaSortAmbientes('activo')">
+                        Estado <span aria-hidden="true">{{ sortIndicatorAmbientes('activo') }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-start">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400" (click)="sortAmbientes('updated_at')" [attr.aria-sort]="ariaSortAmbientes('updated_at')">
+                        Última modificación <span aria-hidden="true">{{ sortIndicatorAmbientes('updated_at') }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+                  @if (ambientesLoading()) {
+                    <tr app-table-row>
+                      <td app-table-cell colspan="6" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">Cargando ambientes...</td>
+                    </tr>
+                  } @else {
+                    @for (ambiente of ambientes(); track ambiente.id) {
+                      <tr app-table-row class="hover:bg-gray-50/70 dark:hover:bg-white/[0.02]">
+                        <td app-table-cell class="px-4 py-4 text-sm font-medium text-gray-800 dark:text-white/90">{{ ambiente.nombre }}</td>
+                        <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ ambiente.sucursal?.nombre || '—' }}</td>
+                        <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ ambiente.uso_label }}</td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                          <app-badge [color]="ambiente.activo ? 'success' : 'gray'" variant="light" size="sm">
+                            {{ ambiente.estado === 'activa' ? 'Activa' : 'Inactiva' }}
+                          </app-badge>
+                        </td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ formatDate(ambiente.updated_at) }}</td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-end">
+                          <div class="flex flex-wrap items-center justify-end gap-1">
+                            <button app-button variant="ghost" size="sm" type="button" (click)="openAmbienteDetail(ambiente)">Ver</button>
+                            @if (canEditAmbienteStructure() || canEditAmbienteData()) {
+                              <button app-button variant="ghost" size="sm" type="button" (click)="openAmbienteEdit(ambiente)">Editar</button>
+                            }
+                            @if (canChangeAmbienteStatus()) {
+                              @if (ambiente.activo) {
+                                <button app-button variant="link" size="sm" type="button" className="text-error-500 hover:text-error-600" (click)="openStatus('ambiente', ambiente, 'deactivate')">Desactivar</button>
+                              } @else {
+                                <button app-button variant="ghost" size="sm" type="button" (click)="openStatus('ambiente', ambiente, 'activate')">Activar</button>
+                              }
+                            }
+                          </div>
+                        </td>
+                      </tr>
+                    } @empty {
+                      <tr app-table-row>
+                        <td app-table-cell colspan="6" class="px-4 py-12 text-center">
+                          <p class="text-base font-semibold text-gray-800 dark:text-white/90">No se encontraron ambientes</p>
+                          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Ajustá la búsqueda o los filtros.</p>
+                        </td>
+                      </tr>
+                    }
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            <div class="flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800">
+              <p class="text-sm text-gray-500 dark:text-gray-400">
+                Mostrando {{ ambientesFrom() ?? 0 }}–{{ ambientesTo() ?? 0 }} de {{ ambientesTotal() }} ambientes
+              </p>
+              @if (ambientesTotal() > 0) {
+                <app-pagination [currentPage]="ambientesPage()" [totalPages]="ambientesLastPage()" variant="text-icon" (pageChange)="goToAmbientesPage($event)" />
+              }
+            </div>
+          </div>
+        }
+
+        @case ('tipos-sala') {
+          <div class="space-y-4">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div class="relative w-full sm:w-64">
+                  <input app-input type="text" [formControl]="tipoSearchControl" placeholder="Buscar tipo de sala..." aria-label="Buscar tipos de sala" />
+                </div>
+                <div class="w-full sm:w-44">
+                  <app-select-field [options]="estadoCatalogoOptions" [value]="tipoEstadoFilter()" placeholder="Todos los estados" ariaLabel="Filtrar tipos por estado" (valueChange)="onTipoEstadoFilter($event)" />
+                </div>
+              </div>
+              @if (canAdminTipos()) {
+                <button app-button type="button" (click)="openTipoCreate()">Nuevo tipo de sala</button>
+              }
+            </div>
+
+            <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+              <table app-table class="min-w-full">
+                <thead app-table-header class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
+                  <tr app-table-row>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Nombre</th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Estado</th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Última modificación</th>
+                    <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+                  @if (tiposLoading()) {
+                    <tr app-table-row><td app-table-cell colspan="4" class="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">Cargando tipos...</td></tr>
+                  } @else {
+                    @for (tipo of tiposSala(); track tipo.id) {
+                      <tr app-table-row>
+                        <td app-table-cell class="px-4 py-4 text-sm font-medium text-gray-800 dark:text-white/90">{{ tipo.nombre }}</td>
+                        <td app-table-cell class="px-4 py-4"><app-badge [color]="tipo.activo ? 'success' : 'gray'" variant="light" size="sm">{{ tipo.estado === 'activo' ? 'Activo' : 'Inactivo' }}</app-badge></td>
+                        <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ formatDate(tipo.updated_at) }}</td>
+                        <td app-table-cell class="px-4 py-4 text-end">
+                          <div class="flex flex-wrap items-center justify-end gap-1">
+                            @if (canAdminTipos()) {
+                              <button app-button variant="ghost" size="sm" type="button" (click)="openTipoEdit(tipo)">Editar</button>
+                              @if (tipo.activo) {
+                                <button app-button variant="link" size="sm" type="button" className="text-error-500 hover:text-error-600" (click)="openStatus('tipo-sala', tipo, 'deactivate')">Desactivar</button>
+                              } @else {
+                                <button app-button variant="ghost" size="sm" type="button" (click)="openStatus('tipo-sala', tipo, 'activate')">Activar</button>
+                              }
+                            }
+                          </div>
+                        </td>
+                      </tr>
+                    } @empty {
+                      <tr app-table-row><td app-table-cell colspan="4" class="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">No se encontraron tipos de sala.</td></tr>
+                    }
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        }
+
+        @case ('turnos') {
+          <div class="space-y-4">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div class="relative w-full sm:w-64">
+                  <input app-input type="text" [formControl]="turnoSearchControl" placeholder="Buscar turno..." aria-label="Buscar turnos" />
+                </div>
+                <div class="w-full sm:w-44">
+                  <app-select-field [options]="estadoCatalogoOptions" [value]="turnoEstadoFilter()" placeholder="Todos los estados" ariaLabel="Filtrar turnos por estado" (valueChange)="onTurnoEstadoFilter($event)" />
+                </div>
+              </div>
+              @if (canAdminTurnos()) {
+                <button app-button type="button" (click)="openTurnoCreate()">Nuevo turno</button>
+              }
+            </div>
+
+            <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+              <table app-table class="min-w-full">
+                <thead app-table-header class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
+                  <tr app-table-row>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Nombre</th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Orden</th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Estado</th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Última modificación</th>
+                    <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+                  @if (turnosLoading()) {
+                    <tr app-table-row><td app-table-cell colspan="5" class="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">Cargando turnos...</td></tr>
+                  } @else {
+                    @for (turno of turnos(); track turno.id) {
+                      <tr app-table-row>
+                        <td app-table-cell class="px-4 py-4 text-sm font-medium text-gray-800 dark:text-white/90">{{ turno.nombre }}</td>
+                        <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ turno.orden }}</td>
+                        <td app-table-cell class="px-4 py-4"><app-badge [color]="turno.activo ? 'success' : 'gray'" variant="light" size="sm">{{ turno.estado === 'activo' ? 'Activo' : 'Inactivo' }}</app-badge></td>
+                        <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ formatDate(turno.updated_at) }}</td>
+                        <td app-table-cell class="px-4 py-4 text-end">
+                          <div class="flex flex-wrap items-center justify-end gap-1">
+                            @if (canAdminTurnos()) {
+                              <button app-button variant="ghost" size="sm" type="button" (click)="openTurnoEdit(turno)">Editar</button>
+                              @if (turno.activo) {
+                                <button app-button variant="link" size="sm" type="button" className="text-error-500 hover:text-error-600" (click)="openStatus('turno', turno, 'deactivate')">Desactivar</button>
+                              } @else {
+                                <button app-button variant="ghost" size="sm" type="button" (click)="openStatus('turno', turno, 'activate')">Activar</button>
+                              }
+                            }
+                          </div>
+                        </td>
+                      </tr>
+                    } @empty {
+                      <tr app-table-row><td app-table-cell colspan="5" class="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">No se encontraron turnos.</td></tr>
+                    }
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        }
+      }
+    </app-component-card>
+  </div>
+</div>
+
+<!-- Ficha de espacio -->
+@if (detailOpen()) {
+  @if (detailType() === 'sala') {
+    @if (selectedSala(); as sala) {
+      <div class="fixed inset-0 z-40 flex justify-end bg-gray-900/50 p-0 sm:p-4" (click)="closeDetail()">
+        <aside class="flex h-full w-full max-w-xl flex-col overflow-y-auto border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-800 dark:bg-gray-900 sm:rounded-2xl" role="dialog" aria-modal="true" aria-labelledby="sala-detail-title" (click)="$event.stopPropagation()">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-xs font-medium uppercase tracking-wide text-gray-400">Sala grupal</p>
+              <h3 id="sala-detail-title" class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ sala.nombre }}</h3>
+              <div class="mt-3"><app-badge [color]="sala.activo ? 'success' : 'gray'" variant="light" size="sm">{{ sala.estado === 'activa' ? 'Activa' : 'Inactiva' }}</app-badge></div>
+            </div>
+            <button app-button variant="ghost" size="icon-sm" type="button" ariaLabel="Cerrar ficha" (click)="closeDetail()">✕</button>
+          </div>
+
+          <dl class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div><dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Sucursal</dt><dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ sala.sucursal?.nombre || '—' }}</dd></div>
+            <div><dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Área</dt><dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ sala.area?.nombre || '—' }}</dd></div>
+            <div><dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Tipo</dt><dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ sala.tipo_sala?.nombre || '—' }}</dd></div>
+            <div><dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Turno</dt><dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ sala.turno?.nombre || '—' }}</dd></div>
+            <div class="sm:col-span-2"><dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Observaciones</dt><dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ sala.observaciones || '—' }}</dd></div>
+            <div><dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Creada</dt><dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ formatDate(sala.created_at) }}</dd></div>
+            <div><dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Última modificación</dt><dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ formatDate(sala.updated_at) }}</dd></div>
+          </dl>
+
+          <div class="mt-auto flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+            @if (canEditSalaStructure() || canEditSalaData()) {
+              <button app-button variant="outline" type="button" (click)="openSalaEdit(sala)">Editar</button>
+            }
+            @if (canChangeSalaStatus()) {
+              @if (sala.activo) {
+                <button app-button variant="destructive" type="button" (click)="openStatus('sala', sala, 'deactivate')">Desactivar</button>
+              } @else {
+                <button app-button type="button" (click)="openStatus('sala', sala, 'activate')">Activar</button>
+              }
+            }
+            <button app-button variant="outline" type="button" (click)="closeDetail()">Cerrar</button>
+          </div>
+        </aside>
+      </div>
+    }
+  } @else if (selectedAmbiente(); as ambiente) {
+    <div class="fixed inset-0 z-40 flex justify-end bg-gray-900/50 p-0 sm:p-4" (click)="closeDetail()">
+      <aside class="flex h-full w-full max-w-xl flex-col overflow-y-auto border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-800 dark:bg-gray-900 sm:rounded-2xl" role="dialog" aria-modal="true" aria-labelledby="ambiente-detail-title" (click)="$event.stopPropagation()">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-xs font-medium uppercase tracking-wide text-gray-400">Ambiente</p>
+            <h3 id="ambiente-detail-title" class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ ambiente.nombre }}</h3>
+            <div class="mt-3"><app-badge [color]="ambiente.activo ? 'success' : 'gray'" variant="light" size="sm">{{ ambiente.estado === 'activa' ? 'Activa' : 'Inactiva' }}</app-badge></div>
+          </div>
+          <button app-button variant="ghost" size="icon-sm" type="button" ariaLabel="Cerrar ficha" (click)="closeDetail()">✕</button>
+        </div>
+
+        <dl class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div><dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Sucursal</dt><dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ ambiente.sucursal?.nombre || '—' }}</dd></div>
+          <div><dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Uso previsto</dt><dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ ambiente.uso_label }}</dd></div>
+          <div class="sm:col-span-2"><dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Observaciones</dt><dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ ambiente.observaciones || '—' }}</dd></div>
+          <div><dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Creada</dt><dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ formatDate(ambiente.created_at) }}</dd></div>
+          <div><dt class="text-xs font-medium uppercase tracking-wide text-gray-400">Última modificación</dt><dd class="mt-1 text-sm text-gray-800 dark:text-gray-200">{{ formatDate(ambiente.updated_at) }}</dd></div>
+        </dl>
+
+        <div class="mt-auto flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+          @if (canEditAmbienteStructure() || canEditAmbienteData()) {
+            <button app-button variant="outline" type="button" (click)="openAmbienteEdit(ambiente)">Editar</button>
+          }
+          @if (canChangeAmbienteStatus()) {
+            @if (ambiente.activo) {
+              <button app-button variant="destructive" type="button" (click)="openStatus('ambiente', ambiente, 'deactivate')">Desactivar</button>
+            } @else {
+              <button app-button type="button" (click)="openStatus('ambiente', ambiente, 'activate')">Activar</button>
+            }
+          }
+          <button app-button variant="outline" type="button" (click)="closeDetail()">Cerrar</button>
+        </div>
+      </aside>
+    </div>
+  }
+}
+
+<!-- Formulario de sala -->
+@if (salaFormOpen()) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 p-4" (click)="closeSalaForm()">
+    <div class="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-800 dark:bg-gray-900" role="dialog" aria-modal="true" aria-labelledby="sala-form-title" (click)="$event.stopPropagation()">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h3 id="sala-form-title" class="text-xl font-semibold text-gray-900 dark:text-white">{{ salaFormMode() === 'create' ? 'Nueva sala grupal' : 'Editar sala grupal' }}</h3>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Los campos marcados con * son obligatorios.</p>
+        </div>
+        <button app-button variant="ghost" size="icon-sm" type="button" ariaLabel="Cerrar formulario" (click)="closeSalaForm()">✕</button>
+      </div>
+
+      <form class="mt-5 space-y-4" [formGroup]="salaForm" (ngSubmit)="saveSala()">
+        @if (salaFormError(); as message) { <app-alert variant="error" [message]="message" /> }
+        @if (salaConflict(); as conflictName) {
+          <app-alert variant="warning" title="Sala duplicada" [message]="'Ya existe la sala ' + conflictName + ' para esa combinación de tipo, turno y sucursal.'" />
+        }
+        @if (salaConcurrency()) {
+          <app-alert variant="warning" title="Conflicto de edición" message="Otro usuario modificó esta sala. Recargá los datos antes de volver a guardar." />
+          <button app-button variant="outline" type="button" (click)="reloadSalaConflict()">Recargar datos</button>
+        }
+
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Sucursal *</label>
+            <app-select-field [options]="salaBranchOptions()" [value]="salaForm.controls.sucursal_id.value" [disabled]="salaFormMode() === 'edit' && !canEditSalaStructure()" placeholder="Seleccioná una sucursal" ariaLabel="Sucursal" (valueChange)="salaForm.controls.sucursal_id.setValue($event)" />
+            @if (fieldError('sala', 'sucursal_id'); as message) { <p class="mt-1 text-sm text-error-500">{{ message }}</p> }
+          </div>
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Área *</label>
+            <app-select-field [options]="areaOptions()" [value]="salaForm.controls.area_id.value" [disabled]="salaFormMode() === 'edit' && !canEditSalaStructure()" placeholder="Seleccioná un área" ariaLabel="Área" (valueChange)="salaForm.controls.area_id.setValue($event)" />
+            @if (fieldError('sala', 'area_id'); as message) { <p class="mt-1 text-sm text-error-500">{{ message }}</p> }
+          </div>
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Tipo de sala *</label>
+            <app-select-field [options]="tipoOptions()" [value]="salaForm.controls.tipo_sala_id.value" [disabled]="salaFormMode() === 'edit' && !canEditSalaStructure()" placeholder="Seleccioná un tipo" ariaLabel="Tipo de sala" (valueChange)="salaForm.controls.tipo_sala_id.setValue($event)" />
+            @if (fieldError('sala', 'tipo_sala_id'); as message) { <p class="mt-1 text-sm text-error-500">{{ message }}</p> }
+          </div>
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Turno *</label>
+            <app-select-field [options]="turnoOptions()" [value]="salaForm.controls.turno_catalogo_id.value" [disabled]="salaFormMode() === 'edit' && !canEditSalaStructure()" placeholder="Seleccioná un turno" ariaLabel="Turno" (valueChange)="salaForm.controls.turno_catalogo_id.setValue($event)" />
+            @if (fieldError('sala', 'turno_catalogo_id'); as message) { <p class="mt-1 text-sm text-error-500">{{ message }}</p> }
+          </div>
+        </div>
+
+        <div>
+          <label for="sala-nombre" class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre visible *</label>
+          <input app-input id="sala-nombre" type="text" formControlName="nombre" [error]="fieldError('sala', 'nombre') !== null" [disabled]="salaFormMode() === 'edit' && !canEditSalaData()" placeholder="Ej. Sala Ositos" />
+          @if (fieldError('sala', 'nombre'); as message) { <p class="mt-1 text-sm text-error-500">{{ message }}</p> }
+        </div>
+
+        <div>
+          <label for="sala-observaciones" class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Observaciones</label>
+          <textarea app-textarea id="sala-observaciones" rows="3" formControlName="observaciones" [error]="fieldError('sala', 'observaciones') !== null" [disabled]="salaFormMode() === 'edit' && !canEditSalaData()" placeholder="Observaciones de la sala"></textarea>
+          @if (fieldError('sala', 'observaciones'); as message) { <p class="mt-1 text-sm text-error-500">{{ message }}</p> }
+        </div>
+
+        @if (salaFormMode() === 'create') {
+          <div class="flex items-center justify-between gap-4 rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+            <div>
+              <p class="text-sm font-medium text-gray-800 dark:text-white/90">Estado inicial</p>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Por defecto, la sala se crea activa.</p>
+            </div>
+            <app-switch [checked]="salaForm.controls.activo.value" (checkedChange)="salaForm.controls.activo.setValue($event)" ariaLabel="Estado inicial activo" />
+          </div>
+        } @else {
+          <p class="text-sm text-gray-500 dark:text-gray-400">El estado se cambia con las acciones Activar o Desactivar.</p>
+        }
+
+        <div class="flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+          <button app-button variant="outline" type="button" [disabled]="saving()" (click)="closeSalaForm()">Cancelar</button>
+          <button app-button type="button" [disabled]="saving()" (click)="saveSala()">{{ saving() ? 'Guardando...' : 'Guardar' }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- Formulario de ambiente -->
+@if (ambienteFormOpen()) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 p-4" (click)="closeAmbienteForm()">
+    <div class="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-800 dark:bg-gray-900" role="dialog" aria-modal="true" aria-labelledby="ambiente-form-title" (click)="$event.stopPropagation()">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h3 id="ambiente-form-title" class="text-xl font-semibold text-gray-900 dark:text-white">{{ ambienteFormMode() === 'create' ? 'Nuevo ambiente' : 'Editar ambiente' }}</h3>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Los campos marcados con * son obligatorios.</p>
+        </div>
+        <button app-button variant="ghost" size="icon-sm" type="button" ariaLabel="Cerrar formulario" (click)="closeAmbienteForm()">✕</button>
+      </div>
+
+      <form class="mt-5 space-y-4" [formGroup]="ambienteForm" (ngSubmit)="saveAmbiente()">
+        @if (ambienteFormError(); as message) { <app-alert variant="error" [message]="message" /> }
+        @if (ambienteConflict(); as conflictName) {
+          <app-alert variant="warning" title="Ambiente duplicado" [message]="'Ya existe el ambiente ' + conflictName + ' en esa sucursal.'" />
+        }
+        @if (ambienteConcurrency()) {
+          <app-alert variant="warning" title="Conflicto de edición" message="Otro usuario modificó este ambiente. Recargá los datos antes de volver a guardar." />
+          <button app-button variant="outline" type="button" (click)="reloadAmbienteConflict()">Recargar datos</button>
+        }
+
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Sucursal *</label>
+            <app-select-field [options]="ambienteBranchOptions()" [value]="ambienteForm.controls.sucursal_id.value" [disabled]="ambienteFormMode() === 'edit' && !canEditAmbienteStructure()" placeholder="Seleccioná una sucursal" ariaLabel="Sucursal" (valueChange)="ambienteForm.controls.sucursal_id.setValue($event)" />
+            @if (fieldError('ambiente', 'sucursal_id'); as message) { <p class="mt-1 text-sm text-error-500">{{ message }}</p> }
+          </div>
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Uso previsto *</label>
+            <app-select-field [options]="usoOptions" [value]="ambienteForm.controls.uso.value" [disabled]="ambienteFormMode() === 'edit' && !canEditAmbienteStructure()" placeholder="Seleccioná un uso" ariaLabel="Uso previsto" (valueChange)="ambienteForm.controls.uso.setValue($event)" />
+            @if (fieldError('ambiente', 'uso'); as message) { <p class="mt-1 text-sm text-error-500">{{ message }}</p> }
+          </div>
+        </div>
+
+        <div>
+          <label for="ambiente-nombre" class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre *</label>
+          <input app-input id="ambiente-nombre" type="text" formControlName="nombre" [error]="fieldError('ambiente', 'nombre') !== null" [disabled]="ambienteFormMode() === 'edit' && !canEditAmbienteData()" placeholder="Ej. Consultorio 1" />
+          @if (fieldError('ambiente', 'nombre'); as message) { <p class="mt-1 text-sm text-error-500">{{ message }}</p> }
+        </div>
+
+        <div>
+          <label for="ambiente-observaciones" class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Observaciones</label>
+          <textarea app-textarea id="ambiente-observaciones" rows="3" formControlName="observaciones" [error]="fieldError('ambiente', 'observaciones') !== null" [disabled]="ambienteFormMode() === 'edit' && !canEditAmbienteData()" placeholder="Observaciones del ambiente"></textarea>
+          @if (fieldError('ambiente', 'observaciones'); as message) { <p class="mt-1 text-sm text-error-500">{{ message }}</p> }
+        </div>
+
+        @if (ambienteFormMode() === 'create') {
+          <div class="flex items-center justify-between gap-4 rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+            <div>
+              <p class="text-sm font-medium text-gray-800 dark:text-white/90">Estado inicial</p>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Por defecto, el ambiente se crea activo.</p>
+            </div>
+            <app-switch [checked]="ambienteForm.controls.activo.value" (checkedChange)="ambienteForm.controls.activo.setValue($event)" ariaLabel="Estado inicial activo" />
+          </div>
+        } @else {
+          <p class="text-sm text-gray-500 dark:text-gray-400">El estado se cambia con las acciones Activar o Desactivar.</p>
+        }
+
+        <div class="flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+          <button app-button variant="outline" type="button" [disabled]="saving()" (click)="closeAmbienteForm()">Cancelar</button>
+          <button app-button type="button" [disabled]="saving()" (click)="saveAmbiente()">{{ saving() ? 'Guardando...' : 'Guardar' }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- Formulario de tipo de sala -->
+@if (tipoFormOpen()) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 p-4" (click)="closeTipoForm()">
+    <div class="w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-800 dark:bg-gray-900" role="dialog" aria-modal="true" aria-labelledby="tipo-form-title" (click)="$event.stopPropagation()">
+      <div class="flex items-start justify-between gap-4">
+        <h3 id="tipo-form-title" class="text-xl font-semibold text-gray-900 dark:text-white">{{ tipoFormMode() === 'create' ? 'Nuevo tipo de sala' : 'Editar tipo de sala' }}</h3>
+        <button app-button variant="ghost" size="icon-sm" type="button" ariaLabel="Cerrar formulario" (click)="closeTipoForm()">✕</button>
+      </div>
+
+      <form class="mt-5 space-y-4" [formGroup]="tipoForm" (ngSubmit)="saveTipo()">
+        @if (tipoFormError(); as message) { <app-alert variant="error" [message]="message" /> }
+        @if (tipoConcurrency()) {
+          <app-alert variant="warning" title="Conflicto de edición" message="Otro usuario modificó este tipo. Recargá los datos antes de volver a guardar." />
+          <button app-button variant="outline" type="button" (click)="reloadTipoConflict()">Recargar datos</button>
+        }
+        <div>
+          <label for="tipo-nombre" class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre *</label>
+          <input app-input id="tipo-nombre" type="text" formControlName="nombre" [error]="fieldError('tipo', 'nombre') !== null" placeholder="Ej. Preescolar" />
+          @if (fieldError('tipo', 'nombre'); as message) { <p class="mt-1 text-sm text-error-500">{{ message }}</p> }
+        </div>
+        @if (tipoFormMode() === 'create') {
+          <div class="flex items-center justify-between gap-4 rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+            <p class="text-sm font-medium text-gray-800 dark:text-white/90">Estado inicial activo</p>
+            <app-switch [checked]="tipoForm.controls.activo.value" (checkedChange)="tipoForm.controls.activo.setValue($event)" ariaLabel="Estado inicial activo" />
+          </div>
+        }
+        <div class="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+          <button app-button variant="outline" type="button" [disabled]="saving()" (click)="closeTipoForm()">Cancelar</button>
+          <button app-button type="button" [disabled]="saving()" (click)="saveTipo()">{{ saving() ? 'Guardando...' : 'Guardar' }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- Formulario de turno -->
+@if (turnoFormOpen()) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 p-4" (click)="closeTurnoForm()">
+    <div class="w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-800 dark:bg-gray-900" role="dialog" aria-modal="true" aria-labelledby="turno-form-title" (click)="$event.stopPropagation()">
+      <div class="flex items-start justify-between gap-4">
+        <h3 id="turno-form-title" class="text-xl font-semibold text-gray-900 dark:text-white">{{ turnoFormMode() === 'create' ? 'Nuevo turno' : 'Editar turno' }}</h3>
+        <button app-button variant="ghost" size="icon-sm" type="button" ariaLabel="Cerrar formulario" (click)="closeTurnoForm()">✕</button>
+      </div>
+
+      <form class="mt-5 space-y-4" [formGroup]="turnoForm" (ngSubmit)="saveTurno()">
+        @if (turnoFormError(); as message) { <app-alert variant="error" [message]="message" /> }
+        @if (turnoConcurrency()) {
+          <app-alert variant="warning" title="Conflicto de edición" message="Otro usuario modificó este turno. Recargá los datos antes de volver a guardar." />
+          <button app-button variant="outline" type="button" (click)="reloadTurnoConflict()">Recargar datos</button>
+        }
+        <div>
+          <label for="turno-nombre" class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre *</label>
+          <input app-input id="turno-nombre" type="text" formControlName="nombre" [error]="fieldError('turno', 'nombre') !== null" placeholder="Ej. Mañana" />
+          @if (fieldError('turno', 'nombre'); as message) { <p class="mt-1 text-sm text-error-500">{{ message }}</p> }
+        </div>
+        <div>
+          <label for="turno-orden" class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Orden de visualización *</label>
+          <input app-input id="turno-orden" type="number" formControlName="orden" [error]="fieldError('turno', 'orden') !== null" placeholder="Ej. 1" />
+          @if (fieldError('turno', 'orden'); as message) { <p class="mt-1 text-sm text-error-500">{{ message }}</p> }
+        </div>
+        @if (turnoFormMode() === 'create') {
+          <div class="flex items-center justify-between gap-4 rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+            <p class="text-sm font-medium text-gray-800 dark:text-white/90">Estado inicial activo</p>
+            <app-switch [checked]="turnoForm.controls.activo.value" (checkedChange)="turnoForm.controls.activo.setValue($event)" ariaLabel="Estado inicial activo" />
+          </div>
+        }
+        <div class="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+          <button app-button variant="outline" type="button" [disabled]="saving()" (click)="closeTurnoForm()">Cancelar</button>
+          <button app-button type="button" [disabled]="saving()" (click)="saveTurno()">{{ saving() ? 'Guardando...' : 'Guardar' }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- Diálogo de estado -->
+@if (statusOpen()) {
+  @if (statusTarget(); as target) {
+    <div class="fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/60 p-4" (click)="closeStatus()">
+      <div class="w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-800 dark:bg-gray-900" role="dialog" aria-modal="true" aria-labelledby="status-title" (click)="$event.stopPropagation()">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h3 id="status-title" class="text-xl font-semibold text-gray-900 dark:text-white">
+              {{ statusMode() === 'deactivate' ? 'Desactivar' : 'Activar' }} {{ entityLabel(target.type) }}
+            </h3>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ target.entity.nombre }}</p>
+          </div>
+          <button app-button variant="ghost" size="icon-sm" type="button" ariaLabel="Cerrar diálogo" (click)="closeStatus()">✕</button>
+        </div>
+
+        @if (statusMode() === 'deactivate') {
+          <div class="mt-4">
+            <app-alert variant="warning" title="Nuevas operaciones bloqueadas" message="Un espacio inactivo no admite nuevas inscripciones ni turnos. Los datos históricos se conservan. El motivo es obligatorio." />
+          </div>
+        } @else {
+          <div class="mt-4">
+            <app-alert variant="info" title="Reactivar registro" message="El registro volverá a estar disponible para nuevas operaciones." />
+          </div>
+        }
+
+        @if (statusError(); as message) {
+          <div class="mt-4"><app-alert variant="error" [message]="message" /></div>
+        }
+
+        @if (statusConflict()) {
+          <div class="mt-3">
+            <button app-button variant="outline" type="button" (click)="reloadStatusTarget()">Recargar datos</button>
+          </div>
+        }
+
+        <form class="mt-5 space-y-4" [formGroup]="statusForm" (ngSubmit)="confirmStatus()">
+          @if (statusMode() === 'deactivate') {
+            <div>
+              <label for="status-motivo" class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Motivo *</label>
+              <textarea app-textarea id="status-motivo" rows="4" formControlName="motivo" [error]="statusFieldError('motivo') !== null" placeholder="Ingresá el motivo de la desactivación"></textarea>
+              @if (statusFieldError('motivo'); as message) { <p class="mt-1 text-sm text-error-500">{{ message }}</p> }
+            </div>
+          } @else {
+            <p class="text-sm text-gray-500 dark:text-gray-400">La activación no requiere motivo.</p>
+          }
+
+          <div class="flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+            <button app-button variant="outline" type="button" [disabled]="saving()" (click)="closeStatus()">Cancelar</button>
+            <button
+              app-button
+              [variant]="statusMode() === 'deactivate' ? 'destructive' : 'default'"
+              type="button"
+              [disabled]="saving()"
+              (click)="confirmStatus()"
+            >
+              {{ saving() ? 'Guardando...' : statusMode() === 'deactivate' ? 'Desactivar' : 'Activar' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+}
