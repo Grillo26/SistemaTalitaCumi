@@ -26,5 +26,9 @@ class DatabaseSeeder extends Seeder
         }
 
         $this->call(OrganizacionSucursalesPermissionSeeder::class);
+        $this->call(OrganizacionSalasAmbientesPermissionSeeder::class);
+        $this->call(OrganizacionSalasAmbientesCatalogSeeder::class);
+        $this->call(OrganizacionConfiguracionPermissionSeeder::class);
+        $this->call(OrganizacionConfiguracionCatalogSeeder::class);
     }
 }

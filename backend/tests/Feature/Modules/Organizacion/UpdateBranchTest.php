@@ -209,6 +209,6 @@ final class UpdateBranchTest extends OrganizacionTestCase
             ->assertOk()
             ->assertJsonPath('data.version', 1);
 
-        $this->assertSame(0, BitacoraEntry::query()->count());
+        $this->assertSame(0, BitacoraEntry::query()->where('entidad', 'sucursal')->count());
     }
 }

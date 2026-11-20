@@ -74,7 +74,7 @@ final class BranchAuditTest extends OrganizacionTestCase
             actorId: $user->id,
         ));
 
-        $entries = BitacoraEntry::query()->orderBy('id')->get();
+        $entries = BitacoraEntry::query()->where('entidad', 'sucursal')->orderBy('id')->get();
 
         $this->assertCount(4, $entries);
         $this->assertSame(['CREAR', 'ACTUALIZAR', 'DESACTIVAR', 'ACTIVAR'], $entries->pluck('accion')->all());

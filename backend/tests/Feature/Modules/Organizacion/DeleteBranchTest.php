@@ -22,7 +22,7 @@ final class DeleteBranchTest extends OrganizacionTestCase
             );
 
         $this->assertDatabaseHas('sucursal', ['id' => $branch->id]);
-        $this->assertSame(0, BitacoraEntry::query()->count());
+        $this->assertSame(0, BitacoraEntry::query()->where('entidad', 'sucursal')->count());
     }
 
     public function test_reception_cannot_attempt_deletion(): void

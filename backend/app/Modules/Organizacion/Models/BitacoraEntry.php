@@ -2,7 +2,9 @@
 
 namespace App\Modules\Organizacion\Models;
 
+use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Entrada de bitácora (solo inserción).
@@ -37,5 +39,10 @@ class BitacoraEntry extends Model
             'datos_nuevos' => 'array',
             'created_at' => 'datetime',
         ];
+    }
+
+    public function usuario(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'usuario_id');
     }
 }

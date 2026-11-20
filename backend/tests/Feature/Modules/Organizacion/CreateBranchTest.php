@@ -36,7 +36,7 @@ final class CreateBranchTest extends OrganizacionTestCase
             'activo' => true,
         ]);
 
-        $audit = BitacoraEntry::query()->sole();
+        $audit = BitacoraEntry::query()->where('entidad', 'sucursal')->sole();
 
         $this->assertSame($user->id, $audit->usuario_id);
         $this->assertSame('CREAR', $audit->accion);

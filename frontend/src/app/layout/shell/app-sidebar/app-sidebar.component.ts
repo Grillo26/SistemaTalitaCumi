@@ -42,6 +42,11 @@ export class AppSidebarComponent {
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V8l8-5 8 5v13"/><path d="M9 21v-6h6v6"/><path d="M4 8h16"/></svg>',
     },
     {
+      name: 'Salas y ambientes',
+      path: '/organizacion/salas-ambientes',
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.25" y="3.25" width="17.5" height="17.5" rx="2"/><path d="M8.5 3.25v17.5M13 8h4M13 12h4M13 16h4"/></svg>',
+    },
+    {
       name: 'Agenda',
       path: '/agenda',
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.25" y="4.75" width="17.5" height="16" rx="2"/><path d="M7.5 2.75v4M16.5 2.75v4M3.25 9.25h17.5"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/></svg>',
@@ -83,7 +88,7 @@ export class AppSidebarComponent {
     },
     {
       name: 'Configuración',
-      path: '/configuracion',
+      path: '/organizacion/configuracion',
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.25"/><path d="M19.5 13.5a7.8 7.8 0 0 0 0-3l2-1.5-2-3.5-2.35.95a7.6 7.6 0 0 0-2.6-1.5L14.25 2h-4.5l-.3 2.45a7.6 7.6 0 0 0-2.6 1.5L4.5 5 2.5 8.5l2 1.5a7.8 7.8 0 0 0 0 3l-2 1.5 2 3.5 2.35-.95a7.6 7.6 0 0 0 2.6 1.5l.3 2.45h4.5l.3-2.45a7.6 7.6 0 0 0 2.6-1.5l2.35.95 2-3.5-2-1.5Z"/></svg>',
     },
   ];

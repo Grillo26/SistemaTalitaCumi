@@ -108,7 +108,13 @@ erDiagram
     configuracion {
         bigint id PK
         varchar clave UK
+        varchar categoria
+        varchar tipo
         text valor
+        text valor_defecto
+        boolean sensible
+        boolean visible_recepcion
+        integer version
     }
 
     rol ||--o{ rol_permiso : "tiene"
@@ -196,7 +202,7 @@ erDiagram
     tutor ||--o{ ficha_ingreso : "firma"
 ```
 
-### Catálogo de servicios, tarifas y salas
+### Catálogo de servicios, tarifas, salas y ambientes
 
 ```mermaid
 erDiagram
@@ -208,13 +214,34 @@ erDiagram
     sucursal {
         bigint id PK
     }
+    tipo_sala {
+        bigint id PK
+        varchar nombre UK
+        boolean activo
+    }
+    turno_catalogo {
+        bigint id PK
+        varchar nombre UK
+        int orden
+        boolean activo
+    }
     sala {
         bigint id PK
         bigint sucursal_id FK
         bigint area_id FK
+        bigint tipo_sala_id FK
+        bigint turno_catalogo_id FK
         varchar nombre
-        varchar tipo
-        varchar turno
+        text observaciones
+        boolean activo
+        integer version
+    }
+    ambiente {
+        bigint id PK
+        bigint sucursal_id FK
+        varchar nombre
+        varchar uso
+        boolean activo
     }
     servicio {
         bigint id PK
@@ -248,6 +275,9 @@ erDiagram
 
     area ||--o{ sala : "tipo de"
     sucursal ||--o{ sala : "tiene"
+    tipo_sala ||--o{ sala : "define"
+    turno_catalogo ||--o{ sala : "define"
+    sucursal ||--o{ ambiente : "tiene"
     area ||--o{ servicio : "clasifica"
     servicio ||--o{ tarifa : "tiene"
     categoria_tarifa ||--o{ tarifa : "clasifica"
@@ -701,17 +731,28 @@ Timestamps: solo `created_at`.
 
 #### `configuracion` — Parámetros del sistema
 
-*Configuración.* Valores configurables sin tocar código.
+*Configuración.* Valores configurables sin tocar código. Catálogo versionado por seeder/migración; no se crean ni eliminan desde la UI y no tiene borrado lógico.
 
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `clave` | `varchar(100)` |  | `UK` | `duracion_sesion_minutos`, `dias_alerta_vencimiento`, `ventana_edicion_asistencia_horas`, `sesion_inactividad_minutos`, `nombre_centro`, `mensaje_whatsapp`… |
-| `valor` | `text` |  |  |  |
-| `tipo` | `varchar(20)` |  | `DEFAULT 'texto'` | texto, número, booleano, json |
-| `descripcion` | `text` | sí |  |  |
+| `clave` | `varchar(100)` |  | `UK` | Clave estable del catálogo (`duracion_sesion_minutos`, `agenda.turno_manana.inicio`, `moneda`…) |
+| `categoria` | `varchar(50)` |  | índice | `identidad`, `operacion`, `agenda`, `pagos`, `formato_documentos`, `zona_horaria`, `moneda` |
+| `descripcion` | `text` | sí |  | Texto en español para la UI |
+| `tipo` | `varchar(20)` |  | `DEFAULT 'texto'`, CHECK | `entero`, `decimal`, `hora`, `texto`, `booleano` |
+| `valor` | `text` |  |  | Valor vigente serializado como texto |
+| `valor_defecto` | `text` |  |  | Se usa para restaurar (RF-005) |
+| `unidad` | `varchar(30)` | sí |  | `minutos`, `horas`, `días`, `Bs`… |
+| `minimo` | `text` | sí |  | Límite inferior; en textos representa longitud |
+| `maximo` | `text` | sí |  | Límite superior; en textos representa longitud |
+| `sensible` | `boolean` |  | `DEFAULT false` | Exige confirmación y motivo (RF-016) |
+| `editable` | `boolean` |  | `DEFAULT true` | `false` para moneda, leyenda y logo (carga especial) |
+| `visible_recepcion` | `boolean` |  | `DEFAULT false` | Filtra lo que ve Recepción (RF-014) |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista (409) |
 
-Timestamps: `updated_at`.
+Timestamps: solo `updated_at`. Las altas y cambios se reconstruyen desde `bitacora` (`entidad = 'parametro'`). No hay `sucursal_id`: los parámetros son globales (RN-009).
+
+Índices: `clave` único, `categoria`, `visible_recepcion`. El catálogo inicial tiene 23 claves y se carga con `OrganizacionConfiguracionCatalogSeeder`; cada alta deja un registro `CREAR` en bitácora.
 
 ---
 
@@ -845,6 +886,8 @@ Timestamps: `created_at`, `updated_at`.
 
 *Configuración.* Salas Grupales e Intervención Terapéutica. El color es configurable.
 
+> **Implementación actual:** el submódulo 01.02 crea esta tabla como prerequisito de solo lectura para `sala.area_id`. El CRUD y la administración de colores pertenecen al módulo 05; aquí no se modifican.
+
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
@@ -854,21 +897,66 @@ Timestamps: `created_at`, `updated_at`.
 
 Timestamps: `created_at`, `updated_at`.
 
-#### `sala` — Salas
+#### `tipo_sala` — Tipos de sala
 
-*Maestro.* Sala = tipo + turno + sucursal. Agregable.
+*Configuración.* Catálogo global administrable (RF-001/RF-002). Los tipos iniciales son preescolar, atención temprana, estimulación temprana y escolar.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `nombre` | `varchar(100)` |  | `UNIQUE` funcional | Único sin distinguir mayúsculas ni espacios externos |
+| `activo` | `boolean` |  | `DEFAULT true` |  |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
+
+Índices: `UNIQUE ((lower(trim(nombre))))`. Timestamps: `created_at`, `updated_at`.
+
+#### `turno_catalogo` — Turnos operativos
+
+*Configuración.* Catálogo global administrable (RF-003). No confundir con la tabla `turno` de agenda del módulo 07.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `nombre` | `varchar(50)` |  | `UNIQUE` funcional | Inicialmente mañana y tarde |
+| `orden` | `integer` |  | `DEFAULT 0` | Orden de visualización |
+| `activo` | `boolean` |  | `DEFAULT true` |  |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
+
+Índices: `UNIQUE ((lower(trim(nombre))))`, `(orden)`. Timestamps: `created_at`, `updated_at`.
+
+#### `sala` — Salas grupales
+
+*Maestro.* Sala = tipo de sala + turno + sucursal. Agregable.
 
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
 | `sucursal_id` | `bigint` |  | `FK → sucursal` |  |
-| `area_id` | `bigint` |  | `FK → area` |  |
-| `nombre` | `varchar(150)` |  |  |  |
-| `tipo` | `varchar(100)` |  |  | preescolar, atención temprana, estimulación temprana, escolar |
-| `turno` | `varchar(20)` |  | `CHECK IN ('mañana','tarde')` |  |
+| `area_id` | `bigint` |  | `FK → area` | Referencia para el color de agenda |
+| `tipo_sala_id` | `bigint` |  | `FK → tipo_sala` |  |
+| `turno_catalogo_id` | `bigint` |  | `FK → turno_catalogo` |  |
+| `nombre` | `varchar(150)` |  |  | Nombre visible |
+| `observaciones` | `text` | sí |  |  |
 | `activo` | `boolean` |  | `DEFAULT true` |  |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
 
-Índices: `UNIQUE (sucursal_id, tipo, turno)`. Timestamps: `created_at`, `updated_at`.
+Índices: `UNIQUE (sucursal_id, tipo_sala_id, turno_catalogo_id)`, `(tipo_sala_id)`, `(turno_catalogo_id)`. Timestamps: `created_at`, `updated_at`.
+
+#### `ambiente` — Ambientes
+
+*Maestro.* Espacios de atención individual, entrevista y diagnóstico. Pertenece a una sucursal.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `sucursal_id` | `bigint` |  | `FK → sucursal` |  |
+| `nombre` | `varchar(150)` |  | `UNIQUE` funcional por sucursal |  |
+| `uso` | `varchar` |  | `CHECK IN ('terapia_individual','entrevista','diagnostico','mixto')` |  |
+| `observaciones` | `text` | sí |  |  |
+| `activo` | `boolean` |  | `DEFAULT true` |  |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
+
+Índices: `UNIQUE (sucursal_id, lower(trim(nombre)))`, `(sucursal_id)`, `(uso)`. Timestamps: `created_at`, `updated_at`.
 
 #### `servicio` — Servicios
 
@@ -1085,6 +1173,8 @@ Sin `updated_at`.
 | `asistencia_registrada_en` | `timestamptz` | sí |  |  |
 
 Índices: `(fecha)`, `(sucursal_id, fecha)`, `(paciente_id)`, `(profesional_id)`, `(estado)`, `(sala_id, fecha)`. CHECK: exactamente uno de `sala_id`, `paquete_sesiones_id` o `atencion_diagnostico_id` no nulo. Timestamps: `created_at`, `updated_at`.
+
+> **TODO módulo 07:** la tabla actual solo referencia `sala_id`. Para las terapias individuales, entrevistas y diagnósticos se evaluará agregar `ambiente_id` y consumir `AmbienteDirectoryContract`. No se modificó esta tabla en el submódulo 01.02.
 
 #### `turno_profesional` — Profesionales por turno
 
@@ -1386,7 +1476,8 @@ Timestamps: `created_at`, `updated_at`.
 |---|---|---|
 | Un pago se vincula a exactamente una entidad | BD | `CHECK` con suma de `IS NOT NULL` = 1 |
 | Un turno es de sala, paquete o diagnóstico (nunca dos) | BD | `CHECK` con suma de `IS NOT NULL` = 1 |
-| Una sala no se repite en la misma sucursal por tipo y turno | BD | `UNIQUE (sucursal_id, tipo, turno)` |
+| Una sala no se repite en la misma sucursal por tipo y turno | BD | `UNIQUE (sucursal_id, tipo_sala_id, turno_catalogo_id)` |
+| Un ambiente no repite nombre dentro de la sucursal | BD | `UNIQUE (sucursal_id, lower(trim(nombre)))` |
 | Una caja abierta por sucursal y día | BD | `UNIQUE (sucursal_id, fecha)` |
 | Un solo informe de entrevista por atención | BD | `UNIQUE (atencion_entrevista_id)` |
 | Un solo resultado por diagnóstico | BD | `UNIQUE (atencion_diagnostico_id)` |

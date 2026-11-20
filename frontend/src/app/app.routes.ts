@@ -11,7 +11,6 @@ import { ReportesComponent } from './pages/reportes/reportes.component';
 import { CatalogoComponent } from './pages/catalogo/catalogo.component';
 import { ProfesionalesComponent } from './pages/profesionales/profesionales.component';
 import { InventarioComponent } from './pages/inventario/inventario.component';
-import { ConfiguracionComponent } from './pages/configuracion/configuracion.component';
 
 export const routes: Routes = [
   {
@@ -76,14 +75,28 @@ export const routes: Routes = [
       },
       {
         path: 'configuracion',
-        component: ConfiguracionComponent,
-        title: 'Configuración | TalitaCumi',
+        redirectTo: 'organizacion/configuracion',
+        pathMatch: 'full',
       },
       {
         path: 'organizacion/sucursales',
         loadChildren: () =>
           import('./pages/organizacion/sucursales/sucursales.routes').then(
             (m) => m.SUCURSALES_ROUTES,
+          ),
+      },
+      {
+        path: 'organizacion/salas-ambientes',
+        loadChildren: () =>
+          import('./pages/organizacion/salas-ambientes/salas-ambientes.routes').then(
+            (m) => m.SALAS_AMBIENTES_ROUTES,
+          ),
+      },
+      {
+        path: 'organizacion/configuracion',
+        loadChildren: () =>
+          import('./pages/organizacion/configuracion/configuracion.routes').then(
+            (m) => m.CONFIGURACION_ROUTES,
           ),
       },
 
