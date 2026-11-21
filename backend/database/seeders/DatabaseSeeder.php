@@ -39,5 +39,8 @@ class DatabaseSeeder extends Seeder
         $this->call(SeguridadPermissionSeeder::class);
         $this->call(SeguridadMatrixBaselineSeeder::class);
         $this->call(AccionAuditadaSeeder::class);
+        $this->call(ProfesionalesPermissionSeeder::class);
+        $this->call(EspecialidadCatalogoSeeder::class);
+        $this->call(ProfesionalesAccionAuditadaSeeder::class);
     }
 }

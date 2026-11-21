@@ -10,7 +10,6 @@ import { InscripcionesComponent } from './pages/inscripciones/inscripciones.comp
 import { PagosComponent } from './pages/pagos/pagos.component';
 import { ReportesComponent } from './pages/reportes/reportes.component';
 import { CatalogoComponent } from './pages/catalogo/catalogo.component';
-import { ProfesionalesComponent } from './pages/profesionales/profesionales.component';
 import { InventarioComponent } from './pages/inventario/inventario.component';
 
 export const routes: Routes = [
@@ -66,8 +65,12 @@ export const routes: Routes = [
       },
       {
         path: 'profesionales',
-        component: ProfesionalesComponent,
-        title: 'Profesionales | TalitaCumi',
+        canActivate: [permissionGuard],
+        data: { permission: 'profesional.ver' },
+        loadChildren: () =>
+          import('./pages/profesionales/profesionales.routes').then(
+            (m) => m.PROFESIONALES_ROUTES,
+          ),
       },
       {
         path: 'inventario',

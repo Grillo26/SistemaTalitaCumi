@@ -1,0 +1,1226 @@
+<div>
+  <app-page-breadcrumb pageTitle="Profesionales" />
+
+  <div class="space-y-5 sm:space-y-6">
+    @if (error(); as apiError) {
+      <app-alert
+        variant="error"
+        title="No se pudo completar la operación"
+        [message]="apiError.message"
+      />
+    }
+
+    <app-component-card
+      title="Profesionales"
+      desc="Directorio, especialidades y sucursales de trabajo del equipo."
+    >
+      <div class="flex flex-wrap gap-2" role="tablist" aria-label="Secciones de profesionales">
+        @for (section of sectionOptions(); track section.value) {
+          <button
+            app-button
+            type="button"
+            [variant]="activeSection() === section.value ? 'default' : 'outline'"
+            [attr.aria-pressed]="activeSection() === section.value"
+            (click)="setSection(section.value)"
+          >
+            {{ section.label }}
+          </button>
+        }
+      </div>
+
+      @switch (activeSection()) {
+        @case ('directorio') {
+          <div class="space-y-4">
+            <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <div class="relative w-full sm:w-64">
+                  <span
+                    class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-gray-400"
+                    aria-hidden="true"
+                  >
+                    <svg class="size-5" viewBox="0 0 20 20" fill="none">
+                      <path
+                        d="M14.382 14.383l3.325 3.326m-1.249-8.334a7.082 7.082 0 01-7.083 7.081 7.082 7.082 0 110-14.163 7.082 7.082 0 017.083 7.082z"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </span>
+                  <input
+                    app-input
+                    type="text"
+                    [formControl]="profesionalSearch"
+                    class="ps-10"
+                    placeholder="Buscar por nombre, CI o correo..."
+                    aria-label="Buscar profesionales"
+                  />
+                </div>
+
+                <div class="w-full sm:w-48">
+                  <app-select-field
+                    [options]="especialidadFilterOptions()"
+                    [value]="profesionalEspecialidadFilter() === '' ? '' : profesionalEspecialidadFilter().toString()"
+                    placeholder="Todas las especialidades"
+                    ariaLabel="Filtrar por especialidad"
+                    (valueChange)="onProfesionalEspecialidadFilter($event)"
+                  />
+                </div>
+
+                <div class="w-full sm:w-48">
+                  <app-select-field
+                    [options]="sucursalFilterOptions()"
+                    [value]="profesionalSucursalFilter() === '' ? '' : profesionalSucursalFilter().toString()"
+                    placeholder="Todas las sucursales"
+                    ariaLabel="Filtrar por sucursal"
+                    (valueChange)="onProfesionalSucursalFilter($event)"
+                  />
+                </div>
+
+                <div class="w-full sm:w-40">
+                  <app-select-field
+                    [options]="estadoOptions"
+                    [value]="profesionalEstadoFilter()"
+                    placeholder="Todos los estados"
+                    ariaLabel="Filtrar por estado"
+                    (valueChange)="onProfesionalEstadoFilter($event)"
+                  />
+                </div>
+              </div>
+
+              @if (canCreate()) {
+                <button app-button variant="default" type="button" (click)="openCreateProfesional()">
+                  Nuevo profesional
+                </button>
+              }
+            </div>
+
+            <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+              <table app-table class="min-w-full">
+                <thead
+                  app-table-header
+                  class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900"
+                >
+                  <tr app-table-row>
+                    <th app-table-cell class="px-4 py-3 text-start">
+                      <button
+                        type="button"
+                        class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                        (click)="sortProfesionales('nombre_completo')"
+                        [attr.aria-sort]="ariaSort('nombre_completo', profesionalSort(), profesionalDirection())"
+                      >
+                        Profesional
+                        <span aria-hidden="true">{{ sortIndicator('nombre_completo', profesionalSort(), profesionalDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-start">
+                      <button
+                        type="button"
+                        class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                        (click)="sortProfesionales('ci')"
+                        [attr.aria-sort]="ariaSort('ci', profesionalSort(), profesionalDirection())"
+                      >
+                        Documento
+                        <span aria-hidden="true">{{ sortIndicator('ci', profesionalSort(), profesionalDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Especialidad principal</th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Sucursales</th>
+                    <th app-table-cell class="px-4 py-3 text-start">
+                      <button
+                        type="button"
+                        class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                        (click)="sortProfesionales('activo')"
+                        [attr.aria-sort]="ariaSort('activo', profesionalSort(), profesionalDirection())"
+                      >
+                        Estado
+                        <span aria-hidden="true">{{ sortIndicator('activo', profesionalSort(), profesionalDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Asignable</th>
+                    <th app-table-cell class="px-4 py-3 text-start">
+                      <button
+                        type="button"
+                        class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                        (click)="sortProfesionales('updated_at')"
+                        [attr.aria-sort]="ariaSort('updated_at', profesionalSort(), profesionalDirection())"
+                      >
+                        Última modificación
+                        <span aria-hidden="true">{{ sortIndicator('updated_at', profesionalSort(), profesionalDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+                  @if (profesionalesLoading()) {
+                    <tr app-table-row>
+                      <td app-table-cell colspan="8" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                        Cargando profesionales...
+                      </td>
+                    </tr>
+                  } @else {
+                    @for (profesional of profesionales(); track profesional.id) {
+                      <tr app-table-row class="hover:bg-gray-50/70 dark:hover:bg-white/[0.02]">
+                        <td app-table-cell class="px-4 py-4 text-sm font-medium text-gray-800 dark:text-white/90">
+                          {{ profesional.nombre_completo }}
+                          @if (profesional.matricula) {
+                            <span class="block text-xs font-normal text-gray-400">Matrícula {{ profesional.matricula }}</span>
+                          }
+                        </td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                          {{ profesional.ci }}
+                        </td>
+                        <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                          {{ profesional.especialidades[0]?.nombre || '—' }}
+                        </td>
+                        <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                          @if (profesional.sucursales.length === 0) {
+                            <span class="text-amber-600 dark:text-amber-400">{{ texts.noBranches }}</span>
+                          } @else {
+                            <div class="flex flex-wrap gap-1">
+                              @for (sucursal of profesional.sucursales; track sucursal.relacion_id) {
+                                <app-badge
+                                  [color]="sucursal.activo_relacion ? 'success' : 'gray'"
+                                  variant="light"
+                                  size="sm"
+                                >
+                                  {{ sucursal.nombre }}
+                                </app-badge>
+                              }
+                            </div>
+                          }
+                        </td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                          <app-badge [color]="profesional.activo ? 'success' : 'gray'" variant="light" size="sm">
+                            {{ profesional.activo ? 'Activo' : 'Inactivo' }}
+                          </app-badge>
+                        </td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                          @if (profesional.asignable) {
+                            <app-badge color="success" variant="light" size="sm">Asignable</app-badge>
+                          } @else {
+                            <app-badge color="warning" variant="light" size="sm">No asignable</app-badge>
+                            <span class="mt-1 block max-w-48 text-xs text-gray-400" [title]="motivosTexto(profesional)">
+                              {{ motivosTexto(profesional) }}
+                            </span>
+                          }
+                        </td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                          {{ formatDate(profesional.updated_at) }}
+                        </td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-end">
+                          <div class="flex flex-wrap items-center justify-end gap-1">
+                            <button app-button variant="ghost" size="sm" type="button" (click)="openDetailProfesional(profesional)">
+                              Ver
+                            </button>
+                            @if (profesional.can.update_data || profesional.can.update_contact) {
+                              <button app-button variant="ghost" size="sm" type="button" (click)="openEditProfesional(profesional)">
+                                Editar
+                              </button>
+                            }
+                            @if (canManageBranches()) {
+                              <button app-button variant="ghost" size="sm" type="button" (click)="openBranches(profesional)">
+                                Sucursales
+                              </button>
+                            }
+                            @if (profesional.can.change_status) {
+                              @if (profesional.activo) {
+                                <button
+                                  app-button
+                                  variant="ghost"
+                                  size="sm"
+                                  type="button"
+                                  (click)="openStatus({ type: 'profesional', entity: profesional }, 'deactivate')"
+                                >
+                                  Desactivar
+                                </button>
+                              } @else {
+                                <button
+                                  app-button
+                                  variant="ghost"
+                                  size="sm"
+                                  type="button"
+                                  (click)="openStatus({ type: 'profesional', entity: profesional }, 'activate')"
+                                >
+                                  Activar
+                                </button>
+                              }
+                            }
+                          </div>
+                        </td>
+                      </tr>
+                    } @empty {
+                      <tr app-table-row>
+                        <td app-table-cell colspan="8" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                          No hay profesionales para los filtros seleccionados.
+                        </td>
+                      </tr>
+                    }
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p class="text-sm text-gray-500 dark:text-gray-400">
+                Mostrando {{ profesionalFrom() ?? 0 }}–{{ profesionalTo() ?? 0 }} de {{ profesionalTotal() }}
+              </p>
+              <app-pagination
+                [currentPage]="profesionalPage()"
+                [totalPages]="profesionalLastPage()"
+                variant="text-icon"
+                (pageChange)="loadProfesionales($event)"
+              />
+            </div>
+          </div>
+        }
+
+        @case ('especialidades') {
+          <div class="space-y-4">
+            <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <div class="relative w-full sm:w-64">
+                  <span
+                    class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-gray-400"
+                    aria-hidden="true"
+                  >
+                    <svg class="size-5" viewBox="0 0 20 20" fill="none">
+                      <path
+                        d="M14.382 14.383l3.325 3.326m-1.249-8.334a7.082 7.082 0 01-7.083 7.081 7.082 7.082 0 110-14.163 7.082 7.082 0 017.083 7.082z"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </span>
+                  <input
+                    app-input
+                    type="text"
+                    [formControl]="especialidadSearch"
+                    class="ps-10"
+                    placeholder="Buscar especialidad..."
+                    aria-label="Buscar especialidades"
+                  />
+                </div>
+
+                <div class="w-full sm:w-44">
+                  <app-select-field
+                    [options]="estadoOptions"
+                    [value]="especialidadEstadoFilter()"
+                    placeholder="Todos los estados"
+                    ariaLabel="Filtrar por estado"
+                    (valueChange)="onEspecialidadEstadoFilter($event)"
+                  />
+                </div>
+              </div>
+
+              @if (canAdminSpecialties()) {
+                <button app-button variant="default" type="button" (click)="openCreateEspecialidad()">
+                  Nueva especialidad
+                </button>
+              }
+            </div>
+
+            <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+              <table app-table class="min-w-full">
+                <thead
+                  app-table-header
+                  class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900"
+                >
+                  <tr app-table-row>
+                    <th app-table-cell class="px-4 py-3 text-start">
+                      <button
+                        type="button"
+                        class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                        (click)="sortEspecialidades('nombre')"
+                        [attr.aria-sort]="ariaSort('nombre', especialidadSort(), especialidadDirection())"
+                      >
+                        Nombre
+                        <span aria-hidden="true">{{ sortIndicator('nombre', especialidadSort(), especialidadDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Descripción</th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Profesionales activos</th>
+                    <th app-table-cell class="px-4 py-3 text-start">
+                      <button
+                        type="button"
+                        class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                        (click)="sortEspecialidades('activo')"
+                        [attr.aria-sort]="ariaSort('activo', especialidadSort(), especialidadDirection())"
+                      >
+                        Estado
+                        <span aria-hidden="true">{{ sortIndicator('activo', especialidadSort(), especialidadDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-start">
+                      <button
+                        type="button"
+                        class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                        (click)="sortEspecialidades('updated_at')"
+                        [attr.aria-sort]="ariaSort('updated_at', especialidadSort(), especialidadDirection())"
+                      >
+                        Última modificación
+                        <span aria-hidden="true">{{ sortIndicator('updated_at', especialidadSort(), especialidadDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+                  @if (especialidadesLoading()) {
+                    <tr app-table-row>
+                      <td app-table-cell colspan="6" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                        Cargando especialidades...
+                      </td>
+                    </tr>
+                  } @else {
+                    @for (especialidad of especialidades(); track especialidad.id) {
+                      <tr app-table-row class="hover:bg-gray-50/70 dark:hover:bg-white/[0.02]">
+                        <td app-table-cell class="px-4 py-4 text-sm font-medium text-gray-800 dark:text-white/90">
+                          {{ especialidad.nombre }}
+                        </td>
+                        <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                          {{ especialidad.descripcion || '—' }}
+                        </td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                          {{ especialidad.profesionales_activos_count }}
+                        </td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                          <app-badge [color]="especialidad.activo ? 'success' : 'gray'" variant="light" size="sm">
+                            {{ especialidad.activo ? 'Activa' : 'Inactiva' }}
+                          </app-badge>
+                        </td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                          {{ formatDate(especialidad.updated_at) }}
+                        </td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-end">
+                          <div class="flex flex-wrap items-center justify-end gap-1">
+                            @if (especialidad.can.update) {
+                              <button app-button variant="ghost" size="sm" type="button" (click)="openEditEspecialidad(especialidad)">
+                                Editar
+                              </button>
+                            }
+                            @if (especialidad.can.change_status) {
+                              @if (especialidad.activo) {
+                                <button
+                                  app-button
+                                  variant="ghost"
+                                  size="sm"
+                                  type="button"
+                                  [disabled]="especialidad.profesionales_activos_count > 0"
+                                  [title]="especialidad.profesionales_activos_count > 0 ? texts.specialtyInUse : ''"
+                                  (click)="openEspecialidadStatus(especialidad, 'deactivate')"
+                                >
+                                  Desactivar
+                                </button>
+                              } @else {
+                                <button
+                                  app-button
+                                  variant="ghost"
+                                  size="sm"
+                                  type="button"
+                                  (click)="openEspecialidadStatus(especialidad, 'activate')"
+                                >
+                                  Activar
+                                </button>
+                              }
+                            }
+                          </div>
+                        </td>
+                      </tr>
+                    } @empty {
+                      <tr app-table-row>
+                        <td app-table-cell colspan="6" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                          No hay especialidades para los filtros seleccionados.
+                        </td>
+                      </tr>
+                    }
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p class="text-sm text-gray-500 dark:text-gray-400">
+                Mostrando {{ especialidadFrom() ?? 0 }}–{{ especialidadTo() ?? 0 }} de {{ especialidadTotal() }}
+              </p>
+              <app-pagination
+                [currentPage]="especialidadPage()"
+                [totalPages]="especialidadLastPage()"
+                variant="text-icon"
+                (pageChange)="loadEspecialidades($event)"
+              />
+            </div>
+          </div>
+        }
+
+        @case ('matriz') {
+          <div class="space-y-4">
+            <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <div class="relative w-full sm:w-56">
+                  <span
+                    class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-gray-400"
+                    aria-hidden="true"
+                  >
+                    <svg class="size-5" viewBox="0 0 20 20" fill="none">
+                      <path
+                        d="M14.382 14.383l3.325 3.326m-1.249-8.334a7.082 7.082 0 01-7.083 7.081 7.082 7.082 0 110-14.163 7.082 7.082 0 017.083 7.082z"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </span>
+                  <input
+                    app-input
+                    type="text"
+                    [formControl]="matrizSearch"
+                    class="ps-10"
+                    placeholder="Buscar profesional, especialidad o sucursal..."
+                    aria-label="Buscar en la matriz"
+                  />
+                </div>
+
+                <div class="w-full sm:w-52">
+                  <app-select-field
+                    [options]="matrizProfesionalOptions()"
+                    [value]="matrizProfesionalFilter() === '' ? '' : matrizProfesionalFilter().toString()"
+                    placeholder="Todos los profesionales"
+                    ariaLabel="Filtrar por profesional"
+                    (valueChange)="onMatrizProfesionalFilter($event)"
+                  />
+                </div>
+
+                <div class="w-full sm:w-48">
+                  <app-select-field
+                    [options]="matrizEspecialidadOptions()"
+                    [value]="matrizEspecialidadFilter() === '' ? '' : matrizEspecialidadFilter().toString()"
+                    placeholder="Todas las especialidades"
+                    ariaLabel="Filtrar por especialidad"
+                    (valueChange)="onMatrizEspecialidadFilter($event)"
+                  />
+                </div>
+
+                <div class="w-full sm:w-48">
+                  <app-select-field
+                    [options]="matrizSucursalOptions()"
+                    [value]="matrizSucursalFilter() === '' ? '' : matrizSucursalFilter().toString()"
+                    placeholder="Todas las sucursales"
+                    ariaLabel="Filtrar por sucursal"
+                    (valueChange)="onMatrizSucursalFilter($event)"
+                  />
+                </div>
+
+                <div class="w-full sm:w-40">
+                  <app-select-field
+                    [options]="estadoOptions"
+                    [value]="matrizEstadoFilter()"
+                    placeholder="Todos los estados"
+                    ariaLabel="Filtrar por estado del profesional"
+                    (valueChange)="onMatrizEstadoFilter($event)"
+                  />
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <app-switch
+                    [checked]="matrizSoloAsignables()"
+                    size="sm"
+                    ariaLabel="Mostrar solo asignables"
+                    (checkedChange)="onMatrizSoloAsignables($event)"
+                  />
+                  <span class="text-sm text-gray-600 dark:text-gray-400">Solo asignables</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+              <table app-table class="min-w-full">
+                <thead
+                  app-table-header
+                  class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900"
+                >
+                  <tr app-table-row>
+                    <th app-table-cell class="px-4 py-3 text-start">
+                      <button
+                        type="button"
+                        class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                        (click)="sortMatriz('profesional_nombre')"
+                        [attr.aria-sort]="ariaSort('profesional_nombre', matrizSort(), matrizDirection())"
+                      >
+                        Profesional
+                        <span aria-hidden="true">{{ sortIndicator('profesional_nombre', matrizSort(), matrizDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-start">
+                      <button
+                        type="button"
+                        class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                        (click)="sortMatriz('profesional_ci')"
+                        [attr.aria-sort]="ariaSort('profesional_ci', matrizSort(), matrizDirection())"
+                      >
+                        Documento
+                        <span aria-hidden="true">{{ sortIndicator('profesional_ci', matrizSort(), matrizDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-start">
+                      <button
+                        type="button"
+                        class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                        (click)="sortMatriz('especialidad_nombre')"
+                        [attr.aria-sort]="ariaSort('especialidad_nombre', matrizSort(), matrizDirection())"
+                      >
+                        Especialidad
+                        <span aria-hidden="true">{{ sortIndicator('especialidad_nombre', matrizSort(), matrizDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Tipo</th>
+                    <th app-table-cell class="px-4 py-3 text-start">
+                      <button
+                        type="button"
+                        class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                        (click)="sortMatriz('sucursal_nombre')"
+                        [attr.aria-sort]="ariaSort('sucursal_nombre', matrizSort(), matrizDirection())"
+                      >
+                        Sucursal
+                        <span aria-hidden="true">{{ sortIndicator('sucursal_nombre', matrizSort(), matrizDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Estado profesional</th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Estado especialidad</th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Estado sucursal</th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Asignable</th>
+                    <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+                  @if (matrizLoading()) {
+                    <tr app-table-row>
+                      <td app-table-cell colspan="10" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                        Cargando matriz...
+                      </td>
+                    </tr>
+                  } @else {
+                    @for (row of matriz(); track row.profesional.id + '-' + row.especialidad.id + '-' + row.sucursal.id) {
+                      <tr app-table-row class="hover:bg-gray-50/70 dark:hover:bg-white/[0.02]">
+                        <td app-table-cell class="px-4 py-4 text-sm font-medium text-gray-800 dark:text-white/90">
+                          {{ row.profesional.nombre_completo }}
+                        </td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                          {{ row.profesional.ci }}
+                        </td>
+                        <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                          {{ row.especialidad.nombre }}
+                        </td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                          <app-badge
+                            [color]="row.especialidad.tipo === 'principal' ? 'primary' : 'info'"
+                            variant="light"
+                            size="sm"
+                          >
+                            {{ row.especialidad.tipo === 'principal' ? 'Principal' : 'Secundaria' }}
+                          </app-badge>
+                        </td>
+                        <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                          {{ row.sucursal.nombre }}
+                        </td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                          <app-badge [color]="row.profesional.activo ? 'success' : 'gray'" variant="light" size="sm">
+                            {{ row.profesional.activo ? 'Activo' : 'Inactivo' }}
+                          </app-badge>
+                        </td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                          <app-badge [color]="row.especialidad.activo ? 'success' : 'gray'" variant="light" size="sm">
+                            {{ row.especialidad.activo ? 'Activa' : 'Inactiva' }}
+                          </app-badge>
+                        </td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                          <app-badge [color]="row.sucursal.activo ? 'success' : 'gray'" variant="light" size="sm">
+                            {{ row.sucursal.activo ? 'Activa' : 'Inactiva' }}
+                          </app-badge>
+                        </td>
+                        <td app-table-cell class="px-4 py-4">
+                          @if (row.asignable) {
+                            <app-badge color="success" variant="light" size="sm">Sí</app-badge>
+                          } @else {
+                            <app-badge color="warning" variant="light" size="sm">No</app-badge>
+                            <span class="mt-1 block max-w-48 text-xs text-gray-400" [title]="motivosMatrizTexto(row)">
+                              {{ motivosMatrizTexto(row) }}
+                            </span>
+                          }
+                        </td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-end">
+                          @if (matrizViewProfessionals()) {
+                            <button app-button variant="ghost" size="sm" type="button" (click)="openDetailById(row.profesional.id)">
+                              Ver ficha
+                            </button>
+                          }
+                          @if (canManageBranches()) {
+                            <button app-button variant="ghost" size="sm" type="button" (click)="openBranchesById(row.profesional.id)">
+                              Sucursales
+                            </button>
+                          }
+                        </td>
+                      </tr>
+                    } @empty {
+                      <tr app-table-row>
+                        <td app-table-cell colspan="10" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                          No hay combinaciones para los filtros seleccionados.
+                        </td>
+                      </tr>
+                    }
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p class="text-sm text-gray-500 dark:text-gray-400">
+                Mostrando {{ matrizFrom() ?? 0 }}–{{ matrizTo() ?? 0 }} de {{ matrizTotal() }}
+              </p>
+              <app-pagination
+                [currentPage]="matrizPage()"
+                [totalPages]="matrizLastPage()"
+                variant="text-icon"
+                (pageChange)="loadMatriz($event)"
+              />
+            </div>
+          </div>
+        }
+      }
+    </app-component-card>
+  </div>
+
+  <!-- Alta / edición de profesional -->
+  <app-modal
+    [open]="profesionalModalOpen()"
+    [title]="profesionalModalMode() === 'create' ? 'Nuevo profesional' : 'Editar profesional'"
+    subtitle="Los profesionales no tienen acceso al sistema; su registro es referencial para agenda y diagnósticos."
+    size="lg"
+    [showFooter]="true"
+    (closed)="profesionalModalOpen.set(false)"
+  >
+    <div modal-body>
+      <form [formGroup]="profesionalForm" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div class="sm:col-span-2">
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="profesional-nombre">
+            Nombre completo
+          </label>
+          <input
+            id="profesional-nombre"
+            app-input
+            type="text"
+            formControlName="nombre_completo"
+            [disabled]="!formCanEditData()"
+            placeholder="Nombre y apellidos"
+          />
+          @if (fieldError('nombre_completo'); as message) {
+            <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+          } @else if (profesionalForm.controls.nombre_completo.touched && profesionalForm.controls.nombre_completo.invalid) {
+            <p class="mt-1 text-xs text-red-500">El nombre completo es obligatorio.</p>
+          }
+        </div>
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="profesional-ci">
+            Documento (CI)
+          </label>
+          <input
+            id="profesional-ci"
+            app-input
+            type="text"
+            formControlName="ci"
+            [disabled]="!formCanEditData()"
+            placeholder="Ej. 12345678-1A"
+          />
+          @if (fieldError('ci'); as message) {
+            <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+          } @else if (profesionalForm.controls.ci.touched && profesionalForm.controls.ci.invalid) {
+            <p class="mt-1 text-xs text-red-500">El documento es obligatorio.</p>
+          }
+        </div>
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="profesional-matricula">
+            Matrícula profesional (opcional)
+          </label>
+          <input
+            id="profesional-matricula"
+            app-input
+            type="text"
+            formControlName="matricula"
+            [disabled]="!formCanEditData()"
+            placeholder="Matrícula"
+          />
+          @if (fieldError('matricula'); as message) {
+            <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+          }
+        </div>
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="profesional-telefono">
+            Teléfono
+          </label>
+          <input
+            id="profesional-telefono"
+            app-input
+            type="text"
+            formControlName="telefono"
+            [disabled]="!formCanEditContact()"
+            placeholder="Ej. 71234567"
+          />
+          @if (fieldError('telefono'); as message) {
+            <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+          }
+        </div>
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="profesional-telefono-2">
+            Teléfono alternativo
+          </label>
+          <input
+            id="profesional-telefono-2"
+            app-input
+            type="text"
+            formControlName="telefono_2"
+            [disabled]="!formCanEditContact()"
+            placeholder="Opcional"
+          />
+          @if (fieldError('telefono_2'); as message) {
+            <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+          }
+        </div>
+
+        <div class="sm:col-span-2">
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="profesional-email">
+            Correo electrónico
+          </label>
+          <input
+            id="profesional-email"
+            app-input
+            type="email"
+            formControlName="email"
+            [disabled]="!formCanEditContact()"
+            placeholder="Opcional"
+          />
+          @if (fieldError('email'); as message) {
+            <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+          } @else if (profesionalForm.controls.email.touched && profesionalForm.controls.email.invalid) {
+            <p class="mt-1 text-xs text-red-500">El correo no tiene un formato válido.</p>
+          }
+        </div>
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Especialidad principal
+          </label>
+          <app-select-field
+            [options]="principalOptions()"
+            [value]="profesionalForm.controls.especialidad_principal_id.value"
+            placeholder="Seleccioná una especialidad"
+            ariaLabel="Especialidad principal"
+            [disabled]="!formCanEditData()"
+            (valueChange)="onPrincipalChange($event)"
+          />
+          @if (fieldError('especialidad_principal_id'); as message) {
+            <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+          } @else if (profesionalForm.controls.especialidad_principal_id.touched && profesionalForm.controls.especialidad_principal_id.invalid) {
+            <p class="mt-1 text-xs text-red-500">Seleccioná una especialidad principal.</p>
+          }
+        </div>
+
+        @if (profesionalModalMode() === 'create') {
+          <div class="flex items-center gap-3 pt-6">
+            <app-switch
+              [checked]="profesionalForm.controls.activo.value"
+              [disabled]="!formCanEditData()"
+              ariaLabel="Profesional activo"
+              (checkedChange)="profesionalForm.controls.activo.setValue($event)"
+            />
+            <span class="text-sm text-gray-700 dark:text-gray-300">Crear como activo</span>
+          </div>
+        }
+
+        @if (puedeSecundarias()) {
+          <div class="sm:col-span-2">
+            <p class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Especialidades secundarias</p>
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              @for (especialidad of secondaryOptions(); track especialidad.id) {
+                <label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                  <input
+                    type="checkbox"
+                    class="size-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                    [checked]="isSecondarySelected(especialidad.id)"
+                    [disabled]="!formCanEditData()"
+                    (change)="toggleSecondary(especialidad.id)"
+                  />
+                  {{ especialidad.nombre }}
+                </label>
+              }
+            </div>
+          </div>
+        }
+      </form>
+    </div>
+
+    <div modal-footer class="flex items-center justify-end gap-2">
+      <button app-button variant="outline" type="button" (click)="profesionalModalOpen.set(false)">
+        Cancelar
+      </button>
+      <button app-button variant="default" type="button" [disabled]="saving()" (click)="saveProfesional()">
+        {{ saving() ? 'Guardando...' : 'Guardar' }}
+      </button>
+    </div>
+  </app-modal>
+
+  <!-- Ficha del profesional -->
+  <app-modal
+    [open]="detailOpen()"
+    title="Ficha del profesional"
+    size="lg"
+    [showFooter]="true"
+    (closed)="detailOpen.set(false)"
+  >
+    <div modal-body>
+      @if (detailProfesional(); as profesional) {
+        <div class="space-y-5">
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <p class="text-xs uppercase text-gray-400">Nombre</p>
+              <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ profesional.nombre_completo }}</p>
+            </div>
+            <div>
+              <p class="text-xs uppercase text-gray-400">Documento</p>
+              <p class="text-sm text-gray-700 dark:text-gray-300">{{ profesional.ci }}</p>
+            </div>
+            <div>
+              <p class="text-xs uppercase text-gray-400">Teléfonos</p>
+              <p class="text-sm text-gray-700 dark:text-gray-300">
+                {{ profesional.telefono || '—' }}
+                @if (profesional.telefono_2) {
+                  · {{ profesional.telefono_2 }}
+                }
+              </p>
+            </div>
+            <div>
+              <p class="text-xs uppercase text-gray-400">Correo</p>
+              <p class="text-sm text-gray-700 dark:text-gray-300">{{ profesional.email || '—' }}</p>
+            </div>
+            <div>
+              <p class="text-xs uppercase text-gray-400">Matrícula</p>
+              <p class="text-sm text-gray-700 dark:text-gray-300">{{ profesional.matricula || '—' }}</p>
+            </div>
+            <div>
+              <p class="text-xs uppercase text-gray-400">Estado</p>
+              <app-badge [color]="profesional.activo ? 'success' : 'gray'" variant="light" size="sm">
+                {{ profesional.activo ? 'Activo' : 'Inactivo' }}
+              </app-badge>
+              @if (profesional.motivo_estado) {
+                <p class="mt-1 text-xs text-gray-400">{{ profesional.motivo_estado }}</p>
+              }
+            </div>
+          </div>
+
+          <div>
+            <p class="mb-2 text-xs uppercase text-gray-400">Especialidades</p>
+            <div class="flex flex-wrap gap-2">
+              @for (especialidad of profesional.especialidades; track especialidad.relacion_id) {
+                <app-badge [color]="especialidad.tipo === 'principal' ? 'primary' : 'info'" variant="light" size="sm">
+                  {{ especialidad.nombre }} · {{ especialidad.tipo }}
+                </app-badge>
+              } @empty {
+                <p class="text-sm text-gray-500">Sin especialidades activas.</p>
+              }
+            </div>
+          </div>
+
+          <div>
+            <p class="mb-2 text-xs uppercase text-gray-400">Sucursales de trabajo</p>
+            <div class="space-y-2">
+              @for (sucursal of profesional.sucursales; track sucursal.relacion_id) {
+                <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-800">
+                  <span class="text-sm text-gray-700 dark:text-gray-300">{{ sucursal.nombre }}</span>
+                  <app-badge [color]="sucursal.activo_relacion ? 'success' : 'gray'" variant="light" size="sm">
+                    {{ sucursal.activo_relacion ? 'Activa' : 'Inactiva' }}
+                  </app-badge>
+                </div>
+              } @empty {
+                <p class="text-sm text-amber-600 dark:text-amber-400">Sin sucursales asignadas: no es asignable.</p>
+              }
+            </div>
+          </div>
+
+          @if (profesional.asignable) {
+            <app-alert variant="success" title="Asignable" message="El profesional puede asignarse a turnos y diagnósticos de sus sucursales." />
+          } @else {
+            <app-alert variant="warning" title="No asignable" [message]="motivosTexto(profesional)" />
+          }
+
+          <p class="text-xs text-gray-400">Última modificación: {{ formatDate(profesional.updated_at) }}</p>
+        </div>
+      }
+    </div>
+
+    <div modal-footer class="flex items-center justify-end gap-2">
+      @if (detailProfesional(); as profesional) {
+        <button app-button variant="outline" type="button" (click)="detailOpen.set(false)">Cerrar</button>
+        @if (profesional.can.update_data || profesional.can.update_contact) {
+          <button app-button variant="default" type="button" (click)="detailOpen.set(false); openEditProfesional(profesional)">
+            Editar
+          </button>
+        }
+        @if (canManageBranches()) {
+          <button app-button variant="default" type="button" (click)="detailOpen.set(false); openBranches(profesional)">
+            Sucursales
+          </button>
+        }
+      }
+    </div>
+  </app-modal>
+
+  <!-- Cambio de estado del profesional -->
+  <app-modal
+    [open]="statusOpen()"
+    [title]="statusMode() === 'activate' ? 'Activar profesional' : 'Desactivar profesional'"
+    size="md"
+    [showFooter]="true"
+    (closed)="statusOpen.set(false)"
+  >
+    <div modal-body>
+      <p class="mb-4 text-sm text-gray-600 dark:text-gray-400">
+        El motivo es obligatorio y quedará registrado en la bitácora.
+      </p>
+      <form [formGroup]="statusForm">
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="status-motivo">
+          Motivo
+        </label>
+        <textarea
+          id="status-motivo"
+          app-textarea
+          formControlName="motivo"
+          rows="3"
+          placeholder="Describí el motivo del cambio de estado"
+        ></textarea>
+        @if (statusForm.controls.motivo.touched && statusForm.controls.motivo.invalid) {
+          <p class="mt-1 text-xs text-red-500">El motivo es obligatorio.</p>
+        }
+      </form>
+    </div>
+    <div modal-footer class="flex items-center justify-end gap-2">
+      <button app-button variant="outline" type="button" (click)="statusOpen.set(false)">Cancelar</button>
+      <button app-button variant="default" type="button" [disabled]="saving()" (click)="confirmStatus()">
+        {{ saving() ? 'Guardando...' : 'Confirmar' }}
+      </button>
+    </div>
+  </app-modal>
+
+  <!-- Sucursales del profesional -->
+  <app-modal
+    [open]="branchesOpen()"
+    title="Sucursales de trabajo"
+    subtitle="La relación es independiente de la especialidad."
+    size="lg"
+    [showFooter]="true"
+    (closed)="branchesOpen.set(false)"
+  >
+    <div modal-body>
+      @if (branchesLoading()) {
+        <p class="py-8 text-center text-sm text-gray-500">Cargando sucursales...</p>
+      } @else {
+        <div class="space-y-2">
+          @for (branch of branches(); track branch.id) {
+            <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-3 dark:border-gray-800">
+              <div>
+                <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ branch.nombre }}</p>
+                <p class="text-xs text-gray-400">
+                  {{ branch.codigo }}
+                  @if (!branch.activo) {
+                    · Sucursal inactiva
+                  }
+                  @if (branch.activo_relacion === false) {
+                    · Relación inactiva
+                  }
+                </p>
+              </div>
+              <div class="flex items-center gap-2">
+                @if (branch.relacion_id === null) {
+                  <button
+                    app-button
+                    variant="default"
+                    size="sm"
+                    type="button"
+                    [disabled]="!branchAbilities().administrar || !branch.activo"
+                    (click)="assignBranch(branch)"
+                  >
+                    Asignar
+                  </button>
+                } @else if (branch.activo_relacion) {
+                  <app-badge color="success" variant="light" size="sm">Activa</app-badge>
+                  @if (branchAbilities().administrar) {
+                    <button app-button variant="ghost" size="sm" type="button" (click)="openBranchStatus(branch, 'deactivate')">
+                      Desactivar
+                    </button>
+                  }
+                } @else {
+                  <app-badge color="gray" variant="light" size="sm">Inactiva</app-badge>
+                  @if (branchAbilities().administrar) {
+                    <button
+                      app-button
+                      variant="ghost"
+                      size="sm"
+                      type="button"
+                      [disabled]="!branch.activo"
+                      (click)="openBranchStatus(branch, 'activate')"
+                    >
+                      Activar
+                    </button>
+                  }
+                }
+              </div>
+            </div>
+          } @empty {
+            <p class="py-8 text-center text-sm text-gray-500">No hay sucursales visibles para tu alcance.</p>
+          }
+        </div>
+      }
+    </div>
+    <div modal-footer class="flex items-center justify-end gap-2">
+      <button app-button variant="outline" type="button" (click)="branchesOpen.set(false)">Cerrar</button>
+    </div>
+  </app-modal>
+
+  <!-- Cambio de estado de la relación con sucursal -->
+  <app-modal
+    [open]="branchStatusOpen()"
+    [title]="branchStatusMode() === 'activate' ? 'Activar sucursal de trabajo' : 'Desactivar sucursal de trabajo'"
+    size="md"
+    [showFooter]="true"
+    (closed)="branchStatusOpen.set(false)"
+  >
+    <div modal-body>
+      <p class="mb-4 text-sm text-gray-600 dark:text-gray-400">
+        El motivo es obligatorio y quedará registrado en la bitácora.
+      </p>
+      <form [formGroup]="branchStatusForm">
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="branch-status-motivo">
+          Motivo
+        </label>
+        <textarea
+          id="branch-status-motivo"
+          app-textarea
+          formControlName="motivo"
+          rows="3"
+          placeholder="Describí el motivo del cambio"
+        ></textarea>
+        @if (branchStatusForm.controls.motivo.touched && branchStatusForm.controls.motivo.invalid) {
+          <p class="mt-1 text-xs text-red-500">El motivo es obligatorio.</p>
+        }
+      </form>
+    </div>
+    <div modal-footer class="flex items-center justify-end gap-2">
+      <button app-button variant="outline" type="button" (click)="branchStatusOpen.set(false)">Cancelar</button>
+      <button app-button variant="default" type="button" [disabled]="saving()" (click)="confirmBranchStatus()">
+        {{ saving() ? 'Guardando...' : 'Confirmar' }}
+      </button>
+    </div>
+  </app-modal>
+
+  <!-- Alta / edición de especialidad -->
+  <app-modal
+    [open]="especialidadModalOpen()"
+    [title]="especialidadModalMode() === 'create' ? 'Nueva especialidad' : 'Editar especialidad'"
+    size="md"
+    [showFooter]="true"
+    (closed)="especialidadModalOpen.set(false)"
+  >
+    <div modal-body>
+      <form [formGroup]="especialidadForm" class="space-y-4">
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="especialidad-nombre">
+            Nombre
+          </label>
+          <input
+            id="especialidad-nombre"
+            app-input
+            type="text"
+            formControlName="nombre"
+            placeholder="Ej. Psicología"
+          />
+          @if (especialidadFieldError('nombre'); as message) {
+            <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+          } @else if (especialidadForm.controls.nombre.touched && especialidadForm.controls.nombre.invalid) {
+            <p class="mt-1 text-xs text-red-500">El nombre es obligatorio.</p>
+          }
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="especialidad-descripcion">
+            Descripción
+          </label>
+          <textarea
+            id="especialidad-descripcion"
+            app-textarea
+            formControlName="descripcion"
+            rows="3"
+            placeholder="Descripción opcional"
+          ></textarea>
+        </div>
+        @if (especialidadModalMode() === 'create') {
+          <div class="flex items-center gap-3">
+            <app-switch
+              [checked]="especialidadForm.controls.activo.value"
+              ariaLabel="Especialidad activa"
+              (checkedChange)="especialidadForm.controls.activo.setValue($event)"
+            />
+            <span class="text-sm text-gray-700 dark:text-gray-300">Crear como activa</span>
+          </div>
+        }
+      </form>
+    </div>
+    <div modal-footer class="flex items-center justify-end gap-2">
+      <button app-button variant="outline" type="button" (click)="especialidadModalOpen.set(false)">Cancelar</button>
+      <button app-button variant="default" type="button" [disabled]="saving()" (click)="saveEspecialidad()">
+        {{ saving() ? 'Guardando...' : 'Guardar' }}
+      </button>
+    </div>
+  </app-modal>
+
+  <!-- Cambio de estado de especialidad -->
+  <app-modal
+    [open]="especialidadStatusOpen()"
+    [title]="especialidadStatusMode() === 'activate' ? 'Activar especialidad' : 'Desactivar especialidad'"
+    size="md"
+    [showFooter]="true"
+    (closed)="especialidadStatusOpen.set(false)"
+  >
+    <div modal-body>
+      <p class="mb-4 text-sm text-gray-600 dark:text-gray-400">
+        El motivo es obligatorio y quedará registrado en la bitácora.
+      </p>
+      <form [formGroup]="statusForm">
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="especialidad-status-motivo">
+          Motivo
+        </label>
+        <textarea
+          id="especialidad-status-motivo"
+          app-textarea
+          formControlName="motivo"
+          rows="3"
+          placeholder="Describí el motivo del cambio"
+        ></textarea>
+        @if (statusForm.controls.motivo.touched && statusForm.controls.motivo.invalid) {
+          <p class="mt-1 text-xs text-red-500">El motivo es obligatorio.</p>
+        }
+      </form>
+    </div>
+    <div modal-footer class="flex items-center justify-end gap-2">
+      <button app-button variant="outline" type="button" (click)="especialidadStatusOpen.set(false)">Cancelar</button>
+      <button app-button variant="default" type="button" [disabled]="saving()" (click)="confirmEspecialidadStatus()">
+        {{ saving() ? 'Guardando...' : 'Confirmar' }}
+      </button>
+    </div>
+  </app-modal>
+</div>

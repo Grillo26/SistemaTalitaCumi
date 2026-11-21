@@ -85,7 +85,7 @@ Todas las rutas están dentro del layout principal y protegidas por `authGuard`.
 | `/pagos` | Pagos y caja |
 | `/reportes` | Reportes |
 | `/catalogo` | Catálogo |
-| `/profesionales` | Profesionales |
+| `/profesionales` | Profesionales: directorio, especialidades y sucursales |
 | `/inventario` | Inventario |
 | `/configuracion` | Redirige a `/organizacion/configuracion` |
 | `/organizacion/sucursales` | Organización y sucursales |
@@ -95,7 +95,7 @@ Todas las rutas están dentro del layout principal y protegidas por `authGuard`.
 | `/seguridad/roles-permisos` | Matriz de roles y permisos |
 | `/seguridad/bitacora` | Consulta y reconstrucción de bitácora |
 
-Los módulos sin implementar muestran un estado vacío reutilizable (`app-module-placeholder`). Las rutas `/organizacion/sucursales`, `/organizacion/salas-ambientes`, `/organizacion/configuracion`, `/seguridad/usuarios`, `/seguridad/roles-permisos` y `/seguridad/bitacora` ya están implementadas y consumen la API real del backend.
+Los módulos sin implementar muestran un estado vacío reutilizable (`app-module-placeholder`). Las rutas `/profesionales`, `/organizacion/sucursales`, `/organizacion/salas-ambientes`, `/organizacion/configuracion`, `/seguridad/usuarios`, `/seguridad/roles-permisos` y `/seguridad/bitacora` ya están implementadas y consumen la API real del backend.
 
 ### Páginas de referencia
 
@@ -957,6 +957,50 @@ Inputs: `title`, `description`. Estado vacío de los módulos pendientes.
 
 ---
 
+### 25. Profesionales
+
+**Ruta:** `/profesionales`
+**Entrada de sidebar:** `Profesionales` (visible con `profesional.ver`)
+
+**Archivos:**
+
+- `src/app/pages/profesionales/profesionales.page.ts`
+- `src/app/pages/profesionales/profesionales.page.html`
+- `src/app/pages/profesionales/profesionales.routes.ts`
+- `src/app/pages/profesionales/profesionales.service.ts`
+- `src/app/pages/profesionales/profesionales.models.ts`
+
+**API consumida:**
+
+| Entidad | Endpoints |
+|---|---|
+| Profesionales | `GET/POST /api/profesionales/profesionales`, `GET/PATCH /profesionales/{id}`, `GET /profesionales/opciones`, `POST /{id}/activar`, `POST /{id}/desactivar` |
+| Sucursales de trabajo | `GET/POST /profesionales/{id}/sucursales`, `POST /{id}/sucursales/{sucursalId}/activar`, `POST /{id}/sucursales/{sucursalId}/desactivar` |
+| Especialidades | `GET/POST /api/profesionales/especialidades`, `GET/PATCH /especialidades/{id}`, `POST /{id}/activar`, `POST /{id}/desactivar` |
+| Matriz | `GET /api/profesionales/matriz`, `GET /api/profesionales/matriz/opciones` |
+
+**Funcionalidad:**
+
+- Una sola página con tabs propias: **Directorio**, **Especialidades** y **Matriz**.
+- Directorio: búsqueda por nombre/CI/correo, filtros por especialidad, sucursal y estado, paginación, ficha, alta/edición en modal y activación/desactivación con motivo.
+- Ficha con especialidades, sucursales, estado, última modificación y marca **Asignable / No asignable** con los motivos (sin sucursal activa, especialidad inactiva, profesional inactivo).
+- Modal de sucursales de trabajo: asignar, activar y desactivar relaciones con motivo.
+- Especialidades: búsqueda, filtro por estado, paginación, alta/edición, activación/desactivación con motivo y conteo de profesionales activos. La desactivación se deshabilita si hay profesionales activos.
+- Matriz: consulta filtrable por profesional, especialidad, sucursal, estado del profesional y “solo asignables”; muestra el tipo de especialidad, los estados de profesional/especialidad/sucursal y el motivo de no asignabilidad. Solo lectura, con acceso a la ficha del profesional y al modal de sucursales para quien puede administrarlas. Sin exportación.
+- Administración solo puede editar contactos: el formulario deshabilita y omite nombre, CI, matrícula y especialidades. Recepción solo consulta.
+- El formulario conserva lo digitado si falla la red. Errores `422` por campo (incluido documento duplicado), `409` de concurrencia con recarga, `409` de especialidad en uso, y `403`/`401` con alerta.
+- Sin botón de exportación (pendiente de infraestructura).
+- Sin pantalla de asignación a turnos: la agenda (07) consumirá los contratos del backend.
+- Sin datos mock: todo se carga desde la API.
+
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-pagination`, `app-modal`, `TABLE_IMPORTS`, `input[app-input]`, `app-select-field`, `textarea[app-textarea]`, `app-switch` y `ToastService`. Los selectores de sucursal reutilizan `SucursalesService` en lectura cuando corresponde.
+
+**Permisos y alcance:** `permissionGuard` con `profesional.ver`; el sidebar oculta la entrada sin permiso. La API devuelve `can` de pantalla y por fila. Sin alcance global, el usuario solo ve profesionales con relación activa a sus sucursales; un profesional sin sucursal solo lo ve el alcance global.
+
+**Estado:** Fases 1 y 2 implementadas en backend y frontend (directorio, especialidades, sucursales, matriz y validador cacheado). La Fase 3 del backend entrega contratos/stubs de agenda, diagnósticos y exportación; no agrega pantallas. La exportación PDF/Excel y la asignación real a turnos quedan fuera de esta entrega.
+
+---
+
 ## Paleta de colores
 
 Definida en `src/styles.css` dentro de `@theme`.
@@ -1000,7 +1044,9 @@ No se agregaron `swiper` ni `jsvectormap` porque sus componentes no forman parte
 - Coming Soon.
 - Carrusel, mapas vectoriales, avatares, tabs y popovers no solicitados. Los diálogos de las páginas de negocio usan el modal compartido `app-modal`; las tabs de salas/ambientes siguen siendo propias de esa página.
 - Exportación PDF/Excel de parámetros (RF-015): sin librerías instaladas y sin botón en la UI.
-- Exportaciones de usuarios/matriz/bitácora y envío automático de contraseña temporal (pendiente de infraestructura).
+- Exportaciones de usuarios/matriz/bitácora/profesionales y envío automático de contraseña temporal (pendiente de infraestructura).
+- Persistencia real de asignaciones a turnos/diagnósticos (módulo 07). Los contratos/stubs de Fase 3 ya están implementados en backend.
+- Asignación de profesionales a turnos/diagnósticos (módulo 07): solo se documentan los contratos.
 - Registro, recuperación de contraseña y verificación en dos pasos.
 - Widget promocional del sidebar.
 
@@ -1030,6 +1076,7 @@ No se ejecutó `ng serve` ni se levantó el servidor.
 - La página `/organizacion/configuracion` consume la API real, agrupa parámetros por categoría (incluida la nueva categoría `seguridad`) y usa overlays propios para ficha, edición, restauración e historial. `/configuracion` redirige a la ruta canónica.
 - La pantalla `/cambiar-password` es la única operación permitida cuando el usuario tiene contraseña temporal; el resto de las rutas se redirige allí.
 - **Estado Fase 4:** consulta/detalle de bitácora, filtros, scoping, catálogo de acciones, reconstrucción por fecha y mecanismo de auditoría de datos sensibles/exportaciones implementados. Solo quedan las exportaciones PDF/Excel y los consumidores de los módulos 04/08/11.
-- No se agregaron datos mock ni dependencias nuevas para sucursales, salas/ambientes, configuración ni autenticación. La exportación PDF/Excel (RF-015) sigue fuera de alcance y no se muestra el botón.
+- La página `/profesionales` consume la API real con dos tabs propias (Directorio y Especialidades), ficha, modales de alta/edición/estado y modal de sucursales de trabajo. El sidebar la oculta sin `profesional.ver`.
+- No se agregaron datos mock ni dependencias nuevas para sucursales, salas/ambientes, configuración, profesionales ni autenticación. La exportación PDF/Excel sigue fuera de alcance y no se muestra el botón.
 - `npm run build` se ejecutó correctamente después de implementar el módulo.
 - No se realizó commit.

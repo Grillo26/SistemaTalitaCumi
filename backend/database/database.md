@@ -19,13 +19,13 @@ Referencia del esquema PostgreSQL del sistema. Las migraciones deben coincidir c
 
 | Tema | Convención |
 |---|---|
-| Nombres | Tablas y columnas en español, `snake_case`, tablas en plural. |
+| Nombres | Tablas y columnas en español, `snake_case`. La implementación real usa tablas en **singular** (`sucursal`, `sala`, `profesional`); los documentos funcionales pueden usar plural. |
 | Claves | `bigint identity` (`GENERATED ALWAYS AS IDENTITY`). |
 | Dinero | `numeric(12,2)` en bolivianos. Costos unitarios `numeric(14,4)`. Nunca `float`. |
 | Tiempo | `timestamptz` guardado en UTC y mostrado en `America/La_Paz`. `date` para valores sin hora (vencimientos, fechas de inicio y fin). |
 | Estados | `varchar` + `CHECK (... IN (...))`, mapeado a enums PHP. No usar el tipo ENUM de Postgres. |
 | FKs | Siempre con índice explícito (Postgres no los crea). `ON DELETE RESTRICT` en todo lo transaccional. |
-| Borrado | **Soft delete solo en maestros**: `paciente`, `tutor`, `profesional`, `servicio`, `material_didactico`. Todo lo demás se anula con estado. |
+| Borrado | **Soft delete solo en maestros**: `paciente`, `tutor`, `servicio`, `material_didactico`. `profesional` se activa/desactiva con motivo y bitácora (03/RN-04, 03/RN-20), sin `deleted_at`. Todo lo demás se anula con estado. |
 | Nulos | Columnas `NOT NULL` salvo las marcadas como NULL en el diccionario. |
 | Búsqueda | Extensión `pg_trgm` con índices GIN en nombres de paciente, tutor, profesional, servicio y material. |
 | SQL crudo | CHECKs complejos, índices parciales, `UNIQUE NULLS NOT DISTINCT` y triggers van en las migraciones con `DB::statement`. |
@@ -131,26 +131,40 @@ erDiagram
 
 ### Profesionales
 
+> **Implementación real Fase 1 (módulo 03):** las tablas físicas son `especialidad`, `profesional`, `profesional_especialidad` y `profesional_sucursal`. No hay FK de profesional a `users`: los profesionales no tienen cuenta (03/RN-19). La especialidad principal se guarda únicamente en el pivote `profesional_especialidad` (`tipo = 'principal'`), con un índice único parcial que garantiza una sola principal activa.
+
 ```mermaid
 erDiagram
     especialidad {
         bigint id PK
         varchar nombre UK
+        boolean activo
+        integer version
     }
     profesional {
         bigint id PK
         varchar nombre_completo
-        varchar ci
+        varchar ci UK
         varchar telefono
+        varchar telefono_2
+        varchar email
+        varchar matricula
         boolean activo
+        integer version
     }
     profesional_especialidad {
+        bigint id PK
         bigint profesional_id FK
         bigint especialidad_id FK
+        varchar tipo
+        boolean activo
     }
     profesional_sucursal {
+        bigint id PK
         bigint profesional_id FK
         bigint sucursal_id FK
+        boolean activo
+        integer version
     }
 
     profesional ||--o{ profesional_especialidad : "tiene"
@@ -772,7 +786,7 @@ No se crea la tabla `sesion`. El límite de sesiones y la revocación se impleme
 
 Índices: `(usuario_id)`, `(created_at)`, `(entidad, entidad_id)`, `(accion)`, `(modulo)`, `(resultado)`, `(critico)`, `(sucursal_id, created_at)`. Trigger `BEFORE UPDATE OR DELETE` que lanza error. Sin `updated_at`.
 
-> **Implementación real:** la tabla física de usuarios es `users`; `bitacora.usuario_id` sigue apuntando a `users.id` y no se migra a una tabla `usuario` inexistente. Las columnas `modulo`, `resultado` y `critico` son nullable/default para tolerar filas históricas, porque el trigger impide rellenarlas con UPDATE. Los listeners de 01/03 no se modificaron en la Fase 1. En la Fase 3, la matriz usa `entidad = 'matriz_permisos'`, `accion = 'EDITAR_PERMISOS'`, con antes/después y `linea_base = true` en el evento inicial. En la Fase 4, las consultas a la bitácora usan `entidad = 'bitacora'`, `accion = 'CONSULTAR'`, y las exportaciones `entidad = 'exportacion'`, `accion = 'EXPORTAR'`, `critico = true`. Los eventos de seguridad de usuario se escriben con `sucursal_id` de cada sucursal activa del usuario afectado (una fila por sucursal); los usuarios con alcance global se registran una sola vez con `sucursal_id NULL`. La matriz, las consultas a la bitácora y las exportaciones siguen siendo globales (`sucursal_id NULL`) y solo las ve el Superadmin.
+> **Implementación real:** la tabla física de usuarios es `users`; `bitacora.usuario_id` sigue apuntando a `users.id` y no se migra a una tabla `usuario` inexistente. Las columnas `modulo`, `resultado` y `critico` son nullable/default para tolerar filas históricas, porque el trigger impide rellenarlas con UPDATE. Los listeners de 01/03 no se modificaron en la Fase 1. En la Fase 3, la matriz usa `entidad = 'matriz_permisos'`, `accion = 'EDITAR_PERMISOS'`, con antes/después y `linea_base = true` en el evento inicial. En la Fase 4, las consultas a la bitácora usan `entidad = 'bitacora'`, `accion = 'CONSULTAR'`, y las exportaciones `entidad = 'exportacion'`, `accion = 'EXPORTAR'`, `critico = true`. Los eventos de seguridad de usuario se escriben con `sucursal_id` de cada sucursal activa del usuario afectado (una fila por sucursal); los usuarios con alcance global se registran una sola vez con `sucursal_id NULL`. La matriz, las consultas a la bitácora y las exportaciones siguen siendo globales (`sucursal_id NULL`) y solo las ve el Superadmin. En el módulo 03, los eventos de `profesional` y `profesional_especialidad` se replican por sucursal activa del profesional; `especialidad` y los profesionales sin sucursal quedan con `sucursal_id NULL`.
 
 #### `acceso_clinico_temporal` — Acceso especial a contenido clínico
 
@@ -825,14 +839,14 @@ Timestamps: solo `updated_at`. Las altas y cambios se reconstruyen desde `bitaco
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `modulo` | `varchar(50)` |  |  | `organizacion`, `usuarios`, `autenticacion`, `roles`, `auditoria` |
-| `entidad` | `varchar(100)` |  |  | `usuario`, `sesion`, `matriz_permisos`, `bitacora`, `exportacion`, etc. |
+| `modulo` | `varchar(50)` |  |  | `organizacion`, `usuarios`, `autenticacion`, `roles`, `auditoria`, `profesionales` |
+| `entidad` | `varchar(100)` |  |  | `usuario`, `sesion`, `matriz_permisos`, `bitacora`, `exportacion`, `profesional`, `especialidad`, `profesional_especialidad`, `profesional_sucursal`, etc. |
 | `accion` | `varchar(100)` |  |  | `CREAR`, `EDITAR`, `DESACTIVAR`, `CONSULTAR`, `EXPORTAR`, etc. |
 | `critico` | `boolean` |  | `DEFAULT false` | Marca para filtro rápido (RF-B13) |
 | `activo` | `boolean` |  | `DEFAULT true` |  |
 | `descripcion` | `text` | sí |  | Etiqueta legible para la UI |
 
-`UNIQUE (modulo, entidad, accion)`, `INDEX (modulo, activo)`. Timestamps. Seeder idempotente `AccionAuditadaSeeder` (40 acciones, 7 críticas al cierre de la Fase 4).
+`UNIQUE (modulo, entidad, accion)`, `INDEX (modulo, activo)`. Timestamps. Seeder idempotente `AccionAuditadaSeeder` (40 acciones, 7 críticas al cierre de la Fase 4) y `ProfesionalesAccionAuditadaSeeder` para el módulo 03.
 
 #### Migraciones del módulo 02 — Fases 1–4
 
@@ -853,43 +867,84 @@ La Fase 2 no requirió migraciones nuevas. La Fase 3 tampoco: usa `roles.version
 
 #### `especialidad` — Especialidades
 
-*Configuración.* Catálogo de especialidades (psicología, fonoaudiología, fisioterapia…).
+*Configuración.* Catálogo global de especialidades. El nombre es único sin distinguir mayúsculas ni espacios externos.
 
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `nombre` | `varchar(100)` |  | `UK` |  |
+| `nombre` | `varchar(100)` |  | `NOT NULL`; unique funcional `lower(trim(nombre))` |  |
 | `descripcion` | `text` | sí |  |  |
-| `activo` | `boolean` |  | `DEFAULT true` |  |
+| `activo` | `boolean` |  | `DEFAULT true` | Estado lógico; no hay SoftDeletes |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
+| `motivo_estado` | `text` | sí |  | Motivo del último cambio de estado |
+| `estado_cambiado_en` | `timestamptz` | sí |  |  |
 
 Timestamps: `created_at`, `updated_at`.
 
 #### `profesional` — Profesionales
 
-*Maestro.* Los profesionales NO usan el sistema; son un directorio administrativo.
+*Maestro.* Los profesionales NO usan el sistema; son un directorio administrativo. No hay FK a `users`, ni cuenta, ni rol Spatie (03/RN-19).
 
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `nombre_completo` | `varchar(200)` |  |  |  |
-| `ci` | `varchar(20)` | sí |  |  |
+| `nombre_completo` | `varchar(200)` |  | `NOT NULL` |  |
+| `ci` | `varchar(30)` |  | `NOT NULL`; unique funcional `lower(trim(ci))` | Documento de identidad (03/RN-01) |
 | `telefono` | `varchar(30)` | sí |  |  |
+| `telefono_2` | `varchar(30)` | sí |  |  |
 | `email` | `varchar(150)` | sí |  |  |
-| `activo` | `boolean` |  | `DEFAULT true` |  |
+| `matricula` | `varchar(50)` | sí |  | Supuesto a validar; opcional |
+| `activo` | `boolean` |  | `DEFAULT true` | Estado lógico; no hay SoftDeletes |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
+| `motivo_estado` | `text` | sí |  | Motivo del último cambio de estado |
+| `estado_cambiado_en` | `timestamptz` | sí |  |  |
 
-Timestamps: `created_at`, `updated_at`. Soft delete: `deleted_at`.
+Timestamps: `created_at`, `updated_at`. Sin `deleted_at`.
 
 #### `profesional_especialidad` — Especialidades del profesional
 
-*Pivot.* Un profesional puede tener una o más especialidades.
+*Pivot con historial.* Única fuente de verdad de la especialidad principal (03/RN-02).
 
-`PRIMARY KEY (profesional_id, especialidad_id)`. Sin timestamps.
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `profesional_id` | `bigint` |  | `FK → profesional` `RESTRICT` |  |
+| `especialidad_id` | `bigint` |  | `FK → especialidad` `RESTRICT` |  |
+| `tipo` | `varchar` |  | `CHECK IN ('principal','secundaria')` |  |
+| `activo` | `boolean` |  | `DEFAULT true` | Conserva historial sin borrado físico |
+
+Índices únicos parciales:
+
+- `(profesional_id, especialidad_id) WHERE activo` → no duplicar la relación activa (03/RF-E07).
+- `(profesional_id) WHERE tipo = 'principal' AND activo` → exactamente una principal activa (03/RN-02).
+
+Timestamps: `created_at`, `updated_at`.
 
 #### `profesional_sucursal` — Sucursales del profesional
 
-*Pivot.* En qué sucursales trabaja cada profesional.
+*Pivot con historial.* La relación es independiente de la especialidad (03/RN-10).
 
-`PRIMARY KEY (profesional_id, sucursal_id)`. Sin timestamps.
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `profesional_id` | `bigint` |  | `FK → profesional` `RESTRICT` |  |
+| `sucursal_id` | `bigint` |  | `FK → sucursal` `RESTRICT` |  |
+| `activo` | `boolean` |  | `DEFAULT true` |  |
+| `motivo` | `text` | sí |  | Obligatorio al activar/desactivar (03/RN-20) |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
+
+Índice único parcial `(profesional_id, sucursal_id) WHERE activo` → no duplicar la relación activa (03/RF-E07).
+
+Timestamps: `created_at`, `updated_at`.
+
+**Migraciones del módulo 03 (Fase 1):**
+
+- `2026_11_22_000000_create_especialidad_table.php`
+- `2026_11_22_000100_create_profesional_table.php`
+- `2026_11_22_000200_create_profesional_especialidad_table.php`
+- `2026_11_22_000300_create_profesional_sucursal_table.php`
+
+**Seeders:** `ProfesionalesPermissionSeeder`, `EspecialidadCatalogoSeeder` (5 especialidades base, PROPUESTO - VALIDAR), `ProfesionalesAccionAuditadaSeeder`.
 
 ---
 
@@ -1267,7 +1322,7 @@ Sin `updated_at`.
 
 Índices: `(fecha)`, `(sucursal_id, fecha)`, `(paciente_id)`, `(profesional_id)`, `(estado)`, `(sala_id, fecha)`. CHECK: exactamente uno de `sala_id`, `paquete_sesiones_id` o `atencion_diagnostico_id` no nulo. Timestamps: `created_at`, `updated_at`.
 
-> **TODO módulo 07:** la tabla actual solo referencia `sala_id`. Para las terapias individuales, entrevistas y diagnósticos se evaluará agregar `ambiente_id` y consumir `AmbienteDirectoryContract`. No se modificó esta tabla en el submódulo 01.02.
+> **Implementación real:** la tabla `turno` aún no existe como tabla física; esta definición es referencia para el módulo 07. El módulo 03 no modifica `turno`: deja contratos y stubs. `profesional_id` será nullable («sin asignar») y el estado `programado` se validará en 07.
 
 #### `turno_profesional` — Profesionales por turno
 
