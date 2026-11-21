@@ -1,0 +1,668 @@
+<div>
+  <app-page-breadcrumb pageTitle="Usuarios" />
+
+  <div class="space-y-5 sm:space-y-6">
+    @if (error(); as apiError) {
+      <app-alert
+        variant="error"
+        title="No se pudo completar la operación"
+        [message]="apiError.message"
+      />
+    }
+
+    <app-component-card
+      title="Gestión de usuarios"
+      desc="Administrá las cuentas del personal, su rol y sus sucursales. Los usuarios no se eliminan: se activan o desactivan."
+    >
+      <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <div class="relative w-full sm:w-64">
+            <span class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-gray-400" aria-hidden="true">
+              <svg class="size-5" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M14.382 14.383l3.325 3.326m-1.249-8.334a7.082 7.082 0 01-7.083 7.081 7.082 7.082 0 110-14.163 7.082 7.082 0 017.083 7.082z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </span>
+            <input
+              app-input
+              type="text"
+              [formControl]="searchControl"
+              class="ps-10"
+              placeholder="Buscar por nombre, correo o documento..."
+              aria-label="Buscar usuarios"
+            />
+          </div>
+
+          <div class="w-full sm:w-48">
+            <app-select-field
+              [options]="roleOptions()"
+              [value]="roleFilter()?.toString() ?? ''"
+              placeholder="Todos los roles"
+              ariaLabel="Filtrar por rol"
+              (valueChange)="onRoleChange($event)"
+            />
+          </div>
+
+          <div class="w-full sm:w-56">
+            <app-select-field
+              [options]="branchOptions()"
+              [value]="branchFilter()?.toString() ?? ''"
+              placeholder="Todas las sucursales"
+              ariaLabel="Filtrar por sucursal"
+              (valueChange)="onBranchChange($event)"
+            />
+          </div>
+
+          <div class="w-full sm:w-44">
+            <app-select-field
+              [options]="stateOptions"
+              [value]="stateFilter()"
+              placeholder="Todos los estados"
+              ariaLabel="Filtrar por estado"
+              (valueChange)="onStateChange($event)"
+            />
+          </div>
+        </div>
+
+        @if (abilities().create) {
+          <button app-button type="button" (click)="openCreate()">
+            Nuevo usuario
+          </button>
+        }
+      </div>
+
+      <div class="mt-5 overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+        <table app-table class="min-w-full">
+          <thead app-table-header class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
+            <tr app-table-row>
+              <th app-table-cell class="px-4 py-3 text-start">
+                <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortBy('nombre')" [attr.aria-sort]="ariaSort('nombre')">
+                  Usuario <span aria-hidden="true">{{ sortIndicator('nombre') }}</span>
+                </button>
+              </th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Documento</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Rol</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Sucursales</th>
+              <th app-table-cell class="px-4 py-3 text-start">
+                <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortBy('activo')" [attr.aria-sort]="ariaSort('activo')">
+                  Estado <span aria-hidden="true">{{ sortIndicator('activo') }}</span>
+                </button>
+              </th>
+              <th app-table-cell class="px-4 py-3 text-start">
+                <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortBy('ultimo_acceso')" [attr.aria-sort]="ariaSort('ultimo_acceso')">
+                  Último acceso <span aria-hidden="true">{{ sortIndicator('ultimo_acceso') }}</span>
+                </button>
+              </th>
+              <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
+            </tr>
+          </thead>
+
+          <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+            @if (loading()) {
+              <tr app-table-row>
+                <td app-table-cell colspan="7" class="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                  Cargando usuarios...
+                </td>
+              </tr>
+            } @else if (users().length === 0) {
+              <tr app-table-row>
+                <td app-table-cell colspan="7" class="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                  No hay usuarios que coincidan con los filtros.
+                </td>
+              </tr>
+            } @else {
+              @for (user of users(); track user.id) {
+                <tr app-table-row>
+                  <td app-table-cell class="px-4 py-3">
+                    <div class="flex items-center gap-3">
+                      <span class="grid size-10 shrink-0 place-items-center rounded-full bg-brand-50 text-sm font-semibold text-brand-600 dark:bg-brand-500/15 dark:text-brand-300">
+                        {{ initials(user.nombre_completo) }}
+                      </span>
+                      <div class="min-w-0">
+                        <p class="truncate text-sm font-medium text-gray-800 dark:text-white/90">{{ user.nombre_completo }}</p>
+                        <p class="truncate text-xs text-gray-500 dark:text-gray-400">{{ user.email || 'Sin correo' }}</p>
+                        @if (user.username) {
+                          <p class="truncate text-xs text-gray-400 dark:text-gray-500">&#64;{{ user.username }}</p>
+                        }
+                      </div>
+                    </div>
+                  </td>
+                  <td app-table-cell class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+                    {{ user.documento || '—' }}
+                  </td>
+                  <td app-table-cell class="px-4 py-3">
+                    @if (user.rol; as role) {
+                      <app-badge color="primary" variant="light" size="sm">{{ role.label }}</app-badge>
+                    } @else {
+                      <span class="text-sm text-gray-400">Sin rol</span>
+                    }
+                  </td>
+                  <td app-table-cell class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+                    {{ branchSummary(user) }}
+                  </td>
+                  <td app-table-cell class="px-4 py-3">
+                    <div class="flex flex-col items-start gap-1">
+                      <app-badge [color]="stateColor(user)" variant="light" size="sm">{{ stateLabel(user) }}</app-badge>
+                      @if (user.debe_cambiar_password) {
+                        <app-badge color="warning" variant="light" size="sm">Cambio pendiente</app-badge>
+                      }
+                    </div>
+                  </td>
+                  <td app-table-cell class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+                    <p>{{ user.ultimo_acceso ? (user.ultimo_acceso | date: 'dd/MM/yyyy HH:mm') : '—' }}</p>
+                    <p class="text-xs text-gray-400 dark:text-gray-500">{{ user.sesiones_activas }} sesión(es)</p>
+                  </td>
+                  <td app-table-cell class="px-4 py-3 text-end">
+                    <div class="flex items-center justify-end gap-2">
+                      <button app-button variant="ghost" size="sm" type="button" (click)="openDetail(user)">
+                        Ver
+                      </button>
+                      @if (user.can.update) {
+                        <button app-button variant="outline" size="sm" type="button" (click)="openEdit(user)">
+                          Editar
+                        </button>
+                      }
+                      @if (user.can.change_status) {
+                        @if (user.activo) {
+                          <button app-button variant="unstyled" size="sm" type="button" class="text-sm font-medium text-error-500 hover:text-error-600" (click)="openStatus(user, 'deactivate')">
+                            Desactivar
+                          </button>
+                        } @else {
+                          <button app-button variant="unstyled" size="sm" type="button" class="text-sm font-medium text-success-600 hover:text-success-700" (click)="openStatus(user, 'activate')">
+                            Activar
+                          </button>
+                        }
+                      }
+                    </div>
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+
+      @if (meta(); as pagination) {
+        @if (pagination.last_page > 1) {
+          <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+              Mostrando {{ pagination.from }}–{{ pagination.to }} de {{ pagination.total }} usuarios
+            </p>
+            <app-pagination
+              [currentPage]="pagination.current_page"
+              [totalPages]="pagination.last_page"
+              variant="text-icon"
+              (pageChange)="goToPage($event)"
+            />
+          </div>
+        } @else {
+          <p class="mt-4 text-sm text-gray-500 dark:text-gray-400">
+            {{ pagination.total }} usuario(s) en total.
+          </p>
+        }
+      }
+    </app-component-card>
+  </div>
+
+  @if (detailOpen()) {
+    @if (selected(); as user) {
+      <app-modal
+        [customHeader]="true"
+        [showClose]="false"
+        [padded]="false"
+        [ariaLabel]="'Ficha de ' + user.nombre_completo"
+        size="lg"
+        (closed)="closeDetail()"
+      >
+          <div modal-header class="flex items-start justify-between gap-4 border-b border-gray-100 p-5 dark:border-gray-800">
+            <div class="flex items-center gap-3">
+              <span class="grid size-12 place-items-center rounded-full bg-brand-50 text-base font-semibold text-brand-600 dark:bg-brand-500/15 dark:text-brand-300">
+                {{ initials(user.nombre_completo) }}
+              </span>
+              <div>
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white/90">{{ user.nombre_completo }}</h2>
+                <p class="text-sm text-gray-500 dark:text-gray-400">{{ user.email || 'Sin correo' }}</p>
+              </div>
+            </div>
+            <button app-button variant="unstyled" type="button" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" (click)="closeDetail()" aria-label="Cerrar ficha">
+              <svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="space-y-5 p-5">
+            <div class="flex flex-wrap items-center gap-2">
+              <app-badge [color]="stateColor(user)" variant="light">{{ stateLabel(user) }}</app-badge>
+              @if (user.rol; as role) {
+                <app-badge color="primary" variant="light">{{ role.label }}</app-badge>
+              }
+              @if (user.debe_cambiar_password) {
+                <app-badge color="warning" variant="light">Debe cambiar contraseña</app-badge>
+              }
+            </div>
+
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div>
+                <p class="text-xs font-medium uppercase text-gray-400">Documento</p>
+                <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ user.documento || '—' }}</p>
+              </div>
+              <div>
+                <p class="text-xs font-medium uppercase text-gray-400">Nombre de usuario</p>
+                <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ user.username || '—' }}</p>
+              </div>
+              <div>
+                <p class="text-xs font-medium uppercase text-gray-400">Último acceso</p>
+                <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ user.ultimo_acceso ? (user.ultimo_acceso | date: 'dd/MM/yyyy HH:mm') : '—' }}</p>
+              </div>
+              <div>
+                <p class="text-xs font-medium uppercase text-gray-400">Sesiones activas</p>
+                <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ user.sesiones_activas }}</p>
+              </div>
+              <div>
+                <p class="text-xs font-medium uppercase text-gray-400">Intentos fallidos</p>
+                <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ user.intentos_fallidos }}</p>
+              </div>
+              <div>
+                <p class="text-xs font-medium uppercase text-gray-400">Versión</p>
+                <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ user.version }}</p>
+              </div>
+              <div>
+                <p class="text-xs font-medium uppercase text-gray-400">Creado</p>
+                <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ user.created_at ? (user.created_at | date: 'dd/MM/yyyy HH:mm') : '—' }}</p>
+              </div>
+              <div>
+                <p class="text-xs font-medium uppercase text-gray-400">Última modificación</p>
+                <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ user.updated_at ? (user.updated_at | date: 'dd/MM/yyyy HH:mm') : '—' }}</p>
+              </div>
+            </div>
+
+            <div>
+              <p class="text-xs font-medium uppercase text-gray-400">Sucursales</p>
+              <div class="mt-2 flex flex-wrap gap-2">
+                @for (branch of user.sucursales; track branch.id) {
+                  <app-badge color="gray" variant="light" size="sm">{{ branch.codigo }} · {{ branch.nombre }}</app-badge>
+                } @empty {
+                  <span class="text-sm text-gray-500 dark:text-gray-400">Sin sucursales asignadas.</span>
+                }
+              </div>
+            </div>
+
+            @if (user.bloqueado && user.bloqueado_hasta) {
+              <app-alert
+                variant="warning"
+                title="Cuenta bloqueada"
+                [message]="blockedMessage(user)"
+              />
+            }
+
+            @if (user.motivo_estado) {
+              <div>
+                <p class="text-xs font-medium uppercase text-gray-400">Motivo del estado</p>
+                <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ user.motivo_estado }}</p>
+              </div>
+            }
+
+            <div class="flex flex-wrap gap-2 border-t border-gray-100 pt-5 dark:border-gray-800">
+              @if (user.can.update) {
+                <button app-button variant="outline" size="sm" type="button" (click)="openEdit(user)">Editar</button>
+              }
+              <button app-button variant="ghost" size="sm" type="button" (click)="openHistory(user)">Historial</button>
+              @if (user.can.change_status) {
+                @if (user.activo) {
+                  <button app-button variant="destructive" size="sm" type="button" (click)="openStatus(user, 'deactivate')">Desactivar</button>
+                } @else {
+                  <button app-button variant="outline" size="sm" type="button" (click)="openStatus(user, 'activate')">Activar</button>
+                }
+              }
+              @if (user.can.reset_password) {
+                <button app-button variant="outline" size="sm" type="button" (click)="openReset(user)">Resetear contraseña</button>
+              }
+              @if (user.can.unlock) {
+                <button app-button variant="outline" size="sm" type="button" (click)="openUnlock(user)">Desbloquear</button>
+              }
+              @if (user.can.close_sessions) {
+                <button app-button variant="outline" size="sm" type="button" (click)="openSessions(user)">Cerrar sesiones</button>
+              }
+            </div>
+          </div>
+      </app-modal>
+    }
+  }
+
+  @if (formOpen()) {
+    <app-modal
+      [title]="formMode() === 'create' ? 'Nuevo usuario' : 'Editar usuario'"
+      [subtitle]="formMode() === 'create'
+        ? 'La contraseña temporal se generará automáticamente y se mostrará una sola vez.'
+        : 'Si cambiás el rol, se cerrarán todas las sesiones del usuario.'"
+      [padded]="false"
+      size="lg"
+      (closed)="closeForm()"
+    >
+        <form [formGroup]="form" (ngSubmit)="submitForm()" class="space-y-5 p-5" novalidate>
+          @if (formConcurrency()) {
+            <app-alert variant="warning" title="Datos desactualizados" [message]="'El usuario fue modificado por otro usuario. Recargá los datos antes de guardar.'" />
+            <button app-button variant="outline" size="sm" type="button" (click)="reloadEditing()">Recargar datos</button>
+          }
+
+          @if (formError(); as message) {
+            <app-alert variant="error" title="No se pudo guardar" [message]="message" />
+          }
+
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400" for="user-name">Nombre completo <span class="text-red-500">*</span></label>
+            <input id="user-name" app-input type="text" formControlName="name" (input)="onNameInput($any($event.target).value)" class="h-11 w-full rounded-[10px] border border-gray-300 bg-white px-4 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white/90" [class.border-red-500]="fieldError('name') !== ''" />
+            @if (fieldError('name')) { <p class="mt-1.5 text-sm text-red-500">{{ fieldError('name') }}</p> }
+          </div>
+
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400" for="user-documento">Documento <span class="text-red-500">*</span></label>
+              <input id="user-documento" app-input type="text" formControlName="documento" class="h-11 w-full rounded-[10px] border border-gray-300 bg-white px-4 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white/90" [class.border-red-500]="fieldError('documento') !== ''" />
+              @if (fieldError('documento')) { <p class="mt-1.5 text-sm text-red-500">{{ fieldError('documento') }}</p> }
+            </div>
+            <div>
+              <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400" for="user-email">Correo <span class="text-xs font-normal text-gray-400">(opcional)</span></label>
+              <input id="user-email" app-input type="email" formControlName="email" placeholder="correo@ejemplo.com (opcional)" class="h-11 w-full rounded-[10px] border border-gray-300 bg-white px-4 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white/90" [class.border-red-500]="fieldError('email') !== ''" />
+              @if (fieldError('email')) { <p class="mt-1.5 text-sm text-red-500">{{ fieldError('email') }}</p> }
+            </div>
+          </div>
+
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400" for="user-username">Nombre de usuario <span class="text-red-500">*</span></label>
+              <input id="user-username" app-input type="text" formControlName="username" (input)="onUsernameInput()" class="h-11 w-full rounded-[10px] border border-gray-300 bg-white px-4 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white/90" [class.border-red-500]="fieldError('username') !== ''" />
+              @if (fieldError('username')) {
+                <p class="mt-1.5 text-sm text-red-500">{{ fieldError('username') }}</p>
+              } @else {
+                <p class="mt-1.5 text-xs text-gray-400 dark:text-gray-500">Se genera desde el nombre. Podés editarlo.</p>
+              }
+            </div>
+            <div>
+              <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Rol <span class="text-red-500">*</span></label>
+              <app-select-field
+                [options]="roleFormOptions()"
+                [value]="form.controls.rol_id.value?.toString() ?? ''"
+                placeholder="Seleccioná un rol"
+                ariaLabel="Rol del usuario"
+                (valueChange)="onFormRoleChange($event)"
+              />
+              @if (fieldError('rol_id')) { <p class="mt-1.5 text-sm text-red-500">{{ fieldError('rol_id') }}</p> }
+            </div>
+          </div>
+
+          <div>
+            <p class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-400">Sucursales <span class="text-red-500">*</span></p>
+            <div class="max-h-44 space-y-2 overflow-y-auto rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+              @for (branch of branches(); track branch.id) {
+                <label class="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-white/5">
+                  <input type="checkbox" class="size-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500" [checked]="isBranchSelected(branch.id)" (change)="toggleBranch(branch.id)" />
+                  <span>{{ branch.codigo }} · {{ branch.nombre }}</span>
+                </label>
+              } @empty {
+                <p class="text-sm text-gray-500 dark:text-gray-400">No hay sucursales disponibles.</p>
+              }
+            </div>
+            @if (branchError()) { <p class="mt-1.5 text-sm text-red-500">{{ branchError() }}</p> }
+            @if (fieldError('sucursales')) { <p class="mt-1.5 text-sm text-red-500">{{ fieldError('sucursales') }}</p> }
+          </div>
+
+          <div class="flex items-center justify-end gap-3 border-t border-gray-100 pt-5 dark:border-gray-800">
+            <button app-button variant="outline" type="button" (click)="closeForm()">Cancelar</button>
+            <button app-button type="submit" [disabled]="saving()">
+              {{ saving() ? 'Guardando...' : (formMode() === 'create' ? 'Crear usuario' : 'Guardar cambios') }}
+            </button>
+          </div>
+        </form>
+    </app-modal>
+  }
+
+  @if (statusOpen()) {
+    @if (statusTarget(); as user) {
+      <app-modal
+        [title]="statusMode() === 'activate' ? 'Activar usuario' : 'Desactivar usuario'"
+        [subtitle]="userSubtitle(user)"
+        [padded]="false"
+        size="md"
+        (closed)="closeStatus()"
+      >
+          <div class="space-y-4 p-5">
+            @if (statusMode() === 'deactivate') {
+              <app-alert variant="warning" title="Se cerrarán las sesiones" message="Al desactivar el usuario, todas sus sesiones activas serán invalidadas y no podrá iniciar sesión hasta que lo actives nuevamente." />
+            }
+
+            @if (statusConcurrency()) {
+              <app-alert variant="warning" title="Datos desactualizados" message="El usuario fue modificado por otro usuario. Recargá los datos antes de guardar." />
+              <button app-button variant="outline" size="sm" type="button" (click)="reloadStatusTarget()">Recargar datos</button>
+            }
+
+            @if (statusError(); as message) {
+              <app-alert variant="error" title="No se pudo cambiar el estado" [message]="message" />
+            }
+
+            <div>
+              <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400" for="status-motivo">
+                Motivo {{ statusMode() === 'deactivate' ? '(obligatorio)' : '(opcional)' }}
+              </label>
+              <textarea id="status-motivo" app-textarea rows="3" [formControl]="statusMotivo" placeholder="Ej. Retiro del personal, cambio de responsable..."></textarea>
+              @if (statusFieldErrors()['motivo']?.[0]; as error) {
+                <p class="mt-1.5 text-sm text-red-500">{{ error }}</p>
+              }
+            </div>
+
+            <div class="flex items-center justify-end gap-3 border-t border-gray-100 pt-5 dark:border-gray-800">
+              <button app-button variant="outline" type="button" (click)="closeStatus()">Cancelar</button>
+              <button app-button type="button" [disabled]="statusSaving()" (click)="submitStatus()">
+                {{ statusSaving() ? 'Guardando...' : (statusMode() === 'activate' ? 'Activar' : 'Desactivar') }}
+              </button>
+            </div>
+          </div>
+      </app-modal>
+    }
+  }
+
+  @if (resetOpen()) {
+    @if (resetTarget(); as user) {
+      <app-modal
+        title="Resetear contraseña"
+        [subtitle]="userSubtitle(user)"
+        [padded]="false"
+        size="md"
+        (closed)="closeReset()"
+      >
+          <div class="space-y-4 p-5">
+            <app-alert variant="warning" title="Contraseña temporal" message="Se generará una contraseña temporal, se cerrarán todas las sesiones y el usuario deberá cambiarla en el siguiente inicio de sesión. La contraseña se muestra una sola vez." />
+            @if (resetError(); as message) {
+              <app-alert variant="error" title="No se pudo resetear" [message]="message" />
+            }
+            <div class="flex items-center justify-end gap-3 border-t border-gray-100 pt-5 dark:border-gray-800">
+              <button app-button variant="outline" type="button" (click)="closeReset()">Cancelar</button>
+              <button app-button type="button" [disabled]="resetting()" (click)="confirmReset()">
+                {{ resetting() ? 'Reseteando...' : 'Resetear contraseña' }}
+              </button>
+            </div>
+          </div>
+      </app-modal>
+    }
+  }
+
+  @if (unlockOpen()) {
+    @if (unlockTarget(); as user) {
+      <app-modal
+        title="Desbloquear cuenta"
+        [subtitle]="userSubtitle(user)"
+        [padded]="false"
+        size="md"
+        (closed)="closeUnlock()"
+      >
+          <div class="space-y-4 p-5">
+            <app-alert variant="info" title="Bloqueo por intentos fallidos" [message]="unlockMessage(user)" />
+            @if (unlockConcurrency()) {
+              <app-alert variant="warning" title="Datos desactualizados" message="El usuario fue modificado por otro usuario. Recargá los datos antes de guardar." />
+              <button app-button variant="outline" size="sm" type="button" (click)="reloadUnlockTarget()">Recargar datos</button>
+            }
+            @if (unlockError(); as message) {
+              <app-alert variant="error" title="No se pudo desbloquear" [message]="message" />
+            }
+            <div>
+              <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400" for="unlock-motivo">Motivo <span class="text-red-500">*</span></label>
+              <textarea id="unlock-motivo" app-textarea rows="3" [formControl]="unlockMotivo" placeholder="Ej. Verificación telefónica con el usuario."></textarea>
+              @if (unlockFieldErrors()['motivo']?.[0]; as error) {
+                <p class="mt-1.5 text-sm text-red-500">{{ error }}</p>
+              }
+            </div>
+            <div class="flex items-center justify-end gap-3 border-t border-gray-100 pt-5 dark:border-gray-800">
+              <button app-button variant="outline" type="button" (click)="closeUnlock()">Cancelar</button>
+              <button app-button type="button" [disabled]="unlocking()" (click)="submitUnlock()">
+                {{ unlocking() ? 'Desbloqueando...' : 'Desbloquear' }}
+              </button>
+            </div>
+          </div>
+      </app-modal>
+    }
+  }
+
+  @if (sessionsOpen()) {
+    @if (sessionsTarget(); as user) {
+      <app-modal
+        title="Cerrar sesiones"
+        [subtitle]="userSubtitle(user)"
+        [padded]="false"
+        size="md"
+        (closed)="closeSessions()"
+      >
+          <div class="space-y-4 p-5">
+            <app-alert variant="warning" title="Cierre remoto" [message]="'Se cerrarán las ' + user.sesiones_activas + ' sesión(es) activa(s). El usuario deberá iniciar sesión nuevamente.'" />
+            @if (sessionsError(); as message) {
+              <app-alert variant="error" title="No se pudieron cerrar las sesiones" [message]="message" />
+            }
+            <div>
+              <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400" for="sessions-motivo">Motivo <span class="text-red-500">*</span></label>
+              <textarea id="sessions-motivo" app-textarea rows="3" [formControl]="sessionsMotivo" placeholder="Ej. Sospecha de uso indebido o equipo compartido."></textarea>
+              @if (sessionsFieldErrors()['motivo']?.[0]; as error) {
+                <p class="mt-1.5 text-sm text-red-500">{{ error }}</p>
+              }
+            </div>
+            <div class="flex items-center justify-end gap-3 border-t border-gray-100 pt-5 dark:border-gray-800">
+              <button app-button variant="outline" type="button" (click)="closeSessions()">Cancelar</button>
+              <button app-button type="button" [disabled]="closingSessions()" (click)="submitSessions()">
+                {{ closingSessions() ? 'Cerrando...' : 'Cerrar sesiones' }}
+              </button>
+            </div>
+          </div>
+      </app-modal>
+    }
+  }
+
+  @if (historyOpen()) {
+    @if (historyTarget(); as user) {
+      <app-modal
+        [title]="'Historial de ' + user.nombre_completo"
+        subtitle="Eventos de alta, edición, estado, contraseña y sesiones."
+        [padded]="false"
+        size="xl"
+        (closed)="closeHistory()"
+      >
+          <div class="space-y-4 p-5">
+            @if (historyLoading()) {
+              <p class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">Cargando historial...</p>
+            } @else if (historyError(); as message) {
+              <app-alert variant="error" title="No se pudo cargar el historial" [message]="message" />
+            } @else if (historyEntries().length === 0) {
+              <p class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">No hay eventos registrados para este usuario.</p>
+            } @else {
+              <div class="space-y-3">
+                @for (entry of historyEntries(); track entry.id) {
+                  <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                    <div class="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ historyActionLabel(entry.accion) }}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">
+                          {{ entry.created_at ? (entry.created_at | date: 'dd/MM/yyyy HH:mm') : '—' }}
+                          · {{ entry.usuario || 'Sistema' }}
+                          @if (entry.ip) { · IP {{ entry.ip }} }
+                        </p>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        @if (entry.critico) {
+                          <app-badge color="error" variant="light" size="sm">Crítico</app-badge>
+                        }
+                        <app-badge color="gray" variant="light" size="sm">{{ historyResultLabel(entry.resultado) }}</app-badge>
+                      </div>
+                    </div>
+
+                    @if (entry.motivo) {
+                      <p class="mt-2 text-sm text-gray-600 dark:text-gray-300"><span class="font-medium">Motivo:</span> {{ entry.motivo }}</p>
+                    }
+
+                    @if (entry.datos_anteriores || entry.datos_nuevos) {
+                      <details class="mt-3">
+                        <summary class="cursor-pointer text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-300">Ver antes/después</summary>
+                        <div class="mt-2 grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <p class="mb-1 text-xs font-medium uppercase text-gray-400">Antes</p>
+                            <pre class="max-h-40 overflow-auto rounded-lg bg-gray-50 p-3 text-xs text-gray-700 dark:bg-white/5 dark:text-gray-300">{{ entry.datos_anteriores | json }}</pre>
+                          </div>
+                          <div>
+                            <p class="mb-1 text-xs font-medium uppercase text-gray-400">Después</p>
+                            <pre class="max-h-40 overflow-auto rounded-lg bg-gray-50 p-3 text-xs text-gray-700 dark:bg-white/5 dark:text-gray-300">{{ entry.datos_nuevos | json }}</pre>
+                          </div>
+                        </div>
+                      </details>
+                    }
+                  </div>
+                }
+              </div>
+
+              @if (historyMeta(); as pagination) {
+                @if (pagination.last_page > 1) {
+                  <app-pagination
+                    [currentPage]="pagination.current_page"
+                    [totalPages]="pagination.last_page"
+                    variant="text-icon"
+                    (pageChange)="historyPageChange($event)"
+                  />
+                }
+              }
+            }
+          </div>
+      </app-modal>
+    }
+  }
+
+  @if (tempOpen()) {
+    @if (tempPassword(); as password) {
+      <app-modal
+        title="Contraseña temporal"
+        [subtitle]="tempUser() ? userSubtitle(tempUser()!) : ''"
+        [padded]="false"
+        size="md"
+        (closed)="closeTemporaryPassword()"
+      >
+          <div class="space-y-4 p-5">
+            <app-alert variant="warning" title="Mostrala una sola vez" [message]="'Esta contraseña se muestra una sola vez. Copiala y entregala al usuario por un canal seguro.'" />
+
+            <div class="flex items-center gap-2">
+              <input
+                app-input
+                type="text"
+                readonly
+                [value]="password"
+                class="h-11 w-full rounded-[10px] border border-gray-300 bg-gray-50 px-4 font-mono text-sm text-gray-800 dark:border-gray-700 dark:bg-white/5 dark:text-white/90"
+                aria-label="Contraseña temporal"
+              />
+              <button app-button variant="outline" type="button" (click)="copyTemporaryPassword()">Copiar</button>
+            </div>
+
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+              El usuario deberá cambiar esta contraseña en el siguiente inicio de sesión.
+            </p>
+
+            <div class="flex justify-end border-t border-gray-100 pt-5 dark:border-gray-800">
+              <button app-button type="button" (click)="closeTemporaryPassword()">Entendido</button>
+            </div>
+          </div>
+      </app-modal>
+    }
+  }
+</div>

@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 import { guestGuard } from './core/guards/guest.guard';
+import { permissionGuard } from './core/guards/permission.guard';
 import { AppLayoutComponent } from './layout/shell/app-layout/app-layout.component';
 import { HomeComponent } from './pages/home/home.component';
 import { AgendaComponent } from './pages/agenda/agenda.component';
@@ -11,7 +12,6 @@ import { ReportesComponent } from './pages/reportes/reportes.component';
 import { CatalogoComponent } from './pages/catalogo/catalogo.component';
 import { ProfesionalesComponent } from './pages/profesionales/profesionales.component';
 import { InventarioComponent } from './pages/inventario/inventario.component';
-import { ConfiguracionComponent } from './pages/configuracion/configuracion.component';
 
 export const routes: Routes = [
   {
@@ -76,8 +76,64 @@ export const routes: Routes = [
       },
       {
         path: 'configuracion',
-        component: ConfiguracionComponent,
-        title: 'Configuración | TalitaCumi',
+        redirectTo: 'organizacion/configuracion',
+        pathMatch: 'full',
+      },
+      {
+        path: 'cambiar-password',
+        loadChildren: () =>
+          import('./pages/seguridad/cambiar-password/cambiar-password.routes').then(
+            (m) => m.CAMBIAR_PASSWORD_ROUTES,
+          ),
+        title: 'Cambiar contraseña | TalitaCumi',
+      },
+      {
+        path: 'seguridad/usuarios',
+        canActivate: [permissionGuard],
+        data: { permission: 'usuario.ver' },
+        loadChildren: () =>
+          import('./pages/seguridad/usuarios/usuarios.routes').then(
+            (m) => m.USUARIOS_ROUTES,
+          ),
+      },
+      {
+        path: 'seguridad/roles-permisos',
+        canActivate: [permissionGuard],
+        data: { permission: 'rol.ver' },
+        loadChildren: () =>
+          import('./pages/seguridad/roles-permisos/roles-permisos.routes').then(
+            (m) => m.ROLES_PERMISOS_ROUTES,
+          ),
+      },
+      {
+        path: 'seguridad/bitacora',
+        canActivate: [permissionGuard],
+        data: { permission: 'bitacora.ver' },
+        loadChildren: () =>
+          import('./pages/seguridad/bitacora/bitacora.routes').then(
+            (m) => m.BITACORA_ROUTES,
+          ),
+      },
+      {
+        path: 'organizacion/sucursales',
+        loadChildren: () =>
+          import('./pages/organizacion/sucursales/sucursales.routes').then(
+            (m) => m.SUCURSALES_ROUTES,
+          ),
+      },
+      {
+        path: 'organizacion/salas-ambientes',
+        loadChildren: () =>
+          import('./pages/organizacion/salas-ambientes/salas-ambientes.routes').then(
+            (m) => m.SALAS_AMBIENTES_ROUTES,
+          ),
+      },
+      {
+        path: 'organizacion/configuracion',
+        loadChildren: () =>
+          import('./pages/organizacion/configuracion/configuracion.routes').then(
+            (m) => m.CONFIGURACION_ROUTES,
+          ),
       },
 
       // Páginas de referencia de componentes reutilizables (fuera del menú).
@@ -195,6 +251,14 @@ export const routes: Routes = [
         (m) => m.NotFoundComponent,
       ),
     title: 'Página no encontrada | TalitaCumi',
+  },
+  {
+    path: 'error-403',
+    loadComponent: () =>
+      import('./pages/other-page/forbidden/forbidden.component').then(
+        (m) => m.ForbiddenComponent,
+      ),
+    title: 'Acceso denegado | TalitaCumi',
   },
   {
     path: 'error-500',

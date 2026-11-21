@@ -1,84 +1,63 @@
-import { Component, input } from '@angular/core';
+import { Component, computed, input } from '@angular/core';
+
+export type BrandLogoSize = 'sm' | 'md' | 'lg';
+
+const FULL_HEIGHT: Record<BrandLogoSize, number> = {
+  sm: 48,
+  md: 72,
+  lg: 104,
+};
+
+const ISOTYPE_HEIGHT: Record<BrandLogoSize, number> = {
+  sm: 32,
+  md: 40,
+  lg: 52,
+};
 
 /**
- * Marca de TalitaCumi. Se usa en el sidebar, header móvil y pantalla de login.
+ * Logo oficial de TalitaCumi.
+ *
+ * El logo completo tiene texto oscuro y el isotipo tiene colores vivos; ambos
+ * se muestran sobre una tarjeta blanca para que se vean igual en modo claro,
+ * modo oscuro y en el panel morado del login.
  *
  * <app-brand-logo />
- * <app-brand-logo variant="light" [compact]="true" />
+ * <app-brand-logo size="lg" />
+ * <app-brand-logo [compact]="true" />
  */
 @Component({
   selector: 'app-brand-logo',
   host: { class: 'inline-flex shrink-0' },
   template: `
-    <span class="inline-flex items-center gap-2.5">
+    @if (compact()) {
       <span
-        class="grid shrink-0 place-items-center rounded-xl shadow-theme-xs"
-        [class]="markClass()"
+        class="inline-flex items-center justify-center rounded-xl bg-white p-1.5 shadow-theme-xs"
       >
-        <svg
-          viewBox="0 0 32 32"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-hidden="true"
-          [class]="size() === 'sm' ? 'size-6' : 'size-7'"
-        >
-          <circle cx="16" cy="8.5" r="5" [class]="petalClass()" />
-          <circle cx="23" cy="14" r="5" [class]="petalClass()" />
-          <circle cx="20.5" cy="22.5" r="5" [class]="petalClass()" />
-          <circle cx="11.5" cy="22.5" r="5" [class]="petalClass()" />
-          <circle cx="9" cy="14" r="5" [class]="petalClass()" />
-          <circle cx="16" cy="16" r="4" [class]="centerClass()" />
-        </svg>
+        <img
+          src="/images/logos/logo-talitacumi-isotipo-web.png"
+          alt="TalitaCumi"
+          [style.height.px]="isotypeHeight()"
+          class="block w-auto"
+        />
       </span>
-
-      @if (!compact()) {
-        <span class="flex min-w-0 flex-col">
-          <span
-            class="truncate font-semibold leading-none tracking-tight"
-            [class]="size() === 'sm' ? 'text-base' : 'text-xl'"
-            [class.text-white]="variant() === 'light'"
-            [class.text-gray-900]="variant() !== 'light'"
-            [class.dark:text-white]="variant() !== 'light'"
-          >
-            TalitaCumi
-          </span>
-          @if (showTagline()) {
-            <span
-              class="mt-1 truncate text-[9px] font-medium uppercase tracking-[0.18em]"
-              [class.text-white/60]="variant() === 'light'"
-              [class.text-gray-500]="variant() !== 'light'"
-              [class.dark:text-gray-400]="variant() !== 'light'"
-            >
-              Sistema de Gestión
-            </span>
-          }
-        </span>
-      }
-    </span>
-  `,
-  styles: `
-    :host {
-      display: inline-flex;
+    } @else {
+      <span
+        class="inline-flex items-center justify-center rounded-xl bg-white px-3 py-2 shadow-theme-xs"
+      >
+        <img
+          src="/images/logos/logo-talitacumi-web.png"
+          alt="TalitaCumi — Centro Integral de Desarrollo Infantil"
+          [style.height.px]="fullHeight()"
+          class="block w-auto"
+        />
+      </span>
     }
   `,
 })
 export class BrandLogoComponent {
-  readonly variant = input<'default' | 'light'>('default');
   readonly compact = input(false);
-  readonly showTagline = input(true);
-  readonly size = input<'sm' | 'md'>('md');
+  readonly size = input<BrandLogoSize>('md');
 
-  markClass(): string {
-    return this.variant() === 'light'
-      ? 'size-10 bg-white text-brand-500'
-      : 'size-10 bg-brand-500 text-white';
-  }
-
-  petalClass(): string {
-    return this.variant() === 'light' ? 'fill-brand-500' : 'fill-white';
-  }
-
-  centerClass(): string {
-    return this.variant() === 'light' ? 'fill-accent-500' : 'fill-highlight-500';
-  }
+  readonly fullHeight = computed(() => FULL_HEIGHT[this.size()]);
+  readonly isotypeHeight = computed(() => ISOTYPE_HEIGHT[this.size()]);
 }

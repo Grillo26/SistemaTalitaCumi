@@ -1,5 +1,6 @@
-import { Component, HostListener } from '@angular/core';
+import { Component, HostListener, computed, inject } from '@angular/core';
 import { SidebarService } from '../../../core/services/sidebar.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { CommonModule } from '@angular/common';
 import { AppSidebarComponent } from '../app-sidebar/app-sidebar.component';
 import { BackdropComponent } from '../backdrop/backdrop.component';
@@ -19,9 +20,14 @@ import { AppHeaderComponent } from '../app-header/app-header.component';
 })
 
 export class AppLayoutComponent {
+  private readonly auth = inject(AuthService);
+
   readonly isExpanded$;
   readonly isHovered$;
   readonly isMobileOpen$;
+  readonly requiresBranchAssignment = computed(
+    () => this.auth.user()?.requiresBranchAssignment === true,
+  );
 
   constructor(public sidebarService: SidebarService) {
     this.isExpanded$ = this.sidebarService.isExpanded$;

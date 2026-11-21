@@ -23,9 +23,9 @@
       class="inline-flex"
     >
       @if (isVisible$ | async) {
-        <app-brand-logo size="sm" />
+        <app-brand-logo size="lg" />
       } @else {
-        <app-brand-logo size="sm" [compact]="true" [showTagline]="false" />
+        <app-brand-logo [compact]="true" />
       }
     </a>
   </div>
@@ -85,6 +85,108 @@
             }
           </ul>
         </div>
+
+        @if (securityNavItems.length > 0) {
+          <div>
+            <h2
+              class="mb-4 flex text-xs uppercase leading-[20px] text-gray-400"
+              [ngClass]="{
+                'xl:justify-center': !(isVisible$ | async),
+                'justify-start': (isVisible$ | async)
+              }"
+            >
+              @if (isVisible$ | async) {
+                Seguridad
+              } @else {
+                <svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 3.25 19 6v5.25c0 4.25-2.75 7.5-7 9.5-4.25-2-7-5.25-7-9.5V6l7-2.75Z" />
+                  <path d="m9.25 12 1.75 1.75L14.75 10" />
+                </svg>
+              }
+            </h2>
+
+            <ul class="flex flex-col gap-1">
+              @for (nav of securityNavItems; track nav.path) {
+                <li>
+                  <a
+                    [routerLink]="nav.path"
+                    (click)="closeMobile()"
+                    class="group menu-item"
+                    [class.menu-item-active]="isActive(nav.path)"
+                    [class.menu-item-inactive]="!isActive(nav.path)"
+                    [ngClass]="{
+                      'xl:justify-center': !(isVisible$ | async),
+                      'xl:justify-start': (isVisible$ | async)
+                    }"
+                    [attr.aria-current]="isActive(nav.path) ? 'page' : null"
+                  >
+                    <span
+                      class="menu-item-icon-size"
+                      [class.menu-item-icon-active]="isActive(nav.path)"
+                      [class.menu-item-icon-inactive]="!isActive(nav.path)"
+                      [innerHTML]="nav.icon | safeHtml"
+                    ></span>
+
+                    @if (isVisible$ | async) {
+                      <span class="menu-item-text">{{ nav.name }}</span>
+                    }
+                  </a>
+                </li>
+              }
+            </ul>
+          </div>
+        }
+
+        <!-- TEMPORAL: grupo de referencia de componentes compartidos. Eliminar al terminar. -->
+        <div>
+          <h2
+            class="mb-4 flex text-xs uppercase leading-[20px] text-gray-400"
+            [ngClass]="{
+              'xl:justify-center': !(isVisible$ | async),
+              'justify-start': (isVisible$ | async)
+            }"
+          >
+            @if (isVisible$ | async) {
+              Referencia UI
+            } @else {
+              <svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9.75 3.25h4.5M12 3.25v3.5" />
+                <path d="M4.25 9.75h15.5v10.5H4.25z" />
+              </svg>
+            }
+          </h2>
+
+          <ul class="flex flex-col gap-1">
+            @for (nav of referenceNavItems; track nav.path) {
+              <li>
+                <a
+                  [routerLink]="nav.path"
+                  (click)="closeMobile()"
+                  class="group menu-item"
+                  [class.menu-item-active]="isActive(nav.path)"
+                  [class.menu-item-inactive]="!isActive(nav.path)"
+                  [ngClass]="{
+                    'xl:justify-center': !(isVisible$ | async),
+                    'xl:justify-start': (isVisible$ | async)
+                  }"
+                  [attr.aria-current]="isActive(nav.path) ? 'page' : null"
+                >
+                  <span
+                    class="menu-item-icon-size"
+                    [class.menu-item-icon-active]="isActive(nav.path)"
+                    [class.menu-item-icon-inactive]="!isActive(nav.path)"
+                    [innerHTML]="nav.icon | safeHtml"
+                  ></span>
+
+                  @if (isVisible$ | async) {
+                    <span class="menu-item-text">{{ nav.name }}</span>
+                  }
+                </a>
+              </li>
+            }
+          </ul>
+        </div>
+        <!-- FIN TEMPORAL -->
       </div>
     </nav>
 

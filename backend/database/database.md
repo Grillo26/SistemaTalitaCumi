@@ -46,10 +46,13 @@ No se dibujan las relaciones con `sucursal` ni con `usuario` en todas las tablas
 erDiagram
     sucursal {
         bigint id PK
+        varchar codigo UK
         varchar nombre
         varchar direccion
         varchar telefono
+        varchar email
         boolean activo
+        integer version
     }
     rol {
         bigint id PK
@@ -105,7 +108,13 @@ erDiagram
     configuracion {
         bigint id PK
         varchar clave UK
+        varchar categoria
+        varchar tipo
         text valor
+        text valor_defecto
+        boolean sensible
+        boolean visible_recepcion
+        integer version
     }
 
     rol ||--o{ rol_permiso : "tiene"
@@ -117,6 +126,8 @@ erDiagram
     usuario ||--o{ bitacora : "genera"
     usuario ||--o{ acceso_clinico_temporal : "otorga o recibe"
 ```
+
+> **Implementación real del módulo 02 (Fase 1):** la base viva usa `users` de Laravel + Spatie (`roles`, `permissions`, `role_has_permissions`, `model_has_roles`) + `personal_access_tokens` de Sanctum. Las entidades `usuario`, `rol`, `permiso`, `rol_permiso` y `sesion` del diagrama son **referencia lógica/aspiracional** y no existen como tablas físicas. La pivote real es `usuario_sucursal`.
 
 ### Profesionales
 
@@ -193,7 +204,7 @@ erDiagram
     tutor ||--o{ ficha_ingreso : "firma"
 ```
 
-### Catálogo de servicios, tarifas y salas
+### Catálogo de servicios, tarifas, salas y ambientes
 
 ```mermaid
 erDiagram
@@ -205,13 +216,34 @@ erDiagram
     sucursal {
         bigint id PK
     }
+    tipo_sala {
+        bigint id PK
+        varchar nombre UK
+        boolean activo
+    }
+    turno_catalogo {
+        bigint id PK
+        varchar nombre UK
+        int orden
+        boolean activo
+    }
     sala {
         bigint id PK
         bigint sucursal_id FK
         bigint area_id FK
+        bigint tipo_sala_id FK
+        bigint turno_catalogo_id FK
         varchar nombre
-        varchar tipo
-        varchar turno
+        text observaciones
+        boolean activo
+        integer version
+    }
+    ambiente {
+        bigint id PK
+        bigint sucursal_id FK
+        varchar nombre
+        varchar uso
+        boolean activo
     }
     servicio {
         bigint id PK
@@ -245,6 +277,9 @@ erDiagram
 
     area ||--o{ sala : "tipo de"
     sucursal ||--o{ sala : "tiene"
+    tipo_sala ||--o{ sala : "define"
+    turno_catalogo ||--o{ sala : "define"
+    sucursal ||--o{ ambiente : "tiene"
     area ||--o{ servicio : "clasifica"
     servicio ||--o{ tarifa : "tiene"
     categoria_tarifa ||--o{ tarifa : "clasifica"
@@ -561,15 +596,21 @@ erDiagram
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `nombre` | `varchar(150)` |  |  |  |
+| `codigo` | `varchar(50)` |  | `UNIQUE` funcional | Único sin distinguir mayúsculas ni espacios externos |
+| `nombre` | `varchar(150)` |  | `UNIQUE` funcional | Único sin distinguir mayúsculas ni espacios externos |
 | `direccion` | `text` | sí |  |  |
 | `telefono` | `varchar(30)` | sí |  |  |
 | `email` | `varchar(150)` | sí |  |  |
-| `activo` | `boolean` |  | `DEFAULT true` |  |
+| `activo` | `boolean` |  | `DEFAULT true` | Estado vigente: activa/inactiva |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
+
+Índices: `UNIQUE ((lower(trim(codigo))))`, `UNIQUE ((lower(trim(nombre))))`. Los espacios internos se normalizan en la aplicación antes de guardar.
 
 Timestamps: `created_at`, `updated_at`.
 
-#### `rol` — Roles
+#### `rol` — Roles (referencia lógica)
+
+> **Implementación real:** la tabla física es `roles` de Spatie (`id`, `name`, `guard_name`, `timestamps`, `version`, `es_superadmin`). `guard_name = 'web'`; `version` habilita concurrencia optimista y `es_superadmin` identifica el rol protegido sin depender del nombre. No hay `activo`.
 
 *Configuración.* Roles base: Superadmin, Administración, Recepción. Los permisos son fijos (definidos por el sistema), pero el rol es editable en su descripción.
 
@@ -582,7 +623,9 @@ Timestamps: `created_at`, `updated_at`.
 
 Timestamps: `created_at`, `updated_at`.
 
-#### `permiso` — Permisos
+#### `permiso` — Permisos (referencia lógica)
+
+> **Implementación real:** la tabla física es `permissions` de Spatie (`id`, `name`, `guard_name`, `timestamps`). El módulo (`usuario`, `rol`, `bitacora`, etc.) se deriva del prefijo `entidad.accion`.
 
 *Configuración.* Permisos granulares por módulo y acción, definidos por el sistema. `codigo` es único (`paciente.ver`, `pago.anular`, `clinico.exportar`…).
 
@@ -595,7 +638,9 @@ Timestamps: `created_at`, `updated_at`.
 
 Timestamps: solo `created_at`.
 
-#### `rol_permiso` — Permisos por rol
+#### `rol_permiso` — Permisos por rol (referencia lógica)
+
+> **Implementación real:** la tabla física es `role_has_permissions` de Spatie (`permission_id`, `role_id`).
 
 *Pivot.*
 
@@ -606,37 +651,71 @@ Timestamps: solo `created_at`.
 
 `PRIMARY KEY (rol_id, permiso_id)`. Sin timestamps.
 
-#### `usuario` — Usuarios
+#### `users` — Usuarios (implementación real)
 
-*Maestro.* Solo Superadmin, Administración y Recepción usan el sistema. Los profesionales y los padres no.
+*Maestro.* Solo Superadmin, Administración y Recepción usan el sistema. Los profesionales y los padres no. El nombre lógico `usuario` se mantiene en la documentación funcional; la tabla física es `users`.
 
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `nombre_completo` | `varchar(200)` |  |  |  |
-| `email` | `varchar(150)` |  | `UK` |  |
-| `username` | `varchar(100)` |  | `UK` |  |
-| `password_hash` | `varchar(255)` |  |  | bcrypt o Argon2 |
-| `rol_id` | `bigint` |  | `FK → rol` |  |
-| `activo` | `boolean` |  | `DEFAULT true` |  |
-| `ultimo_acceso` | `timestamptz` | sí |  |  |
-| `intentos_fallidos` | `int` |  | `DEFAULT 0` |  |
-| `bloqueado_hasta` | `timestamptz` | sí |  |  |
+| `name` | `varchar(255)` |  |  | Nombre completo |
+| `username` | `varchar(100)` | sí | `UNIQUE` | Login principal; obligatorio en la aplicación |
+| `documento` | `varchar(20)` | sí | `UNIQUE` | CI; obligatorio en la aplicación |
+| `email` | `varchar(255)` | sí | `UNIQUE` | Opcional. Login alternativo si está presente; no se usa para envíos |
+| `email_verified_at` | `timestamp` | sí |  | No se usa en Etapa 1 |
+| `password` | `varchar(255)` |  |  | Hash bcrypt |
+| `activo` | `boolean` |  | `DEFAULT true` | RN-05/RN-06 |
+| `motivo_estado` | `text` | sí |  | Motivo de la última desactivación |
+| `estado_cambiado_en` | `timestamptz` | sí |  |  |
+| `ultimo_acceso` | `timestamptz` | sí |  | RF-A16 |
+| `intentos_fallidos` | `smallint` |  | `DEFAULT 0` |  |
+| `bloqueado_hasta` | `timestamptz` | sí |  | Bloqueo temporal |
+| `debe_cambiar_password` | `boolean` |  | `DEFAULT false` | RF-A13 |
+| `password_actualizada_en` | `timestamptz` | sí |  | Caducidad opcional |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
+| `remember_token` | `varchar(100)` | sí |  | Laravel |
+| `created_at` / `updated_at` | `timestamptz` | sí |  |  |
 
-Índices: `UNIQUE (email)`, `UNIQUE (username)`, `INDEX (rol_id)`. Timestamps: `created_at`, `updated_at`.
+Índices: `UNIQUE (username)`, `UNIQUE (documento)`, `UNIQUE (email)` (permite múltiples `NULL`), `INDEX (activo)`. El rol vive en `model_has_roles` (Spatie) y no en una columna `rol_id`. No hay `deleted_at`. Login: `username` o `email` si existe.
 
 #### `usuario_sucursal` — Usuario en sucursal
 
-*Pivot.* En qué sucursales puede trabajar cada usuario. La sucursal activa se guarda en sesión y se revalida en cada petición.
+*Pivot.* En qué sucursales puede trabajar cada usuario. **No hay concepto de “sucursal activa en sesión”**: el alcance se evalúa contra todas las sucursales asignadas. La implementación real (`EloquentUserBranchAccess`) está activa desde la Fase 2. El Superadmin con `sucursal.alcance_global` puede operar sin pivotes; el bootstrap lo crea sin sucursales si aún no hay ninguna.
 
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
-| `usuario_id` | `bigint` |  | `FK → usuario` |  |
-| `sucursal_id` | `bigint` |  | `FK → sucursal` |  |
+| `usuario_id` | `bigint` |  | `FK → users`, `ON DELETE CASCADE` |  |
+| `sucursal_id` | `bigint` |  | `FK → sucursal`, `ON DELETE CASCADE` |  |
 
 `PRIMARY KEY (usuario_id, sucursal_id)`, `INDEX (sucursal_id)`. Sin timestamps.
 
-#### `sesion` — Sesiones
+#### `usuario_password_historial` — Historial de contraseñas
+
+*Historial.* Solo hashes de contraseñas anteriores. No guarda contraseñas en claro.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `usuario_id` | `bigint` |  | `FK → users`, `ON DELETE CASCADE` |  |
+| `password_hash` | `varchar(255)` |  |  | Hash bcrypt |
+| `created_at` | `timestamptz` |  | `DEFAULT now()` |  |
+
+Índice: `(usuario_id, created_at)`. Sin `updated_at`. Se podan los hashes más antiguos según `password_historial_cantidad`.
+
+#### `modulo_permisos_inicializado` — Matriz inicial por módulo
+
+*Configuración interna.* Marca qué módulos ya aplicaron su matriz inicial para que `db:seed` no vuelva a conceder permisos revocados por UI (RF-R04).
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `modulo` | `varchar(100)` |  | `PK` | Ej. `seguridad`, `organizacion.sucursales`, `seguridad.matriz_baseline` |
+| `inicializado_en` | `timestamptz` |  | `DEFAULT now()` |  |
+
+La clave `seguridad.matriz_baseline` marca la línea base histórica de la matriz (Fase 3); evita duplicar el evento inicial en cada `db:seed`.
+
+#### `sesion` — Sesiones (referencia lógica, no implementada)
+
+> **No implementada:** el módulo 02 usa `personal_access_tokens` de Sanctum. No se crea la tabla `sesion`. La expiración absoluta se guarda en `personal_access_tokens.expires_at`; la inactividad se mide con `last_used_at` y `sesion_inactividad_minutos`.
 
 *Documento.* Sesiones activas. Token con hash. Cierre por inactividad en contenido clínico.
 
@@ -653,6 +732,23 @@ Timestamps: solo `created_at`.
 
 Índices: `INDEX (usuario_id)`, `INDEX (expira_en)`.
 
+#### `personal_access_tokens` — Tokens de sesión (Sanctum)
+
+*Documento.* Tabla real de sesiones de API. Cada fila es un token bearer; el valor en claro nunca se guarda, solo su hash.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `tokenable_type` / `tokenable_id` | `varchar` / `bigint` |  | índice | Apunta a `App\Models\User` |
+| `name` | `text` |  |  | `sesion` |
+| `token` | `varchar(64)` |  | `UNIQUE` | Hash del token |
+| `abilities` | `text` | sí |  |  |
+| `last_used_at` | `timestamp` | sí |  | Actualizado por `EnsureSessionIsValid` |
+| `expires_at` | `timestamp` | sí | índice | Expiración absoluta |
+| `created_at` / `updated_at` | `timestamp` | sí |  |  |
+
+No se crea la tabla `sesion`. El límite de sesiones y la revocación se implementan sobre esta tabla.
+
 #### `bitacora` — Bitácora
 
 *Historial.* Solo inserción. Registra quién hizo qué, cuándo y en qué sucursal. Inmutable.
@@ -660,18 +756,23 @@ Timestamps: solo `created_at`.
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `usuario_id` | `bigint` | sí | `FK → usuario` | NULL en intentos fallidos |
-| `sucursal_id` | `bigint` | sí | `FK → sucursal` |  |
-| `accion` | `varchar(100)` |  |  | `INSERT`, `UPDATE`, `DELETE`, `LOGIN`, `ANULAR`, etc. |
-| `entidad` | `varchar(100)` | sí |  | Nombre de la tabla |
+| `usuario_id` | `bigint` | sí | `FK → users` | NULL en intentos fallidos con usuario desconocido |
+| `sucursal_id` | `bigint` | sí | `FK → sucursal` | En eventos de usuario se replica una fila por sucursal activa del usuario afectado; los usuarios con alcance global y los eventos globales quedan NULL |
+| `accion` | `varchar(100)` |  |  | `CREAR`, `EDITAR`, `ACTIVAR`, `DESACTIVAR`, `LOGIN`, `LOGIN_FALLIDO`, `CERRAR_SESION`, `BLOQUEAR`, etc. |
+| `entidad` | `varchar(100)` | sí |  | `usuario`, `sesion`, `sucursal`, `parametro`, etc. |
 | `entidad_id` | `bigint` | sí |  |  |
 | `datos_anteriores` | `jsonb` | sí |  |  |
 | `datos_nuevos` | `jsonb` | sí |  |  |
-| `motivo` | `text` | sí |  | Para anulaciones |
-| `ip` | `varchar(45)` | sí |  |  |
+| `motivo` | `text` | sí |  | Para anulaciones, bloqueos y desactivaciones |
+| `ip` | `varchar(45)` | sí |  | Se completa en el módulo 02; filas de 01/02/03 lo dejan NULL |
+| `modulo` | `varchar(50)` | sí |  | `autenticacion`, `usuarios`, `roles`, `auditoria`; NULL en filas históricas |
+| `resultado` | `varchar(20)` | sí |  | `exito`, `fallo`, `denegado`; NULL en filas históricas |
+| `critico` | `boolean` |  | `DEFAULT false` | Eventos críticos (bloqueo, matriz, exportación) |
 | `created_at` | `timestamptz` |  | `DEFAULT now()` |  |
 
-Índices: `(usuario_id)`, `(created_at)`, `(entidad, entidad_id)`, `(accion)`. Trigger `BEFORE UPDATE OR DELETE` que lanza error. Sin `updated_at`.
+Índices: `(usuario_id)`, `(created_at)`, `(entidad, entidad_id)`, `(accion)`, `(modulo)`, `(resultado)`, `(critico)`, `(sucursal_id, created_at)`. Trigger `BEFORE UPDATE OR DELETE` que lanza error. Sin `updated_at`.
+
+> **Implementación real:** la tabla física de usuarios es `users`; `bitacora.usuario_id` sigue apuntando a `users.id` y no se migra a una tabla `usuario` inexistente. Las columnas `modulo`, `resultado` y `critico` son nullable/default para tolerar filas históricas, porque el trigger impide rellenarlas con UPDATE. Los listeners de 01/03 no se modificaron en la Fase 1. En la Fase 3, la matriz usa `entidad = 'matriz_permisos'`, `accion = 'EDITAR_PERMISOS'`, con antes/después y `linea_base = true` en el evento inicial. En la Fase 4, las consultas a la bitácora usan `entidad = 'bitacora'`, `accion = 'CONSULTAR'`, y las exportaciones `entidad = 'exportacion'`, `accion = 'EXPORTAR'`, `critico = true`. Los eventos de seguridad de usuario se escriben con `sucursal_id` de cada sucursal activa del usuario afectado (una fila por sucursal); los usuarios con alcance global se registran una sola vez con `sucursal_id NULL`. La matriz, las consultas a la bitácora y las exportaciones siguen siendo globales (`sucursal_id NULL`) y solo las ve el Superadmin.
 
 #### `acceso_clinico_temporal` — Acceso especial a contenido clínico
 
@@ -692,17 +793,59 @@ Timestamps: solo `created_at`.
 
 #### `configuracion` — Parámetros del sistema
 
-*Configuración.* Valores configurables sin tocar código.
+*Configuración.* Valores configurables sin tocar código. Catálogo versionado por seeder/migración; no se crean ni eliminan desde la UI y no tiene borrado lógico.
 
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `clave` | `varchar(100)` |  | `UK` | `duracion_sesion_minutos`, `dias_alerta_vencimiento`, `ventana_edicion_asistencia_horas`, `sesion_inactividad_minutos`, `nombre_centro`, `mensaje_whatsapp`… |
-| `valor` | `text` |  |  |  |
-| `tipo` | `varchar(20)` |  | `DEFAULT 'texto'` | texto, número, booleano, json |
-| `descripcion` | `text` | sí |  |  |
+| `clave` | `varchar(100)` |  | `UK` | Clave estable del catálogo (`duracion_sesion_minutos`, `agenda.turno_manana.inicio`, `moneda`…) |
+| `categoria` | `varchar(50)` |  | índice | `identidad`, `operacion`, `agenda`, `pagos`, `formato_documentos`, `zona_horaria`, `moneda` |
+| `descripcion` | `text` | sí |  | Texto en español para la UI |
+| `tipo` | `varchar(20)` |  | `DEFAULT 'texto'`, CHECK | `entero`, `decimal`, `hora`, `texto`, `booleano` |
+| `valor` | `text` |  |  | Valor vigente serializado como texto |
+| `valor_defecto` | `text` |  |  | Se usa para restaurar (RF-005) |
+| `unidad` | `varchar(30)` | sí |  | `minutos`, `horas`, `días`, `Bs`… |
+| `minimo` | `text` | sí |  | Límite inferior; en textos representa longitud |
+| `maximo` | `text` | sí |  | Límite superior; en textos representa longitud |
+| `sensible` | `boolean` |  | `DEFAULT false` | Exige confirmación y motivo (RF-016) |
+| `editable` | `boolean` |  | `DEFAULT true` | `false` para moneda, leyenda y logo (carga especial) |
+| `visible_recepcion` | `boolean` |  | `DEFAULT false` | Filtra lo que ve Recepción (RF-014) |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista (409) |
 
-Timestamps: `updated_at`.
+Timestamps: solo `updated_at`. Las altas y cambios se reconstruyen desde `bitacora` (`entidad = 'parametro'`). No hay `sucursal_id`: los parámetros son globales (RN-009).
+
+Índices: `clave` único, `categoria`, `visible_recepcion`. El catálogo inicial tiene 23 claves y se carga con `OrganizacionConfiguracionCatalogSeeder`; cada alta deja un registro `CREAR` en bitácora.
+
+> **Módulo 02 (Fases 1–4):** se agregaron 12 claves de seguridad (categoría `seguridad`), por lo que el catálogo pasa a 35 claves. `sesion_inactividad_minutos` se reutiliza en `operacion`. Las fases 2 y 3 no agregan tablas; la Fase 4 agrega `accion_auditada` y reutiliza `bitacora`.
+
+#### `accion_auditada` — Catálogo de acciones auditadas
+
+*Configuración.* Catálogo mínimo de acciones auditables por módulo, entidad y acción (02/RF-B03). No es la bitácora: solo describe qué acciones existen y si son críticas.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `modulo` | `varchar(50)` |  |  | `organizacion`, `usuarios`, `autenticacion`, `roles`, `auditoria` |
+| `entidad` | `varchar(100)` |  |  | `usuario`, `sesion`, `matriz_permisos`, `bitacora`, `exportacion`, etc. |
+| `accion` | `varchar(100)` |  |  | `CREAR`, `EDITAR`, `DESACTIVAR`, `CONSULTAR`, `EXPORTAR`, etc. |
+| `critico` | `boolean` |  | `DEFAULT false` | Marca para filtro rápido (RF-B13) |
+| `activo` | `boolean` |  | `DEFAULT true` |  |
+| `descripcion` | `text` | sí |  | Etiqueta legible para la UI |
+
+`UNIQUE (modulo, entidad, accion)`, `INDEX (modulo, activo)`. Timestamps. Seeder idempotente `AccionAuditadaSeeder` (40 acciones, 7 críticas al cierre de la Fase 4).
+
+#### Migraciones del módulo 02 — Fases 1–4
+
+- `2026_11_21_000000_add_security_fields_to_users_table.php`
+- `2026_11_21_000100_create_usuario_sucursal_table.php`
+- `2026_11_21_000200_create_usuario_password_historial_table.php`
+- `2026_11_21_000300_add_audit_fields_to_bitacora_table.php`
+- `2026_11_21_000400_add_matrix_fields_to_roles_table.php`
+- `2026_11_21_000500_create_modulo_permisos_inicializado_table.php`
+- `2026_11_21_000600_create_accion_auditada_table.php`
+- `2026_11_21_000700_make_users_email_nullable.php`
+
+La Fase 2 no requirió migraciones nuevas. La Fase 3 tampoco: usa `roles.version`, `roles.es_superadmin` y `bitacora`. La Fase 4 agrega `accion_auditada`; la bitácora sigue en `bitacora`. La migración `000700` hace opcional `users.email`; el login por usuario ya existía y el correo deja de ser obligatorio en el alta.
 
 ---
 
@@ -836,6 +979,8 @@ Timestamps: `created_at`, `updated_at`.
 
 *Configuración.* Salas Grupales e Intervención Terapéutica. El color es configurable.
 
+> **Implementación actual:** el submódulo 01.02 crea esta tabla como prerequisito de solo lectura para `sala.area_id`. El CRUD y la administración de colores pertenecen al módulo 05; aquí no se modifican.
+
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
@@ -845,21 +990,66 @@ Timestamps: `created_at`, `updated_at`.
 
 Timestamps: `created_at`, `updated_at`.
 
-#### `sala` — Salas
+#### `tipo_sala` — Tipos de sala
 
-*Maestro.* Sala = tipo + turno + sucursal. Agregable.
+*Configuración.* Catálogo global administrable (RF-001/RF-002). Los tipos iniciales son preescolar, atención temprana, estimulación temprana y escolar.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `nombre` | `varchar(100)` |  | `UNIQUE` funcional | Único sin distinguir mayúsculas ni espacios externos |
+| `activo` | `boolean` |  | `DEFAULT true` |  |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
+
+Índices: `UNIQUE ((lower(trim(nombre))))`. Timestamps: `created_at`, `updated_at`.
+
+#### `turno_catalogo` — Turnos operativos
+
+*Configuración.* Catálogo global administrable (RF-003). No confundir con la tabla `turno` de agenda del módulo 07.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `nombre` | `varchar(50)` |  | `UNIQUE` funcional | Inicialmente mañana y tarde |
+| `orden` | `integer` |  | `DEFAULT 0` | Orden de visualización |
+| `activo` | `boolean` |  | `DEFAULT true` |  |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
+
+Índices: `UNIQUE ((lower(trim(nombre))))`, `(orden)`. Timestamps: `created_at`, `updated_at`.
+
+#### `sala` — Salas grupales
+
+*Maestro.* Sala = tipo de sala + turno + sucursal. Agregable.
 
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
 | `sucursal_id` | `bigint` |  | `FK → sucursal` |  |
-| `area_id` | `bigint` |  | `FK → area` |  |
-| `nombre` | `varchar(150)` |  |  |  |
-| `tipo` | `varchar(100)` |  |  | preescolar, atención temprana, estimulación temprana, escolar |
-| `turno` | `varchar(20)` |  | `CHECK IN ('mañana','tarde')` |  |
+| `area_id` | `bigint` |  | `FK → area` | Referencia para el color de agenda |
+| `tipo_sala_id` | `bigint` |  | `FK → tipo_sala` |  |
+| `turno_catalogo_id` | `bigint` |  | `FK → turno_catalogo` |  |
+| `nombre` | `varchar(150)` |  |  | Nombre visible |
+| `observaciones` | `text` | sí |  |  |
 | `activo` | `boolean` |  | `DEFAULT true` |  |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
 
-Índices: `UNIQUE (sucursal_id, tipo, turno)`. Timestamps: `created_at`, `updated_at`.
+Índices: `UNIQUE (sucursal_id, tipo_sala_id, turno_catalogo_id)`, `(tipo_sala_id)`, `(turno_catalogo_id)`. Timestamps: `created_at`, `updated_at`.
+
+#### `ambiente` — Ambientes
+
+*Maestro.* Espacios de atención individual, entrevista y diagnóstico. Pertenece a una sucursal.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `sucursal_id` | `bigint` |  | `FK → sucursal` |  |
+| `nombre` | `varchar(150)` |  | `UNIQUE` funcional por sucursal |  |
+| `uso` | `varchar` |  | `CHECK IN ('terapia_individual','entrevista','diagnostico','mixto')` |  |
+| `observaciones` | `text` | sí |  |  |
+| `activo` | `boolean` |  | `DEFAULT true` |  |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
+
+Índices: `UNIQUE (sucursal_id, lower(trim(nombre)))`, `(sucursal_id)`, `(uso)`. Timestamps: `created_at`, `updated_at`.
 
 #### `servicio` — Servicios
 
@@ -1076,6 +1266,8 @@ Sin `updated_at`.
 | `asistencia_registrada_en` | `timestamptz` | sí |  |  |
 
 Índices: `(fecha)`, `(sucursal_id, fecha)`, `(paciente_id)`, `(profesional_id)`, `(estado)`, `(sala_id, fecha)`. CHECK: exactamente uno de `sala_id`, `paquete_sesiones_id` o `atencion_diagnostico_id` no nulo. Timestamps: `created_at`, `updated_at`.
+
+> **TODO módulo 07:** la tabla actual solo referencia `sala_id`. Para las terapias individuales, entrevistas y diagnósticos se evaluará agregar `ambiente_id` y consumir `AmbienteDirectoryContract`. No se modificó esta tabla en el submódulo 01.02.
 
 #### `turno_profesional` — Profesionales por turno
 
@@ -1377,7 +1569,8 @@ Timestamps: `created_at`, `updated_at`.
 |---|---|---|
 | Un pago se vincula a exactamente una entidad | BD | `CHECK` con suma de `IS NOT NULL` = 1 |
 | Un turno es de sala, paquete o diagnóstico (nunca dos) | BD | `CHECK` con suma de `IS NOT NULL` = 1 |
-| Una sala no se repite en la misma sucursal por tipo y turno | BD | `UNIQUE (sucursal_id, tipo, turno)` |
+| Una sala no se repite en la misma sucursal por tipo y turno | BD | `UNIQUE (sucursal_id, tipo_sala_id, turno_catalogo_id)` |
+| Un ambiente no repite nombre dentro de la sucursal | BD | `UNIQUE (sucursal_id, lower(trim(nombre)))` |
 | Una caja abierta por sucursal y día | BD | `UNIQUE (sucursal_id, fecha)` |
 | Un solo informe de entrevista por atención | BD | `UNIQUE (atencion_entrevista_id)` |
 | Un solo resultado por diagnóstico | BD | `UNIQUE (atencion_diagnostico_id)` |
