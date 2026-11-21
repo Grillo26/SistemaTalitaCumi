@@ -103,7 +103,7 @@ export class PacienteFormModalComponent implements OnInit, OnChanges {
     tutor_telefono_alternativo: [''],
     tutor_email: [''],
     tutor_direccion: [''],
-    tutor_parentesco: [''],
+    tutor_parentesco_id: ['', [Validators.required]],
   });
 
   get isEdit(): boolean {
@@ -116,6 +116,13 @@ export class PacienteFormModalComponent implements OnInit, OnChanges {
 
   get tutoresDisponibles(): boolean {
     return this.options?.tutores.disponible === true;
+  }
+
+  get parentescoOptions(): { value: string; label: string }[] {
+    return (this.options?.parentescos ?? []).map((parentesco) => ({
+      value: String(parentesco.id),
+      label: parentesco.nombre,
+    }));
   }
 
   get sexoOptions(): { value: string; label: string }[] {
@@ -178,7 +185,7 @@ export class PacienteFormModalComponent implements OnInit, OnChanges {
         tutor_telefono_alternativo: '',
         tutor_email: '',
         tutor_direccion: '',
-        tutor_parentesco: '',
+        tutor_parentesco_id: '',
       });
 
       this.mostrarSensibles.set(Boolean(paciente.alergias || paciente.condiciones_medicas));
@@ -201,7 +208,7 @@ export class PacienteFormModalComponent implements OnInit, OnChanges {
         tutor_telefono_alternativo: '',
         tutor_email: '',
         tutor_direccion: '',
-        tutor_parentesco: '',
+        tutor_parentesco_id: '',
       });
 
       this.mostrarSensibles.set(false);
@@ -344,7 +351,7 @@ export class PacienteFormModalComponent implements OnInit, OnChanges {
       }
 
       if (this.tutorMode() === 'nuevo') {
-        const tutorRequired = ['tutor_nombre', 'tutor_telefono', 'tutor_parentesco'];
+        const tutorRequired = ['tutor_nombre', 'tutor_telefono', 'tutor_parentesco_id'];
 
         if (tutorRequired.some((field) => !String(this.form.get(field)?.value ?? '').trim())) {
           this.error.set({
@@ -440,7 +447,8 @@ export class PacienteFormModalComponent implements OnInit, OnChanges {
       telefono_alternativo: value.tutor_telefono_alternativo.trim() || null,
       email: value.tutor_email.trim() || null,
       direccion: value.tutor_direccion.trim() || null,
-      parentesco: value.tutor_parentesco.trim(),
+      parentesco_id: Number(value.tutor_parentesco_id),
+      sucursal_registro_id: Number(value.sucursal_registro_id),
     };
 
     return { modo: 'nuevo', ...tutor };

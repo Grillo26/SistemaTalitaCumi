@@ -1,0 +1,218 @@
+<div>
+  <app-page-breadcrumb pageTitle="Tutores" />
+
+  <div class="space-y-5 sm:space-y-6">
+    @if (error(); as apiError) {
+      <app-alert variant="error" title="No se pudo completar la operación" [message]="apiError.message" />
+    }
+
+    <app-component-card [title]="texts.title" [desc]="texts.description">
+      <div class="space-y-4">
+        <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <div class="relative w-full sm:w-80">
+              <span class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-gray-400" aria-hidden="true">
+                <svg class="size-5" viewBox="0 0 20 20" fill="none">
+                  <path
+                    d="M14.382 14.383l3.325 3.326m-1.249-8.334a7.082 7.082 0 01-7.083 7.081 7.082 7.082 0 110-14.163 7.082 7.082 0 017.083 7.082z"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </span>
+              <input
+                app-input
+                type="text"
+                [formControl]="searchControl"
+                class="ps-10"
+                [placeholder]="texts.searchPlaceholder"
+                aria-label="Buscar tutores"
+              />
+            </div>
+
+            <div class="w-full sm:w-44">
+              <app-select-field
+                [options]="estadoFilterOptions"
+                [value]="estadoFilter()"
+                placeholder="Todos los estados"
+                ariaLabel="Filtrar tutores por estado"
+                (valueChange)="onEstadoFilter($event)"
+              />
+            </div>
+
+            <div class="w-full sm:w-52">
+              <app-select-field
+                [options]="sucursalFilterOptions()"
+                [value]="sucursalFilter() === '' ? '' : sucursalFilter().toString()"
+                placeholder="Todas las sucursales"
+                ariaLabel="Filtrar tutores por sucursal de registro"
+                (valueChange)="onSucursalFilter($event)"
+              />
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            @if (abilities().export) {
+              <button
+                app-button
+                variant="outline"
+                type="button"
+                (click)="exportTutores()"
+                [disabled]="exporting()"
+              >
+                {{ exporting() ? texts.exporting : texts.export }}
+              </button>
+            }
+            @if (abilities().create) {
+              <button app-button variant="default" type="button" (click)="openCreate()">
+                {{ texts.create }}
+              </button>
+            }
+          </div>
+        </div>
+
+        <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+          <table app-table class="min-w-full">
+            <thead
+              app-table-header
+              class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900"
+            >
+              <tr app-table-row>
+                <th app-table-cell class="px-4 py-3 text-start">
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                    (click)="sortBy('nombre_completo')"
+                    [attr.aria-sort]="ariaSort('nombre_completo')"
+                  >
+                    Tutor
+                    <span aria-hidden="true">{{ sortIndicator('nombre_completo') }}</span>
+                  </button>
+                </th>
+                <th app-table-cell class="px-4 py-3 text-start">
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                    (click)="sortBy('ci')"
+                    [attr.aria-sort]="ariaSort('ci')"
+                  >
+                    Documento
+                    <span aria-hidden="true">{{ sortIndicator('ci') }}</span>
+                  </button>
+                </th>
+                <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Teléfono</th>
+                <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Parentesco</th>
+                <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Sucursal</th>
+                <th app-table-cell class="px-4 py-3 text-start">
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                    (click)="sortBy('activo')"
+                    [attr.aria-sort]="ariaSort('activo')"
+                  >
+                    Estado
+                    <span aria-hidden="true">{{ sortIndicator('activo') }}</span>
+                  </button>
+                </th>
+                <th app-table-cell class="px-4 py-3 text-start">
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                    (click)="sortBy('updated_at')"
+                    [attr.aria-sort]="ariaSort('updated_at')"
+                  >
+                    Última modificación
+                    <span aria-hidden="true">{{ sortIndicator('updated_at') }}</span>
+                  </button>
+                </th>
+                <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
+              </tr>
+            </thead>
+            <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+              @if (loading()) {
+                <tr app-table-row>
+                  <td app-table-cell colspan="8" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                    {{ texts.loading }}
+                  </td>
+                </tr>
+              } @else {
+                @for (tutor of rows(); track tutor.id) {
+                  <tr
+                    app-table-row
+                    class="cursor-pointer hover:bg-gray-50/70 dark:hover:bg-white/[0.02]"
+                    (click)="openFicha(tutor)"
+                  >
+                    <td app-table-cell class="px-4 py-4 text-sm font-medium text-gray-800 dark:text-white/90">
+                      {{ tutor.nombre_completo }}
+                    </td>
+                    <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                      {{ tutor.ci || '—' }}
+                    </td>
+                    <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                      {{ tutor.telefono }}
+                    </td>
+                    <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                      {{ tutor.parentesco || texts.noParentesco }}
+                    </td>
+                    <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                      {{ sucursalName(tutor) }}
+                    </td>
+                    <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                      <app-badge [color]="estadoColor(tutor.estado)" variant="light" size="sm">
+                        {{ tutor.activo ? texts.active : texts.inactive }}
+                      </app-badge>
+                    </td>
+                    <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                      {{ formatDateTime(tutor.updated_at) }}
+                    </td>
+                    <td app-table-cell class="whitespace-nowrap px-4 py-4 text-end">
+                      <button
+                        app-button
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        (click)="$event.stopPropagation(); openFicha(tutor)"
+                      >
+                        {{ texts.view }}
+                      </button>
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr app-table-row>
+                    <td app-table-cell colspan="8" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                      {{ texts.noResults }}
+                    </td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p class="text-sm text-gray-500 dark:text-gray-400">
+            Mostrando {{ from() ?? 0 }}–{{ to() ?? 0 }} de {{ total() }}
+          </p>
+          <app-pagination
+            [currentPage]="page()"
+            [totalPages]="lastPage()"
+            variant="text-icon"
+            (pageChange)="goToPage($event)"
+          />
+        </div>
+      </div>
+    </app-component-card>
+  </div>
+
+  @if (createOpen() && options(); as opts) {
+    <app-tutor-form-modal
+      [open]="true"
+      mode="create"
+      [options]="opts"
+      (closed)="closeCreate()"
+      (saved)="onCreated($event)"
+    />
+  }
+</div>

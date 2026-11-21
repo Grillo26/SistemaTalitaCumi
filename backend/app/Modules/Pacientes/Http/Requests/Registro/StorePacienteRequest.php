@@ -2,12 +2,13 @@
 
 namespace App\Modules\Pacientes\Http\Requests\Registro;
 
-use App\Modules\Pacientes\Enums\EstadoPaciente;
 use App\Modules\Pacientes\Enums\Sexo;
 use App\Modules\Pacientes\Exceptions\PacienteSensitiveFieldsForbiddenException;
+use App\Modules\Pacientes\Rules\TutorPhoneRule;
 use App\Modules\Pacientes\Support\PacientesPermission;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 /**
  * Alta de paciente con tutor principal (04.01/RF-001..RF-004).
@@ -51,11 +52,16 @@ final class StorePacienteRequest extends FormRequest
             'tutor_principal.tutor_id' => ['required_if:tutor_principal.modo,existente', 'integer', Rule::exists('tutor', 'id')],
             'tutor_principal.nombre_completo' => ['required_if:tutor_principal.modo,nuevo', 'nullable', 'string', 'max:200'],
             'tutor_principal.ci' => ['nullable', 'string', 'max:20', 'regex:/^[0-9A-Za-zÁÉÍÓÚÜÑáéíóúüñ\-\s]+$/u'],
-            'tutor_principal.telefono' => ['required_if:tutor_principal.modo,nuevo', 'nullable', 'string', 'max:30', 'regex:/^[0-9+()\-\s]{6,30}$/'],
-            'tutor_principal.telefono_alternativo' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+()\-\s]{6,30}$/'],
+            'tutor_principal.telefono' => ['required_if:tutor_principal.modo,nuevo', 'nullable', 'string', 'max:30', new TutorPhoneRule(TutorPhoneRule::PRINCIPAL)],
+            'tutor_principal.telefono_alternativo' => ['nullable', 'string', 'max:30', new TutorPhoneRule(TutorPhoneRule::ALTERNATE)],
             'tutor_principal.email' => ['nullable', 'email:rfc', 'max:150'],
             'tutor_principal.direccion' => ['nullable', 'string', 'max:500'],
-            'tutor_principal.parentesco' => ['required_if:tutor_principal.modo,nuevo', 'nullable', 'string', 'max:50'],
+            'tutor_principal.parentesco_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('parentesco', 'id')->where('activo', true),
+            ],
+            'tutor_principal.parentesco' => ['nullable', 'string', 'max:50'],
 
             'confirmar_duplicado' => ['sometimes', 'boolean'],
             'motivo_confirmacion' => ['nullable', 'string', 'max:500', 'required_if:confirmar_duplicado,true'],
@@ -64,6 +70,32 @@ final class StorePacienteRequest extends FormRequest
             'codigo' => ['prohibited'],
             'version' => ['prohibited'],
             'sucursal_inscripcion_id' => ['prohibited'],
+        ];
+    }
+
+    /**
+     * @return array<int, callable>
+     */
+    public function after(): array
+    {
+        return [
+            function (Validator $validator): void {
+                $mode = $this->input('tutor_principal.modo');
+
+                if ($mode !== 'nuevo') {
+                    return;
+                }
+
+                $hasParentesco = $this->input('tutor_principal.parentesco_id') !== null
+                    || trim((string) $this->input('tutor_principal.parentesco', '')) !== '';
+
+                if (! $hasParentesco) {
+                    $validator->errors()->add(
+                        'tutor_principal.parentesco_id',
+                        'Seleccioná el parentesco del tutor principal.',
+                    );
+                }
+            },
         ];
     }
 
@@ -88,8 +120,7 @@ final class StorePacienteRequest extends FormRequest
             'tutor_principal.tutor_id.exists' => 'El tutor seleccionado no existe.',
             'tutor_principal.nombre_completo.required_if' => 'El nombre del tutor es obligatorio.',
             'tutor_principal.telefono.required_if' => 'El teléfono del tutor es obligatorio.',
-            'tutor_principal.telefono.regex' => 'El teléfono debe contener solo números, espacios, +, paréntesis o guiones (6 a 30 caracteres).',
-            'tutor_principal.parentesco.required_if' => 'El parentesco del tutor es obligatorio.',
+            'tutor_principal.parentesco_id.exists' => 'El parentesco del tutor no existe o está inactivo.',
             'motivo_confirmacion.required_if' => 'Para confirmar que no es un duplicado tenés que ingresar un motivo.',
         ];
     }

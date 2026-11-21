@@ -93,7 +93,7 @@ final class PacienteAgeCalculatorTest extends TestCase
 
     public function test_missing_timezone_fails_explicitly(): void
     {
-        $calculator = new PacienteAgeCalculator(new FakeParameterReaderContract());
+        $calculator = new PacienteAgeCalculator(new FakeParameterReaderContract);
 
         $this->expectException(PacienteConfigurationUnavailableException::class);
 

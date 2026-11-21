@@ -3,6 +3,7 @@
 namespace App\Modules\Pacientes\Actions\Registro;
 
 use App\Models\User;
+use App\Modules\Pacientes\Contracts\TutorDirectoryContract;
 use App\Modules\Pacientes\Enums\EstadoPaciente;
 use App\Modules\Pacientes\Events\Registro\PacienteStatusChanged;
 use App\Modules\Pacientes\Exceptions\PacienteConcurrencyException;
@@ -16,7 +17,6 @@ use App\Modules\Pacientes\Rules\PacienteTutorRequirementRule;
 use App\Modules\Pacientes\Support\PacienteAccessScope;
 use App\Modules\Pacientes\Support\PacienteBranchResolver;
 use App\Modules\Pacientes\Support\PacienteSnapshot;
-use App\Modules\Pacientes\Contracts\TutorDirectoryContract;
 use Illuminate\Support\Facades\DB;
 
 /**

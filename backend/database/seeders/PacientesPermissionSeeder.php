@@ -10,10 +10,9 @@ use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
- * Permisos del módulo 04 — Pacientes y tutores.
+ * Permisos del módulo 04.01 — Registro de pacientes.
  *
- * La única capa que nombra roles es esta matriz inicial. Recepción crea
- * pacientes; Administración consulta y edita. Superadmin tiene todo.
+ * Los permisos de tutor pertenecen a TutoresPermissionSeeder (04.02).
  */
 final class PacientesPermissionSeeder extends Seeder
 {
@@ -25,10 +24,7 @@ final class PacientesPermissionSeeder extends Seeder
             Permission::findOrCreate($permission, 'web');
         }
 
-        $assign = InitialPermissionMatrix::shouldAssign(
-            'pacientes',
-            PacientesPermission::all(),
-        );
+        $assign = InitialPermissionMatrix::shouldAssign('pacientes', PacientesPermission::all());
 
         if ($assign) {
             $superadmin = Role::findByName('superadmin', 'web');
@@ -40,9 +36,6 @@ final class PacientesPermissionSeeder extends Seeder
                 PacientesPermission::PATIENT_EDIT,
                 PacientesPermission::PATIENT_VIEW_SENSITIVE,
                 PacientesPermission::PATIENT_EXPORT,
-                PacientesPermission::TUTOR_VIEW,
-                PacientesPermission::TUTOR_EDIT,
-                PacientesPermission::TUTOR_EXPORT,
             ]);
 
             $recepcion = Role::findByName('recepcion', 'web');
@@ -53,10 +46,6 @@ final class PacientesPermissionSeeder extends Seeder
                 PacientesPermission::PATIENT_CHANGE_STATUS,
                 PacientesPermission::PATIENT_VIEW_SENSITIVE,
                 PacientesPermission::PATIENT_EXPORT,
-                PacientesPermission::TUTOR_VIEW,
-                PacientesPermission::TUTOR_CREATE,
-                PacientesPermission::TUTOR_EDIT,
-                PacientesPermission::TUTOR_EXPORT,
             ]);
 
             InitialPermissionMatrix::mark('pacientes');

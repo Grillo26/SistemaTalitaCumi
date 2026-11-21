@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Modules\Pacientes\Models\Tutor;
 use App\Modules\Pacientes\Support\TutorAccessScope;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Listado/buscador de tutores (04.02/RF-007).
@@ -17,6 +18,7 @@ final class ListTutoresQuery
     public function __invoke(
         ?string $search,
         ?bool $activo,
+        ?int $sucursalRegistroId,
         int $page,
         int $perPage,
         string $sort,
@@ -25,14 +27,36 @@ final class ListTutoresQuery
     ): LengthAwarePaginator {
         $page = max(1, $page);
         $perPage = max(1, min($perPage, 50));
-        $direction = $direction === 'desc' ? 'desc' : 'asc';
 
+        return $this->builder(
+            search: $search,
+            activo: $activo,
+            sucursalRegistroId: $sucursalRegistroId,
+            sort: $sort,
+            direction: $direction,
+            actor: $actor,
+        )
+            ->paginate($perPage, ['*'], 'page', $page)
+            ->withQueryString();
+    }
+
+    /**
+     * Query reutilizable por el listado paginado y la exportación.
+     */
+    public function builder(
+        ?string $search,
+        ?bool $activo,
+        ?int $sucursalRegistroId,
+        string $sort,
+        string $direction,
+        User $actor,
+    ): Builder {
+        $direction = $direction === 'desc' ? 'desc' : 'asc';
         $allowedSorts = ['nombre_completo', 'ci', 'activo', 'updated_at'];
         $sort = in_array($sort, $allowedSorts, true) ? $sort : 'nombre_completo';
 
-        $query = Tutor::query();
-        $this->scope->apply($query, $actor);
-
+        $query = Tutor::query()->with(['parentescoCatalogo', 'sucursalRegistro']);
+        $this->scope->apply($query, $actor, $sucursalRegistroId);
         $query->buscar($search)->activo($activo);
 
         if ($sort === 'nombre_completo') {
@@ -41,8 +65,6 @@ final class ListTutoresQuery
             $query->orderBy($sort, $direction);
         }
 
-        return $query
-            ->paginate($perPage, ['*'], 'page', $page)
-            ->withQueryString();
+        return $query;
     }
 }

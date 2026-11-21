@@ -1311,16 +1311,19 @@ El esquema de referencia se mantiene sincronizado en `database/database.md` y `d
 
 ---
 
-## Módulo 04 — Pacientes y tutores (04.02 núcleo + 04.01 Fase 1)
+## Módulo 04 — Pacientes y tutores (04.01 Fase 1 + 04.02 Fases A y B + export CSV)
 
-Implementa el registro de pacientes (04.01) y el núcleo de tutores necesario para que el alta sea funcional (04.02: crear/buscar/editar tutor, asociar/desasociar y tutor principal). Los pacientes son globales; `sucursal_registro_id` es el ancla de visibilidad, no una duplicación por sucursal. No hay SoftDeletes: el retiro es `estado = retirado`.
+Implementa el registro de pacientes (04.01) y las Fases A y B del registro de tutores y contactos (04.02): alta, edición, listado y ficha standalone de tutores, asociación, tutor principal, activación/desactivación, parentesco por relación, sucursal de registro del tutor, duplicados, enmascarado de teléfonos, auditoría y contactos de emergencia adicionales por paciente. Los pacientes y tutores son globales; `sucursal_registro_id` es el ancla de visibilidad, no una duplicación por sucursal. No hay SoftDeletes: el retiro es `estado = retirado` y los tutores se desactivan con motivo.
+
+La exportación de tutores (04.02/RF-016) y el consumo del teléfono por la alerta de próximo pago (04.02/RF-013, módulo 09) quedan para la Fase C.
 
 ### Estructura
 
 ```text
 app/Modules/Pacientes/
 ├── Actions/Registro/       Alta, edición, estado y rechazo de eliminación
-├── Actions/Tutores/        Alta, edición y asociación de tutores
+├── Actions/Tutores/        Alta, edición, estado, asociación y desasociación
+├── Actions/Contactos/      Alta, edición y eliminación de contactos de emergencia
 ├── Contracts/              Directorio de pacientes, tutores, stubs y exportación
 ├── Enums/                  EstadoPaciente, Sexo, TipoCoincidencia
 ├── Events/                 Eventos de paciente y de tutores
@@ -1329,7 +1332,7 @@ app/Modules/Pacientes/
 ├── Http/Requests/          Validación y permisos por campo
 ├── Http/Resources/         Paciente y tutor
 ├── Listeners/              RecordPacientesAudit
-├── Models/                 Paciente, Tutor, PacienteTutor, historial y bitácora
+├── Models/                 Paciente, Tutor, Parentesco, PacienteTutor, ContactoEmergencia, historial y bitácora
 ├── Providers/              PacientesServiceProvider
 ├── Queries/                Listados, ficha y opciones
 ├── Rules/                  Reglas puras
@@ -1352,21 +1355,33 @@ app/Modules/Pacientes/
 | POST | `/pacientes/{id}/estado` | `ChangePacienteStatusAction` | `paciente.cambiar_estado` |
 | DELETE | `/pacientes/{id}` | `RejectPacienteDeletionAction` → 409 | `paciente.cambiar_estado` |
 | GET | `/pacientes/{id}/tutores` | `ListPacienteTutoresQuery` | `paciente.ver` |
-| POST | `/pacientes/{id}/tutores` | `AssociateTutorAction` | `paciente.editar` |
-| POST | `/pacientes/{id}/tutores/{tutorId}/principal` | `SetPrincipalTutorAction` | `paciente.editar` |
-| DELETE | `/pacientes/{id}/tutores/{tutorId}` | `DissociateTutorAction` | `paciente.editar` |
+| POST | `/pacientes/{id}/tutores` | `AssociateTutorAction` | `tutor.asociar` |
+| POST | `/pacientes/{id}/tutores/{tutorId}/principal` | `SetPrincipalTutorAction` | `tutor.asociar` |
+| DELETE | `/pacientes/{id}/tutores/{tutorId}` | `DissociateTutorAction` | `tutor.asociar` |
+| GET | `/pacientes/{id}/contactos-emergencia` | `ListContactosEmergenciaQuery` | `paciente.ver_contacto_emergencia` |
+| POST | `/pacientes/{id}/contactos-emergencia` | `CreateContactoEmergenciaAction` | `paciente.editar_contacto_emergencia` |
+| PATCH | `/pacientes/{id}/contactos-emergencia/{contactoId}` | `UpdateContactoEmergenciaAction` | `paciente.editar_contacto_emergencia` |
+| DELETE | `/pacientes/{id}/contactos-emergencia/{contactoId}` | `DeleteContactoEmergenciaAction` | `paciente.editar_contacto_emergencia` |
 | GET | `/tutores` | `ListTutoresQuery` | `tutor.ver` |
-| GET | `/tutores/{id}` | `GetTutorQuery` | `tutor.ver` |
+| GET | `/tutores/opciones` | `GetTutorFormOptionsQuery` | `tutor.ver` |
+| GET | `/tutores/exportar` | `TutorCsvExporter` + `AuditRecorderContract` | `tutor.exportar` |
+| GET | `/tutores/{id}` | `GetTutorQuery` + consulta auditada | `tutor.ver` |
 | POST | `/tutores` | `CreateTutorAction` | `tutor.crear` |
-| PATCH | `/tutores/{id}` | `UpdateTutorAction` | `tutor.editar` |
+| PATCH | `/tutores/{id}` | `UpdateTutorAction` | `tutor.editar` o `tutor.editar_contacto` según campos |
+| POST | `/tutores/{id}/estado` | `ChangeTutorStatusAction` | `tutor.cambiar_estado` |
+| DELETE | `/tutores/{id}` | `RejectTutorDeletionAction` → 409 | `tutor.editar` |
 
 Parámetros de pacientes: `search` (nombre/documento/código), `estado`, `tipo_diagnostico_id`, `sin_diagnostico`, `sucursal_registro_id`, `page`, `per_page` (máx. 50), `sort` (`nombre_completo|codigo|fecha_nacimiento|estado|updated_at`), `direction`. `sucursal_inscripcion_id` está **prohibido** hasta el módulo 06.
 
-La respuesta incluye `data`, `links`, `meta` y `can` de pantalla. Cada fila incluye `can` (`edit`, `change_status`, `view_sensibles`, `delete=false`, `view_tutors`). La ficha incluye `edad`, `sucursal_registro`, `sin_diagnostico_definido`, `observaciones`, `sensibles_protegidos`, `tutores_disponibles`, `tutores` y `can`.
+Parámetros de tutores: `search` (nombre/documento/teléfono), `activo`, `sucursal_registro_id`, `page`, `per_page` (máx. 50), `sort` (`nombre_completo|ci|activo|updated_at`), `direction`.
+
+La respuesta de pacientes incluye `data`, `links`, `meta` y `can` de pantalla. Cada fila incluye `can` (`edit`, `change_status`, `view_sensibles`, `delete=false`, `view_tutors`, `manage_tutors`, `view_emergency_contacts`, `manage_emergency_contacts`). La ficha incluye `edad`, `sucursal_registro`, `sin_diagnostico_definido`, `observaciones`, `sensibles_protegidos`, `tutores_disponibles`, `tutores`, `contactos_emergencia` y `can`. Los contactos solo se envían si el actor tiene `paciente.ver_contacto_emergencia`; sin ese permiso la sección no se expone.
+
+La respuesta de tutores incluye `data`, `links`, `meta` y `can` (`create`, `edit_data`, `edit_contact`, `change_status`, `view_contact`, `export`, `delete=false`, `manage_tutors`, `view_patients`). El listado enmascara teléfonos como `712***67` salvo `tutor.ver_contacto`; la ficha devuelve el valor completo a quien tiene ese permiso. La ficha incluye `pacientes` solo si el actor tiene `paciente.ver` y respeta su alcance por sucursal; nunca devuelve conteos de pacientes ocultos.
 
 ### Permisos
 
-Seeder: `PacientesPermissionSeeder`, con `InitialPermissionMatrix` y marca `pacientes`.
+Seeders: `PacientesPermissionSeeder` (marca `pacientes`), `TutoresPermissionSeeder` (marca `pacientes.tutores`) y `ContactosEmergenciaPermissionSeeder` (marca `pacientes.contactos_emergencia`). Las matrices son independientes para no revertir cambios del Superadmin al re-sembrar.
 
 | Permiso | Superadmin | Administración | Recepción |
 |---|---:|---:|---:|
@@ -1378,11 +1393,16 @@ Seeder: `PacientesPermissionSeeder`, con `InitialPermissionMatrix` y marca `paci
 | `paciente.exportar` (reservado) | sí | sí | sí |
 | `tutor.ver` | sí | sí | sí |
 | `tutor.crear` | sí | no | sí |
-| `tutor.editar` | sí | sí | sí |
-| `tutor.cambiar_estado` (reservado 04.02) | sí | no | no |
-| `tutor.exportar` (reservado 04.02) | sí | sí | no |
+| `tutor.editar` (identidad + contacto) | sí | no | sí |
+| `tutor.editar_contacto` (teléfonos, email, dirección) | sí | sí | no |
+| `tutor.ver_contacto` (valores completos) | sí | sí | sí |
+| `tutor.asociar` (asociar, desasociar, principal) | sí | no | sí |
+| `tutor.cambiar_estado` | sí | no | no |
+| `tutor.exportar` | sí | sí | no |
+| `paciente.ver_contacto_emergencia` | sí | sí | sí |
+| `paciente.editar_contacto_emergencia` | sí | sí | sí |
 
-No se creó `paciente.eliminar`. La aplicación decide por permiso, nunca por nombre de rol. Administración no crea pacientes ni cambia estado según 04.01/RF-001 y 04.01/RF-008; 06.05 propone otra cosa y queda pendiente de confirmación.
+No se creó `paciente.eliminar` ni `tutor.eliminar`. La aplicación decide por permiso, nunca por nombre de rol. Administración edita solo contacto y no crea tutores ni cambia estado; Recepción crea y edita completamente, asocia y no cambia estado; solo Superadmin activa/desactiva. El `DELETE` de tutor siempre responde `409 TUTOR_DELETE_NOT_ALLOWED` para quien tiene `tutor.editar`. Administración, Recepción y Superadmin gestionan contactos de emergencia; un rol con `paciente.ver` pero sin `paciente.ver_contacto_emergencia` no los recibe en la ficha y recibe 403 en el endpoint.
 
 ### Estados y reglas
 
@@ -1404,31 +1424,47 @@ No se creó `paciente.eliminar`. La aplicación decide por permiso, nunca por no
 - Si la coincidencia está fuera del alcance, **no** se devuelven id, nombre, documento ni datos clínicos; solo `data.fuera_de_alcance=true` o `data.coincidencias_fuera_de_alcance=true`.
 - La ficha de un paciente fuera de alcance responde `404 PATIENT_NOT_FOUND` para no revelar su existencia.
 
+### Reglas de tutores (04.02 Fase A)
+
+- **Parentesco híbrido:** catálogo `parentesco`; `tutor.parentesco_id` es el valor de referencia y `paciente_tutor.parentesco_id` es el autoritativo por relación. Al asociar se puede indicar otro parentesco; si se omite, se usa el del tutor. El texto legacy `tutor.parentesco` se conserva por compatibilidad y se resuelve contra el catálogo al crear/editar.
+- **Sucursal de registro del tutor:** `tutor.sucursal_registro_id` (home branch). Es obligatoria cuando el usuario tiene alcance global o varias sucursales; con una sola sucursal accesible se toma automáticamente. No se cambia desde la edición.
+- **Visibilidad fail-closed:** un tutor es visible por su home branch **o** por la sucursal de un paciente asociado. Un tutor sin pacientes y sin home branch solo lo ve el alcance global. El filtro por sucursal usa la misma regla.
+- **Identidad compartida:** si el tutor está asociado a sucursales fuera del alcance del actor, este solo puede editar contacto; nombre, documento y parentesco de referencia responden `403 TUTOR_IDENTITY_OUT_OF_SCOPE`.
+- **Estados:** desactivar exige `motivo` (`422 STATUS_REASON_REQUIRED`); reactivar no. No se permite el mismo estado (`409 TUTOR_STATUS_UNCHANGED`). Un tutor inactivo no puede asociarse ni designarse principal (`409 TUTOR_INACTIVE`). No se puede desactivar al principal de un paciente activo (`409 TUTOR_PRINCIPAL_ACTIVE_PATIENT`): primero hay que designar otro principal.
+- **Eliminación:** siempre `409 TUTOR_DELETE_NOT_ALLOWED`; los tutores se desactivan y conservan historial.
+- **Unicidad:** documento normalizado único si existe; si no, nombre completo normalizado + teléfono principal normalizado. El índice único refuerza carreras y `UniqueViolationTranslator` devuelve `409 TUTOR_DUPLICATE`. Los duplicados fuera de alcance no exponen id, nombre ni teléfono.
+- **Teléfonos:** se normalizan `+591`, `591` y `0` inicial. Principal: 8 dígitos que empiezan en 6 o 7. Alternativo: 8 dígitos que empiezan en 2, 3, 4, 6 o 7. Formato propuesto a validar con el cliente.
+- **Enmascarado:** listados y respuestas sin `tutor.ver_contacto` muestran `712***67`; email y dirección se omiten. La ficha y la ficha de paciente devuelven valores completos con el permiso.
+- **Tutor principal:** exactamente uno por paciente; índice parcial `(paciente_id) WHERE es_principal`. Reemplazar al principal exige `motivo` (`422 TUTOR_PRINCIPAL_REASON_REQUIRED`) y se audita. Un paciente activo no puede quedar sin principal (`409 TUTOR_PRINCIPAL_REQUIRED`).
+
 ### Alcance por sucursal
 
 - Paciente global; visibilidad inicial por `sucursal_registro_id ∈ sucursales accesibles`.
 - Sin `sucursal.alcance_global`, el listado se filtra; sin sucursales asignadas devuelve lista vacía y el alta responde `403 BRANCH_ACCESS_DENIED`.
 - Un filtro por sucursal fuera de alcance devuelve lista vacía; un alta con sucursal ajena responde 403.
 - El filtro por “sucursal de inscripción vigente” (04.01/RF-005, 04.01/CA-010) queda deshabilitado hasta el módulo 06. `PatientEnrollmentDirectoryContract` está stubeado y no se invoca en listado/ficha.
-- Los tutores son globales; el buscador muestra tutores asociados a pacientes de las sucursales accesibles y tutores todavía sin pacientes. `tutor.cambiar_estado` queda reservado.
+- Los tutores son globales; el buscador muestra tutores por su home branch o por pacientes de las sucursales accesibles, y tutores todavía sin pacientes si su home branch está en alcance.
 
 ### Eventos y bitácora
 
-`RecordPacientesAudit` es síncrono y fail-closed (`503 AUDIT_UNAVAILABLE`). Escribe `modulo='pacientes'`, `resultado='exito'`, `usuario_id`, `ip` y una fila por sucursal visible (hoy `sucursal_registro_id`).
+`RecordPacientesAudit` es síncrono y fail-closed (`503 AUDIT_UNAVAILABLE`). Escribe `modulo='pacientes'`, `resultado='exito'`, `usuario_id`, `ip` y una fila por sucursal visible. Para pacientes y asociaciones se usa la sucursal del paciente; para cambios de tutor se usa la home branch + las sucursales de sus pacientes asociados (sin duplicados).
 
 | Entidad (`bitacora.entidad`) | Acciones | `critico` |
 |---|---|---|
 | `paciente` | `CREAR`, `ACTUALIZAR`, `CAMBIAR_ESTADO`, `CONSULTAR`, `CONFIRMAR_DUPLICADO` | `true` al retirar y al volver de retirado; `false` en pausa/resto |
-| `tutor` | `CREAR`, `ACTUALIZAR` | `false` |
+| `tutor` | `CREAR`, `ACTUALIZAR`, `CAMBIAR_ESTADO`, `CONSULTAR` | `true` al desactivar; `false` al reactivar/resto |
 | `paciente_tutor` | `ASOCIAR`, `DESASOCIAR`, `CAMBIAR_PRINCIPAL` | `false` |
+| `contacto_emergencia` | `CREAR`, `ACTUALIZAR`, `ELIMINAR` | `false` |
 
 **Qué NO se guarda en los snapshots:** contenido de `alergias`, `condiciones_medicas` ni `observaciones`. Se guardan booleanos `tiene_alergias`, `tiene_condiciones_medicas`, `tiene_observaciones`, la lista `campos_sensibles_modificados` y valores no clínicos (nombre, apellidos, fecha, sexo, documento, diagnóstico por id, sucursal, estado, versión). Los motivos de estado se guardan en `motivo` porque 04.01/RN-005 lo exige; no se copian a `datos_nuevos`.
 
-`PacientesAccionAuditadaSeeder` agrega las acciones al catálogo `accion_auditada` sin modificar el seeder de Seguridad. `AuditModuleResolver` ya resuelve `paciente` → `pacientes`; no se modificó código de Seguridad.
+Para tutores, la bitácora guarda valores completos de nombre, documento, teléfonos, email y dirección en `datos_anteriores`/`datos_nuevos` (04.02/CA-005). La consulta de la ficha **no** copia teléfono ni dirección en `contexto`; solo `{recurso: 'ficha_tutor'}`.
+
+`PacientesAccionAuditadaSeeder`, `TutoresAccionAuditadaSeeder` y `ContactosEmergenciaAccionAuditadaSeeder` agregan las acciones al catálogo `accion_auditada` sin modificar el seeder de Seguridad. `AuditModuleResolver` ya resuelve `paciente`/`tutor` → `pacientes`; no se modificó código de Seguridad. Los contactos de emergencia usan `entidad='contacto_emergencia'` y la sucursal de registro del paciente.
 
 ### Auditoría de consulta
 
-Solo `GET /pacientes/{id}` llama a `AuditRecorderContract::registrarConsultaSensible('paciente', $id, $sucursalRegistroId, ['recurso' => 'ficha_paciente'], $actorId, $ip)`. El listado no audita. Si el recorder falla, la ficha responde `503 AUDIT_UNAVAILABLE` y no se devuelve contenido (fail-closed). Cada apertura de ficha desde el frontend es un GET nuevo; no hay prefetch.
+Solo `GET /pacientes/{id}` y `GET /tutores/{id}` llaman a `AuditRecorderContract::registrarConsultaSensible(...)`. Los listados no auditan. Si el recorder falla, la ficha responde `503 AUDIT_UNAVAILABLE` y no se devuelve contenido (fail-closed). Cada apertura de ficha desde el frontend es un GET nuevo; no hay prefetch. La consulta del tutor registra la primera sucursal accesible que otorga visibilidad (home branch o paciente asociado).
 
 ### Contrato expuesto — `PatientDirectoryContract`
 
@@ -1477,12 +1513,12 @@ No se tocaron esos módulos.
 | `PatientEnrollmentDirectoryContract` | `StubPatientEnrollmentDirectoryContract` | `Módulo 06 — Inscripciones no implementado todavía.` |
 | `PacienteExporterContract` | `UnavailablePacienteExporter` | `Exportación PDF/Excel pendiente de infraestructura.` |
 
-- `TutorDirectoryContract` tiene implementación real (`EloquentTutorDirectory`) para el núcleo 04.02.
+- `TutorDirectoryContract` tiene implementación real (`EloquentTutorDirectory`): `existe`, `estaActivo`, `resumen`, `tutoresDePaciente`, `tieneTutorPrincipal`, `tutorPrincipal` y `asegurarTutorPrincipal`. `tieneTutorPrincipal` y `tutorPrincipal` exigen que el principal esté **activo** (04.02/RN-007); `tutorPrincipal` devuelve `null` si el principal está inactivo. `TutorResumen` incluye el parentesco de la relación.
 - La Action rechaza `tipo_diagnostico_id` no nulo mientras `DIAGNOSTICOS_DISPONIBLES=false`; el stub no se invoca en flujos normales.
 - El listado y la ficha no invocan los stubs de inscripciones ni de diagnóstico.
-- Exportación: sin endpoint y sin botón; `AuditRecorderContract::registrarExportacion` queda listo para cuando exista exportador.
+- Exportación de tutores: `GET /tutores/exportar` genera un CSV compatible con Excel, respeta filtros y alcance, enmascara el teléfono sin `tutor.ver_contacto` y audita la exportación con cantidad y filtros. El PDF queda pendiente de infraestructura.
 - Importación CSV: no implementada; no hay planilla del cliente. Técnicamente viable con `fgetcsv` sin librerías.
-- 04.02 completo (contactos de emergencia, ficha/listado standalone, activar/desactivar tutor y export) queda pendiente.
+- 04.02 Fase C parcial: exportación CSV de tutores implementada; PDF y consumo del teléfono por la alerta de próximo pago (módulo 09) quedan pendientes. Los contactos de emergencia de la Fase B están implementados.
 - Cifrado de campo (`encrypted`) no implementado por defecto; HTTPS + cifrado de infraestructura/backups. Si el cliente lo exige, se decide en una fase posterior.
 
 ### Migraciones y seeders
@@ -1491,8 +1527,35 @@ No se tocaron esos módulos.
 - `2026_11_23_000100_create_paciente_table.php`
 - `2026_11_23_000200_create_paciente_tutor_table.php`
 - `2026_11_23_000300_create_estado_paciente_historial_table.php`
-- Seeders: `PacientesPermissionSeeder`, `PacientesAccionAuditadaSeeder`.
+- `2026_11_24_000000_create_parentesco_table.php`
+- `2026_11_24_000100_add_tutor_fields_table.php` (home branch, parentesco de referencia, unicidad nombre+teléfono y backfill)
+- `2026_11_24_000200_add_parentesco_to_paciente_tutor_table.php` (recrea el índice parcial de principal en SQLite)
+- `2026_11_24_000300_create_contacto_emergencia_table.php`
+- Seeders: `PacientesPermissionSeeder`, `PacientesAccionAuditadaSeeder`, `ParentescoCatalogoSeeder`, `TutoresPermissionSeeder`, `TutoresAccionAuditadaSeeder`, `ContactosEmergenciaPermissionSeeder`, `ContactosEmergenciaAccionAuditadaSeeder`.
 - `database/database.md` y `database/talitacumi_schema.sql` quedan sincronizados. El .sql no aplica el trigger genérico sobre `paciente`/`tutor` para no duplicar la bitácora ni copiar contenido clínico.
+
+### Checklist 04.02 Fases A y B
+
+| Requisito | Estado | Evidencia |
+|---|---|---|
+| 04.02/RF-001 crear tutor | Completo | `CreateTutorAction`, `TutorCoreTest`, `TutorAuthorizationTest` |
+| 04.02/RF-002 campos obligatorios + teléfono | Completo | `StoreTutorRequest`, `TutorPhoneRuleTest` |
+| 04.02/RF-003 unicidad documento / nombre+teléfono | Completo | `TutorDuplicateDetector`, `UniqueViolationTranslator`, `TutorDataProtectionTest` |
+| 04.02/RF-004 asociar tutores | Completo | `AssociateTutorAction`, `PacienteTutorController` |
+| 04.02/RF-005 tutor principal único + motivo al reemplazar | Completo | `TutorPrincipalRule`, `TutorPrincipalChangeRule`, tests |
+| 04.02/RF-006 desasociar sin dejar activo sin principal | Completo | `DissociateTutorAction`, `TutorCoreTest` |
+| 04.02/RF-007 listar/buscar por alcance | Completo | `ListTutoresQuery`, `TutorAccessScope`, tests |
+| 04.02/RF-008 ficha con pacientes y estado | Completo | `GetTutorQuery`, `TutorResource`, `TutorContractTest` |
+| 04.02/RF-009 editar con bitácora | Completo | `UpdateTutorAction`, `TutorAuditTest` |
+| 04.02/RF-010 activar/desactivar con motivo | Completo | `ChangeTutorStatusAction`, `TutorStatusTest` |
+| 04.02/RF-011 bloquear eliminación | Completo | `RejectTutorDeletionAction`, `TutorStatusTest` |
+| 04.02/RF-014 bitácora completa | Completo | `RecordPacientesAudit`, `TutorAuditTest` |
+| 04.02/RF-015 alcance por rol/sucursal | Completo (proxy paciente) | `TutorAccessScope`; inscripción 06 pendiente |
+| 04.02/RNF-005 enmascarado de teléfono | Completo | `PhoneMask`, `TutorDataProtectionTest` |
+| 04.02/RNF-012 catálogo de parentescos | Completo | `parentesco`, `ParentescoResolver`, `TutorParentescoTest` |
+| 04.02/RF-012 contactos de emergencia | Completo | `ContactoEmergencia`, `PacienteContactoEmergenciaController`, `ContactoEmergenciaTest` |
+| 04.02/RF-013 teléfono para módulo 09 | Fase C | contrato listo; consumidor 09 pendiente |
+| 04.02/RF-016 exportar tutores | Completo (CSV; PDF pendiente) | `TutorCsvExporter`, `TutorExportTest`, botón en frontend |
 
 ### Checklist Fase 1 (numeración 04.01)
 
@@ -1507,7 +1570,7 @@ No se tocaron esos módulos.
 | 04.01/RF-007 editar | Completo | `UpdatePacienteAction`, auditoría |
 | 04.01/RF-008 cambiar estado | Completo | `ChangePacienteStatusAction`, tests |
 | 04.01/RF-009 bloquear eliminación | Parcial | DELETE 409; historial real 06/07/08 |
-| 04.01/RF-010 asociar tutores | Completo (núcleo) | `AssociateTutorAction`, principal |
+| 04.02/RF-004 asociar tutores | Completo | `AssociateTutorAction`, principal |
 | 04.01/RF-011 observaciones/condiciones | Completo | campos + `ver_sensibles` |
 | 04.01/RF-012 bitácora de cambios | Completo | `RecordPacientesAudit` |
 | 04.01/RF-013 bitácora de consultas | Completo | `PacienteConsultationAuditTest` |
@@ -1521,14 +1584,169 @@ No se tocaron esos módulos.
 
 ### Decisiones tomadas
 
-- Tutores: se implementó 04.02 núcleo para que el alta sea funcional. No se inventó un cuarto estado ni se permitió un paciente activo sin tutor.
+- Tutores: se implementó 04.02 Fase A (incluye ficha/listado standalone, estados, parentesco por relación, home branch, duplicados, enmascarado y auditoría). No se inventó un cuarto estado ni se permitió un paciente activo sin tutor.
 - Visibilidad: `sucursal_registro_id` + fail-closed. Ficha fuera de alcance = 404. Inscripción vigente se suma cuando exista 06.
-- Duplicados: documento = bloqueo duro; nombre+fecha (+tutor) = confirmable; fuera de alcance no filtra datos.
-- Auditoría de consulta: fail-closed 503.
+- Duplicados de paciente: documento = bloqueo duro; nombre+fecha (+tutor) = confirmable; fuera de alcance no filtra datos.
+- Duplicados de tutor: documento o nombre+teléfono = bloqueo duro; fuera de alcance no filtra id/nombre/teléfono.
+- Auditoría de consulta: fail-closed 503 en fichas de paciente y tutor.
 - Edad: se calcula en lectura con `zona_horaria`; formato días/meses/años.
 - Diagnóstico: opcional al alta; FK diferida hasta 05.
 - Sin cifrado de campo por defecto; sin exportación; sin importación CSV.
 - No se modificó código de 01/02/03 ni el catálogo de Seguridad.
+
+---
+
+## Módulo 04.03 — Ficha de ingreso (Fase A)
+
+Implementa la ficha **administrativa y de contexto** del ingreso. No implementa la entrevista terapéutica del módulo 06 ni el registro clínico del módulo 11.
+
+### Alcance de la Fase A
+
+- Crear ficha en borrador, consultar, editar y completar.
+- Archivar y reactivar con motivo.
+- Una sola ficha no archivada por paciente.
+- Persona que deriva.
+- Campos sensibles protegidos.
+- Revisiones inmutables y bitácora sin contenido clínico.
+- Auditoría de consulta de ficha y revisiones.
+- Contactos de emergencia existentes, solo lectura dentro de la ficha.
+- Stubs de entrevista 06 y exportación PDF.
+
+### Endpoints
+
+Prefijo real: `/api/pacientes`.
+
+| Método | Ruta | Acción / Query | Permiso |
+|---|---|---|---|
+| GET | `/pacientes/{id}/ficha-ingreso` | `GetFichaIngresoQuery` + `ListFichaIngresoHistorialQuery` | `ficha_ingreso.ver` |
+| GET | `/pacientes/{id}/ficha-ingreso/{fichaId}` | `GetFichaIngresoQuery` + consulta auditada | `ficha_ingreso.ver` |
+| POST | `/pacientes/{id}/ficha-ingreso` | `CreateFichaIngresoAction` | `ficha_ingreso.crear` |
+| PATCH | `/pacientes/{id}/ficha-ingreso/{fichaId}` | `UpdateFichaIngresoAction` | `ficha_ingreso.editar` |
+| POST | `/pacientes/{id}/ficha-ingreso/{fichaId}/completar` | `CompleteFichaIngresoAction` | `ficha_ingreso.editar` |
+| POST | `/pacientes/{id}/ficha-ingreso/{fichaId}/archivar` | `ArchiveFichaIngresoAction` | `ficha_ingreso.archivar` |
+| POST | `/pacientes/{id}/ficha-ingreso/{fichaId}/reactivar` | `ReactivateFichaIngresoAction` | `ficha_ingreso.reactivar` |
+| GET | `/pacientes/{id}/ficha-ingreso/{fichaId}/revisiones` | `GetFichaIngresoRevisionesQuery` + auditoría | `ficha_ingreso.ver` |
+| DELETE | `/pacientes/{id}/ficha-ingreso/{fichaId}` | `RejectFichaIngresoDeletionAction` → 409 | `ficha_ingreso.editar` |
+
+`GET` devuelve `data` de la ficha vigente o `null`, `paciente` (resumen no sensible) e `historial` de fichas archivadas. El listado no existe en Fase A.
+
+### Reglas
+
+- `paciente_id` existente; la ficha siempre pertenece a un paciente.
+- `motivo_consulta_inicial` y `fecha_ingreso` obligatorios.
+- Fecha de ingreso no futura; se usa `zona_horaria` de 01 vía `PacienteAgeCalculator`.
+- Estados: `borrador`, `completa`, `archivada`.
+- “Completa” no agrega campos obligatorios nuevos hasta validar con el cliente. **PROPUESTO - VALIDAR.**
+- Borrador exige motivo y fecha; los demás campos son opcionales.
+- Archivada bloquea edición, completar y nuevas observaciones/consentimientos. Reactivar solo Superadmin y vuelve al estado anterior con motivo.
+- DELETE siempre `409 FICHA_DELETE_NOT_ALLOWED`. El chequeo real de inscripciones/turnos/pagos queda pendiente de 06/07/08.
+- `tutor_principal_id` es un snapshot nullable; la ficha se permite sin tutor, pero los consentimientos de Fase B quedarán bloqueados.
+- `sucursal_ingreso_id` obligatoria; por defecto la sucursal de registro del paciente. El alcance exige paciente accesible y sucursal de la ficha accesible; si no, `404 FICHA_NOT_FOUND`.
+- `version` optimista: `409 FICHA_VERSION_CONFLICT`. Crear una segunda ficha abierta: `409 FICHA_ALREADY_EXISTS`.
+- Prefijo documental: todo usa `04.03/`.
+
+### Campos sensibles (propuesta a confirmar)
+
+`ficha_ingreso.ver_sensibles` protege:
+
+- `motivo_consulta_inicial`
+- `composicion_familiar`
+- `antecedentes_familiares`
+- `observaciones`
+- `derivado_por_contacto`
+- `motivo_archivado`
+
+Sin permiso, el backend omite los valores y devuelve `sensibles_protegidos=true` y `campos_protegidos`. Editar campos sensibles exige `ficha_ingreso.editar` + `ficha_ingreso.ver_sensibles`.
+
+### Revisiones y bitácora
+
+`ficha_ingreso_revision` guarda un snapshot JSON completo e inmutable por versión, con `accion`, `version`, `campos_modificados` y actor. El snapshot solo se expone con `ficha_ingreso.ver_sensibles`; sin ese permiso se devuelven metadatos y `contenido_protegido=true`.
+
+La bitácora guarda:
+
+- `entidad='ficha_ingreso'`.
+- Acciones `CREAR`, `ACTUALIZAR`, `COMPLETAR`, `ARCHIVAR`, `REACTIVAR`, `CONSULTAR`, `EXPORTAR` (reservada).
+- Ids, estado, fechas, versión, `campos_modificados`, `revision_id` y banderas `tiene_*`.
+- **No** guarda motivo de consulta, composición, antecedentes, observaciones ni contacto del derivante.
+- Una fila por sucursal visible: sucursal de ingreso + sucursal de registro del paciente.
+- `critico=true` al archivar. El motivo de archivo/reactivación se guarda en la columna `motivo` de la bitácora para trazabilidad; en la ficha queda protegido por `ver_sensibles`.
+
+La consulta de ficha y de revisiones usa `AuditRecorderContract::registrarConsultaSensible`; el listado/historial no genera una auditoría adicional. El fallo del recorder responde `503 AUDIT_UNAVAILABLE`.
+
+### Permisos
+
+Seeder: `FichaIngresoPermissionSeeder` con `InitialPermissionMatrix` y marca `pacientes.ficha_ingreso`.
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `ficha_ingreso.ver` | sí | sí | sí |
+| `ficha_ingreso.crear` | sí | no | sí |
+| `ficha_ingreso.editar` | sí | sí | sí |
+| `ficha_ingreso.archivar` | sí | sí | no |
+| `ficha_ingreso.reactivar` | sí | no | no |
+| `ficha_ingreso.ver_sensibles` | sí | sí | sí |
+| `ficha_ingreso.exportar` (reservado) | sí | sí | no |
+
+Recepción no exporta, igual que en tutores. La exportación PDF queda pendiente de infraestructura y no tiene botón.
+
+### Contratos y stubs
+
+**`FichaIngresoDirectoryContract`**:
+
+```php
+public function existe(int $pacienteId): bool;
+public function resumen(int $pacienteId): ?FichaIngresoResumen;
+public function tieneFichaCompleta(int $pacienteId): bool;
+public function fichaVigenteId(int $pacienteId): ?int;
+```
+
+`FichaIngresoResumen` no expone contenido sensible. Consumidores previstos: `docs/04_PACIENTES_TUTORES/04_busqueda_ficha_resumen.md`.
+
+**`PatientConsentContract`**: Fase B, no implementado en esta entrega. Consumidores previstos: `docs/06_INSCRIPCIONES_ATENCIONES/03_entrevista_diagnostico_atenciones.md` y `docs/11_EVALUACIONES_RESULTADOS/04_acceso_informacion_clinica.md`.
+
+**`EntrevistaDirectoryContract`**: stub con `disponible() === false`; `existe()` lanza `LogicException('Módulo 06 — Entrevista y diagnóstico no implementado todavía.')`. No se agregó `entrevista_id` a la ficha.
+
+**`FichaIngresoExporterContract`**: bindeado a `UnavailableFichaIngresoExporter`, que lanza `LogicException('Exportación PDF de la ficha de ingreso pendiente de infraestructura.')`. Sin endpoint ni botón.
+
+### Contactos de emergencia
+
+04.03/RF-007 queda cubierto por **04.02/RF-012**. La ficha muestra los contactos existentes en modo lectura; se administran desde la ficha del paciente. No se crea tabla, Action ni endpoint nuevo.
+
+### Migraciones y seeders
+
+- `2026_11_24_000400_create_ficha_ingreso_tables.php`
+- `FichaIngresoPermissionSeeder`
+- `FichaIngresoAccionAuditadaSeeder`
+
+`database/database.md` y `database/talitacumi_schema.sql` quedan sincronizados.
+
+### Checklist Fase A
+
+| Requisito | Estado | Evidencia |
+|---|---|---|
+| 04.03/RF-001 crear ficha | Completo | `CreateFichaIngresoAction`, `FichaIngresoTest` |
+| 04.03/RF-002 motivo y fecha obligatorios | Completo | `StoreFichaIngresoRequest`, `FichaIngresoTest` |
+| 04.03/RF-003 consentimientos | Fase B | — |
+| 04.03/RF-004 consultar consentimientos | Fase B | — |
+| 04.03/RF-005 editar con antes/después | Completo | Revisiones + bitácora |
+| 04.03/RF-006 observaciones fechadas | Fase C | — |
+| 04.03/RF-007 contactos de emergencia | Completo por 04.02/RF-012 | Reutilización en lectura |
+| 04.03/RF-008 persona que deriva | Completo | Campos en ficha |
+| 04.03/RF-009 consultar ficha | Completo | GET auditado |
+| 04.03/RF-010 exportar PDF | Fase C / infraestructura | Stub, sin botón |
+| 04.03/RF-011 bitácora | Completo (A) / Fases B-C | `RecordPacientesAudit` |
+| 04.03/RF-012 vincular entrevista 06 | Fase C / stub | `EntrevistaDirectoryContract` |
+| 04.03/RF-013 rol y sucursal | Completo | `FichaIngresoAccessScope` |
+| 04.03/RF-014 bloquear eliminación | Completo (DELETE 409; historial 06/07/08 pendiente) | `RejectFichaIngresoDeletionAction` |
+| 04.03/RF-015 datos sensibles | Completo | `FichaIngresoFields`, `ver_sensibles` |
+| 04.03/RN-001 a RN-010 | Implementadas según fase | Ver reglas |
+| 04.03/CU-01, CU-03; CA-001, 002, 006, 008, 010 | Completo | `FichaIngresoTest` |
+
+### Pendiente
+
+- Fase B: catálogo y registro/revocación de consentimientos.
+- Fase C: observaciones fechadas, integración visual completa de contactos y stubs de entrevista/exportación.
+- PDF, cifrado en reposo y chequeo de historial 06/07/08.
 
 ---
 

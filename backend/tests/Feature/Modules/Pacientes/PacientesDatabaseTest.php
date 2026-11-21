@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Modules\Pacientes;
 
-use App\Modules\Pacientes\Models\Paciente;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 

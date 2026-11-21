@@ -3,9 +3,7 @@
 namespace Tests\Feature\Modules\Pacientes\Registro;
 
 use App\Modules\Pacientes\Models\BitacoraEntry;
-use App\Modules\Pacientes\Models\EstadoPacienteHistorial;
 use App\Modules\Pacientes\Models\Paciente;
-use App\Modules\Pacientes\Models\PacienteTutor;
 use App\Modules\Pacientes\Models\Tutor;
 use Tests\Feature\Modules\Pacientes\PacientesTestCase;
 

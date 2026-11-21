@@ -1,0 +1,71 @@
+<app-modal
+  [open]="open"
+  [title]="isEdit ? texts.editEmergencyContact : texts.addEmergencyContact"
+  size="md"
+  [showFooter]="true"
+  (closed)="close()"
+>
+  <div class="space-y-5">
+    @if (error(); as apiError) {
+      <app-alert variant="error" title="No se pudo guardar el contacto" [message]="apiError.message" />
+    }
+
+    <div>
+      <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="contacto-nombre">
+        {{ texts.emergencyContactName }} *
+      </label>
+      <input
+        id="contacto-nombre"
+        app-input
+        type="text"
+        [formControl]="form.controls.nombre_completo"
+      />
+      @if (fieldError('nombre_completo'); as message) {
+        <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+      }
+    </div>
+
+    <div>
+      <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+        Parentesco *
+      </label>
+      <app-select-field
+        [options]="parentescoOptions"
+        [value]="form.controls.parentesco_id.value"
+        placeholder="Seleccioná el parentesco"
+        ariaLabel="Parentesco del contacto de emergencia"
+        (valueChange)="form.controls.parentesco_id.setValue($event)"
+      />
+      @if (fieldError('parentesco_id'); as message) {
+        <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+      }
+    </div>
+
+    <div>
+      <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="contacto-telefono">
+        {{ texts.emergencyContactPhone }} *
+      </label>
+      <input
+        id="contacto-telefono"
+        app-input
+        type="text"
+        [formControl]="form.controls.telefono"
+      />
+      @if (fieldError('telefono'); as message) {
+        <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+      }
+      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+        8 dígitos. Se aceptan fijos (2, 3, 4) y móviles (6, 7).
+      </p>
+    </div>
+  </div>
+
+  <div modal-footer class="flex flex-wrap items-center justify-end gap-2">
+    <button app-button variant="outline" type="button" (click)="close()" [disabled]="saving()">
+      {{ texts.cancel }}
+    </button>
+    <button app-button variant="default" type="button" (click)="submit()" [disabled]="saving()">
+      {{ saving() ? texts.saving : texts.save }}
+    </button>
+  </div>
+</app-modal>

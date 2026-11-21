@@ -7,6 +7,7 @@ use App\Modules\Pacientes\Enums\EstadoPaciente;
 use App\Modules\Pacientes\Events\Tutores\PacienteTutorDissociated;
 use App\Modules\Pacientes\Exceptions\PacienteNotFoundException;
 use App\Modules\Pacientes\Exceptions\PacienteTutorNotFoundException;
+use App\Modules\Pacientes\Exceptions\TutorNotFoundException;
 use App\Modules\Pacientes\Models\Paciente;
 use App\Modules\Pacientes\Models\PacienteTutor;
 use App\Modules\Pacientes\Models\Tutor;
@@ -33,6 +34,12 @@ final class DissociateTutorAction
         $this->pacienteScope->assertCanAccess($actor, $paciente);
 
         DB::transaction(function () use ($paciente, $tutor, $actor, $ip): void {
+            $currentTutor = Tutor::query()->whereKey($tutor->id)->lockForUpdate()->first();
+
+            if ($currentTutor === null) {
+                throw new TutorNotFoundException((int) $tutor->id);
+            }
+
             $current = Paciente::query()->whereKey($paciente->id)->lockForUpdate()->first();
 
             if ($current === null) {
@@ -41,11 +48,11 @@ final class DissociateTutorAction
 
             $relation = PacienteTutor::query()
                 ->where('paciente_id', $current->id)
-                ->where('tutor_id', $tutor->id)
+                ->where('tutor_id', $currentTutor->id)
                 ->first();
 
             if ($relation === null) {
-                throw new PacienteTutorNotFoundException((int) $current->id, (int) $tutor->id);
+                throw new PacienteTutorNotFoundException((int) $current->id, (int) $currentTutor->id);
             }
 
             $this->principalRule->assertCanDissociate(
@@ -55,16 +62,15 @@ final class DissociateTutorAction
 
             $eraPrincipal = (bool) $relation->es_principal;
 
-            // La tabla tiene PK compuesta; se elimina por query y no por
-            // `delete()` del modelo (Eloquent asumiría una columna `id`).
+            // La tabla tiene PK compuesta; se elimina por query.
             PacienteTutor::query()
                 ->where('paciente_id', $current->id)
-                ->where('tutor_id', $tutor->id)
+                ->where('tutor_id', $currentTutor->id)
                 ->delete();
 
             event(new PacienteTutorDissociated(
                 pacienteId: (int) $current->id,
-                tutorId: (int) $tutor->id,
+                tutorId: (int) $currentTutor->id,
                 eraPrincipal: $eraPrincipal,
                 branchIds: $this->branchResolver->for($current),
                 actorId: $actor->id,

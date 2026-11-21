@@ -3,11 +3,15 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, catchError, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
+  ContactoEmergencia,
+  ContactoEmergenciaCreatePayload,
+  ContactoEmergenciaUpdatePayload,
   PacienteCreatePayload,
   PacienteListParams,
   PacienteListResponse,
   PacienteOptionsResponse,
   PacienteResponse,
+  PacienteRowAbilities,
   PacienteStatusPayload,
   PacienteTutorAssociation,
   PacienteUpdatePayload,
@@ -16,7 +20,10 @@ import {
   TutorCreatePayload,
   TutorListParams,
   TutorListResponse,
+  TutorOptionsResponse,
   TutorResponse,
+  TutorStatusPayload,
+  TutorUpdatePayload,
 } from './pacientes.models';
 
 @Injectable({ providedIn: 'root' })
@@ -62,10 +69,65 @@ export class PacientesService {
       .pipe(catchError((error: unknown) => this.fail(error)));
   }
 
+  listContactosEmergencia(
+    pacienteId: number,
+  ): Observable<{ data: ContactoEmergencia[]; can: PacienteRowAbilities }> {
+    return this.http
+      .get<{ data: ContactoEmergencia[]; can: PacienteRowAbilities }>(
+        `${this.baseUrl}/pacientes/${pacienteId}/contactos-emergencia`,
+      )
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  createContactoEmergencia(
+    pacienteId: number,
+    payload: ContactoEmergenciaCreatePayload,
+  ): Observable<{ data: ContactoEmergencia; can: PacienteRowAbilities }> {
+    return this.http
+      .post<{ data: ContactoEmergencia; can: PacienteRowAbilities }>(
+        `${this.baseUrl}/pacientes/${pacienteId}/contactos-emergencia`,
+        payload,
+      )
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  updateContactoEmergencia(
+    pacienteId: number,
+    contactoId: number,
+    payload: ContactoEmergenciaUpdatePayload,
+  ): Observable<{ data: ContactoEmergencia; can: PacienteRowAbilities }> {
+    return this.http
+      .patch<{ data: ContactoEmergencia; can: PacienteRowAbilities }>(
+        `${this.baseUrl}/pacientes/${pacienteId}/contactos-emergencia/${contactoId}`,
+        payload,
+      )
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  deleteContactoEmergencia(
+    pacienteId: number,
+    contactoId: number,
+  ): Observable<{ message: string; can: PacienteRowAbilities }> {
+    return this.http
+      .delete<{ message: string; can: PacienteRowAbilities }>(
+        `${this.baseUrl}/pacientes/${pacienteId}/contactos-emergencia/${contactoId}`,
+      )
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
   listTutores(params: TutorListParams): Observable<TutorListResponse> {
     return this.http
       .get<TutorListResponse>(`${this.baseUrl}/tutores`, {
         params: this.buildParams(params),
+      })
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  exportTutores(params: TutorListParams): Observable<Blob> {
+    return this.http
+      .get(`${this.baseUrl}/tutores/exportar`, {
+        params: this.buildParams(params),
+        responseType: 'blob',
       })
       .pipe(catchError((error: unknown) => this.fail(error)));
   }
@@ -76,9 +138,27 @@ export class PacientesService {
       .pipe(catchError((error: unknown) => this.fail(error)));
   }
 
+  getTutorOptions(): Observable<TutorOptionsResponse> {
+    return this.http
+      .get<TutorOptionsResponse>(`${this.baseUrl}/tutores/opciones`)
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
   createTutor(payload: TutorCreatePayload): Observable<TutorResponse> {
     return this.http
       .post<TutorResponse>(`${this.baseUrl}/tutores`, payload)
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  updateTutor(id: number, payload: TutorUpdatePayload): Observable<TutorResponse> {
+    return this.http
+      .patch<TutorResponse>(`${this.baseUrl}/tutores/${id}`, payload)
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  changeTutorStatus(id: number, payload: TutorStatusPayload): Observable<TutorResponse> {
+    return this.http
+      .post<TutorResponse>(`${this.baseUrl}/tutores/${id}/estado`, payload)
       .pipe(catchError((error: unknown) => this.fail(error)));
   }
 
@@ -86,20 +166,28 @@ export class PacientesService {
     pacienteId: number,
     tutorId: number,
     esPrincipal = false,
+    parentescoId: number | null = null,
+    motivo: string | null = null,
   ): Observable<PacienteTutorAssociation> {
     return this.http
       .post<PacienteTutorAssociation>(`${this.baseUrl}/pacientes/${pacienteId}/tutores`, {
         tutor_id: tutorId,
         es_principal: esPrincipal,
+        parentesco_id: parentescoId,
+        motivo,
       })
       .pipe(catchError((error: unknown) => this.fail(error)));
   }
 
-  setPrincipalTutor(pacienteId: number, tutorId: number): Observable<PacienteTutorAssociation> {
+  setPrincipalTutor(
+    pacienteId: number,
+    tutorId: number,
+    motivo: string | null = null,
+  ): Observable<PacienteTutorAssociation> {
     return this.http
       .post<PacienteTutorAssociation>(
         `${this.baseUrl}/pacientes/${pacienteId}/tutores/${tutorId}/principal`,
-        {},
+        { motivo },
       )
       .pipe(catchError((error: unknown) => this.fail(error)));
   }

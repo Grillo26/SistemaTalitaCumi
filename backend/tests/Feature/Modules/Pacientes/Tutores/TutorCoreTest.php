@@ -3,7 +3,6 @@
 namespace Tests\Feature\Modules\Pacientes\Tutores;
 
 use App\Modules\Pacientes\Contracts\TutorDirectoryContract;
-use App\Modules\Pacientes\Models\BitacoraEntry;
 use App\Modules\Pacientes\Models\Paciente;
 use App\Modules\Pacientes\Models\PacienteTutor;
 use App\Modules\Pacientes\Models\Tutor;
@@ -78,7 +77,10 @@ final class TutorCoreTest extends PacientesTestCase
         $user = $this->actingAsRole('recepcion');
         $this->withBranch($user, $branch);
 
-        $tutor = $this->tutor(['nombre_completo' => 'Carlos Pérez']);
+        $tutor = $this->tutor([
+            'nombre_completo' => 'Carlos Pérez',
+            'sucursal_registro_id' => $branch->id,
+        ]);
 
         $created = $this->postJson('/api/pacientes/pacientes', $this->pacientePayload([
             'tutor_principal' => ['modo' => 'existente', 'tutor_id' => $tutor->id],
@@ -121,15 +123,19 @@ final class TutorCoreTest extends PacientesTestCase
             ->json('data');
 
         $principalId = $created['tutores'][0]['tutor_id'];
-        $secondary = $this->tutor(['nombre_completo' => 'Segundo Tutor']);
+        $secondary = $this->tutor([
+            'nombre_completo' => 'Segundo Tutor',
+            'sucursal_registro_id' => $branch->id,
+        ]);
 
         $this->postJson('/api/pacientes/pacientes/'.$created['id'].'/tutores', [
             'tutor_id' => $secondary->id,
             'es_principal' => false,
         ])->assertCreated();
 
-        $this->postJson('/api/pacientes/pacientes/'.$created['id'].'/tutores/'.$secondary->id.'/principal')
-            ->assertOk()
+        $this->postJson('/api/pacientes/pacientes/'.$created['id'].'/tutores/'.$secondary->id.'/principal', [
+            'motivo' => 'La madre solicitó el cambio de tutor principal.',
+        ])->assertOk()
             ->assertJsonPath('data.es_principal', true);
 
         $this->assertFalse(
@@ -139,8 +145,9 @@ final class TutorCoreTest extends PacientesTestCase
                 ->value('es_principal'),
         );
 
-        $this->postJson('/api/pacientes/pacientes/'.$created['id'].'/tutores/'.$principalId.'/principal')
-            ->assertOk();
+        $this->postJson('/api/pacientes/pacientes/'.$created['id'].'/tutores/'.$principalId.'/principal', [
+            'motivo' => 'Se restituye el tutor principal original.',
+        ])->assertOk();
 
         $this->deleteJson('/api/pacientes/pacientes/'.$created['id'].'/tutores/'.$secondary->id)
             ->assertOk();
@@ -185,7 +192,10 @@ final class TutorCoreTest extends PacientesTestCase
 
         $tutorA = $this->tutor(['nombre_completo' => 'Tutor Sucursal A']);
         $tutorB = $this->tutor(['nombre_completo' => 'Tutor Sucursal B']);
-        $tutorSinPacientes = $this->tutor(['nombre_completo' => 'Tutor Sin Pacientes']);
+        $tutorSinPacientes = $this->tutor([
+            'nombre_completo' => 'Tutor Sin Pacientes',
+            'sucursal_registro_id' => $branchA->id,
+        ]);
 
         PacienteTutor::query()->create([
             'paciente_id' => $pacienteA->id,
@@ -205,5 +215,39 @@ final class TutorCoreTest extends PacientesTestCase
         $this->assertContains($tutorA->id, $ids);
         $this->assertContains($tutorSinPacientes->id, $ids);
         $this->assertNotContains($tutorB->id, $ids);
+    }
+
+    public function test_branch_filter_uses_the_tutor_home_branch(): void
+    {
+        $branchA = $this->branch();
+        $branchB = $this->branch();
+
+        $user = $this->actingAsRole('recepcion');
+        $this->withBranch($user, $branchA);
+
+        $pacienteA = $this->paciente(['sucursal_registro_id' => $branchA->id]);
+        $tutorRegistradoEnB = $this->tutor([
+            'nombre_completo' => 'Tutor Registrado en B',
+            'sucursal_registro_id' => $branchB->id,
+        ]);
+
+        PacienteTutor::query()->create([
+            'paciente_id' => $pacienteA->id,
+            'tutor_id' => $tutorRegistradoEnB->id,
+            'es_principal' => true,
+        ]);
+
+        $sinFiltro = collect($this->getJson('/api/pacientes/tutores?per_page=50')->assertOk()->json('data'))
+            ->pluck('id')
+            ->all();
+        $this->assertContains($tutorRegistradoEnB->id, $sinFiltro);
+
+        $filtradoA = collect(
+            $this->getJson('/api/pacientes/tutores?sucursal_registro_id='.$branchA->id.'&per_page=50')
+                ->assertOk()
+                ->json('data'),
+        )->pluck('id')->all();
+
+        $this->assertNotContains($tutorRegistradoEnB->id, $filtradoA);
     }
 }

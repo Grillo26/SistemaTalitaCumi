@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Pacientes\Http\Controllers\Contactos\PacienteContactoEmergenciaController;
 use App\Modules\Pacientes\Http\Controllers\Registro\PacienteController;
 use App\Modules\Pacientes\Http\Controllers\Registro\PacienteStatusController;
 use App\Modules\Pacientes\Http\Controllers\Tutores\PacienteTutorController;
@@ -58,18 +59,40 @@ Route::middleware('auth:sanctum')->prefix('pacientes')->group(function (): void 
 
     Route::post('/{id}/tutores', [PacienteTutorController::class, 'store'])
         ->whereNumber('id')
-        ->middleware(PermissionMiddleware::using(PacientesPermission::PATIENT_EDIT, 'sanctum'))
+        ->middleware(PermissionMiddleware::using(PacientesPermission::TUTOR_ASSOCIATE, 'sanctum'))
         ->name('tutores.store');
 
     Route::post('/{id}/tutores/{tutorId}/principal', [PacienteTutorController::class, 'setPrincipal'])
         ->whereNumber('id')
         ->whereNumber('tutorId')
-        ->middleware(PermissionMiddleware::using(PacientesPermission::PATIENT_EDIT, 'sanctum'))
+        ->middleware(PermissionMiddleware::using(PacientesPermission::TUTOR_ASSOCIATE, 'sanctum'))
         ->name('tutores.principal');
 
     Route::delete('/{id}/tutores/{tutorId}', [PacienteTutorController::class, 'destroy'])
         ->whereNumber('id')
         ->whereNumber('tutorId')
-        ->middleware(PermissionMiddleware::using(PacientesPermission::PATIENT_EDIT, 'sanctum'))
+        ->middleware(PermissionMiddleware::using(PacientesPermission::TUTOR_ASSOCIATE, 'sanctum'))
         ->name('tutores.destroy');
+
+    Route::get('/{id}/contactos-emergencia', [PacienteContactoEmergenciaController::class, 'index'])
+        ->whereNumber('id')
+        ->middleware(PermissionMiddleware::using(PacientesPermission::CONTACT_EMERGENCY_VIEW, 'sanctum'))
+        ->name('contactos-emergencia.index');
+
+    Route::post('/{id}/contactos-emergencia', [PacienteContactoEmergenciaController::class, 'store'])
+        ->whereNumber('id')
+        ->middleware(PermissionMiddleware::using(PacientesPermission::CONTACT_EMERGENCY_EDIT, 'sanctum'))
+        ->name('contactos-emergencia.store');
+
+    Route::patch('/{id}/contactos-emergencia/{contactoId}', [PacienteContactoEmergenciaController::class, 'update'])
+        ->whereNumber('id')
+        ->whereNumber('contactoId')
+        ->middleware(PermissionMiddleware::using(PacientesPermission::CONTACT_EMERGENCY_EDIT, 'sanctum'))
+        ->name('contactos-emergencia.update');
+
+    Route::delete('/{id}/contactos-emergencia/{contactoId}', [PacienteContactoEmergenciaController::class, 'destroy'])
+        ->whereNumber('id')
+        ->whereNumber('contactoId')
+        ->middleware(PermissionMiddleware::using(PacientesPermission::CONTACT_EMERGENCY_EDIT, 'sanctum'))
+        ->name('contactos-emergencia.destroy');
 });

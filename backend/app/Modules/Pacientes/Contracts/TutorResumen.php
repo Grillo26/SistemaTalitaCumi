@@ -5,7 +5,9 @@ namespace App\Modules\Pacientes\Contracts;
 /**
  * Resumen de tutor para el módulo 04.
  *
- * No incluye datos de pacientes ni información clínica.
+ * No incluye datos de pacientes ni información clínica. El teléfono se
+ * devuelve completo porque el contrato es interno; la capa HTTP lo enmascara
+ * según `tutor.ver_contacto`.
  */
 final readonly class TutorResumen
 {
@@ -17,9 +19,11 @@ final readonly class TutorResumen
         public ?string $telefonoAlternativo,
         public ?string $email,
         public ?string $direccion,
+        public ?int $parentescoId,
         public ?string $parentesco,
         public bool $activo,
         public bool $esPrincipal = false,
+        public ?int $sucursalRegistroId = null,
     ) {}
 
     /**
@@ -35,9 +39,11 @@ final readonly class TutorResumen
             'telefono_alternativo' => $this->telefonoAlternativo,
             'email' => $this->email,
             'direccion' => $this->direccion,
+            'parentesco_id' => $this->parentescoId,
             'parentesco' => $this->parentesco,
             'activo' => $this->activo,
             'es_principal' => $this->esPrincipal,
+            'sucursal_registro_id' => $this->sucursalRegistroId,
         ];
     }
 }

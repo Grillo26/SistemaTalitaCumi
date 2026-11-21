@@ -39,6 +39,9 @@
 
           <div class="flex flex-wrap gap-2">
             <button app-button variant="outline" type="button" (click)="back()">{{ texts.back }}</button>
+            @if (canViewFichaIngreso()) {
+              <button app-button variant="outline" type="button" (click)="openFichaIngreso()">{{ texts.fichaIngreso }}</button>
+            }
             @if (p.can.edit) {
               <button app-button variant="outline" type="button" (click)="openEdit()">{{ texts.edit }}</button>
             }
@@ -152,7 +155,7 @@
                       </p>
                     </div>
 
-                    @if (p.can.edit) {
+                    @if (p.can.manage_tutors) {
                       <div class="flex flex-wrap gap-1">
                         @if (!tutor.es_principal) {
                           <button app-button variant="ghost" size="sm" type="button" (click)="makePrincipal(tutor)">
@@ -171,7 +174,7 @@
                   <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.noTutor }}</p>
                 }
 
-                @if (p.can.edit) {
+                @if (p.can.manage_tutors) {
                   <button app-button variant="outline" size="sm" type="button" (click)="openTutors()">
                     {{ texts.addTutor }}
                   </button>
@@ -179,6 +182,44 @@
               </div>
             }
           </app-component-card>
+
+          @if (p.can.view_emergency_contacts) {
+            <app-component-card [title]="texts.emergencyContacts" [desc]="texts.emergencyContactsDesc">
+              <div class="space-y-3">
+                @for (contacto of p.contactos_emergencia ?? []; track contacto.id) {
+                  <div class="flex flex-col gap-2 rounded-lg border border-gray-200 p-3 dark:border-gray-800 sm:flex-row sm:items-center sm:justify-between">
+                    <div class="min-w-0">
+                      <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+                        {{ contacto.nombre_completo }}
+                      </p>
+                      <p class="mt-1 text-xs text-gray-500">
+                        {{ contacto.parentesco || 'Sin parentesco' }} · {{ contacto.telefono }}
+                      </p>
+                    </div>
+
+                    @if (p.can.manage_emergency_contacts) {
+                      <div class="flex flex-wrap gap-1">
+                        <button app-button variant="ghost" size="sm" type="button" (click)="editContact(contacto)">
+                          Editar
+                        </button>
+                        <button app-button variant="ghost" size="sm" type="button" (click)="removeContact(contacto)">
+                          Eliminar
+                        </button>
+                      </div>
+                    }
+                  </div>
+                } @empty {
+                  <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.noEmergencyContacts }}</p>
+                }
+
+                @if (p.can.manage_emergency_contacts) {
+                  <button app-button variant="outline" size="sm" type="button" (click)="openNewContact()">
+                    {{ texts.addEmergencyContact }}
+                  </button>
+                }
+              </div>
+            </app-component-card>
+          }
 
           <p class="text-xs text-gray-400">{{ texts.auditNotice }}</p>
         </div>
@@ -209,8 +250,20 @@
           [open]="true"
           [pacienteId]="p.id"
           [pacienteNombre]="p.nombre_completo"
+          [sucursalId]="p.sucursal_registro.id"
           (closed)="closeTutors()"
           (saved)="onTutorsChanged()"
+        />
+      }
+
+      @if (contactoOpen() && options(); as opts) {
+        <app-contacto-emergencia-modal
+          [open]="true"
+          [pacienteId]="p.id"
+          [contacto]="contactoEditando()"
+          [parentescos]="opts.parentescos"
+          (closed)="closeContact()"
+          (saved)="onContactSaved()"
         />
       }
     }

@@ -13,7 +13,7 @@ use App\Modules\Pacientes\Models\Paciente;
 final class PacienteAbilities
 {
     /**
-     * @return array{create: bool, edit: bool, change_status: bool, view_sensibles: bool, export: bool, tutors: bool, diagnostics: bool}
+     * @return array{create: bool, edit: bool, change_status: bool, view_sensibles: bool, export: bool, tutors: bool, diagnostics: bool, manage_tutors: bool, view_emergency_contacts: bool, manage_emergency_contacts: bool}
      */
     public static function collection(User $user): array
     {
@@ -25,11 +25,16 @@ final class PacienteAbilities
             'export' => false,
             'tutors' => PacientesModule::TUTORES_DISPONIBLES,
             'diagnostics' => PacientesModule::DIAGNOSTICOS_DISPONIBLES,
+            'manage_tutors' => $user->can(PacientesPermission::TUTOR_ASSOCIATE),
+            'view_emergency_contacts' => PacientesModule::CONTACTOS_EMERGENCIA_DISPONIBLES
+                && $user->can(PacientesPermission::CONTACT_EMERGENCY_VIEW),
+            'manage_emergency_contacts' => PacientesModule::CONTACTOS_EMERGENCIA_DISPONIBLES
+                && $user->can(PacientesPermission::CONTACT_EMERGENCY_EDIT),
         ];
     }
 
     /**
-     * @return array{edit: bool, change_status: bool, view_sensibles: bool, delete: bool, view_tutors: bool}
+     * @return array{edit: bool, change_status: bool, view_sensibles: bool, delete: bool, view_tutors: bool, manage_tutors: bool, view_emergency_contacts: bool, manage_emergency_contacts: bool}
      */
     public static function for(User $user, Paciente $paciente): array
     {
@@ -39,6 +44,11 @@ final class PacienteAbilities
             'view_sensibles' => $user->can(PacientesPermission::PATIENT_VIEW_SENSITIVE),
             'delete' => false,
             'view_tutors' => PacientesModule::TUTORES_DISPONIBLES,
+            'manage_tutors' => $user->can(PacientesPermission::TUTOR_ASSOCIATE),
+            'view_emergency_contacts' => PacientesModule::CONTACTOS_EMERGENCIA_DISPONIBLES
+                && $user->can(PacientesPermission::CONTACT_EMERGENCY_VIEW),
+            'manage_emergency_contacts' => PacientesModule::CONTACTOS_EMERGENCIA_DISPONIBLES
+                && $user->can(PacientesPermission::CONTACT_EMERGENCY_EDIT),
         ];
     }
 }

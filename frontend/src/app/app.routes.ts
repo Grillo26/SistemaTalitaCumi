@@ -40,7 +40,7 @@ export const routes: Routes = [
       {
         path: 'pacientes',
         canActivate: [permissionGuard],
-        data: { permission: 'paciente.ver' },
+        data: { permissions: ['paciente.ver', 'tutor.ver', 'ficha_ingreso.ver'] },
         loadChildren: () =>
           import('./pages/pacientes/pacientes.routes').then(
             (m) => m.PACIENTES_ROUTES,

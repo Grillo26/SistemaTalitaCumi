@@ -1,6 +1,7 @@
-import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
+import { AuthService } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
 import { PageBreadcrumbComponent } from '../../shared/components/common/page-breadcrumb/page-breadcrumb.component';
 import { ComponentCardComponent } from '../../shared/components/common/component-card/component-card.component';
@@ -8,6 +9,7 @@ import { AlertComponent } from '../../shared/components/ui/alert/alert.component
 import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import {
+  ContactoEmergencia,
   PACIENTES_TEXTS,
   Paciente,
   PacienteEstado,
@@ -16,6 +18,7 @@ import {
   TutorResumen,
 } from './pacientes.models';
 import { PacientesService } from './pacientes.service';
+import { ContactoEmergenciaModalComponent } from './contacto-emergencia-modal.component';
 import { PacienteFormModalComponent } from './paciente-form-modal.component';
 import { PacienteStatusModalComponent } from './paciente-status-modal.component';
 import { PacienteTutorModalComponent } from './paciente-tutor-modal.component';
@@ -31,6 +34,7 @@ import { PacienteTutorModalComponent } from './paciente-tutor-modal.component';
     PacienteFormModalComponent,
     PacienteStatusModalComponent,
     PacienteTutorModalComponent,
+    ContactoEmergenciaModalComponent,
   ],
   templateUrl: './paciente-ficha.page.html',
 })
@@ -38,8 +42,11 @@ export class PacienteFichaPageComponent implements OnInit {
   private readonly service = inject(PacientesService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
+
+  readonly canViewFichaIngreso = computed(() => this.auth.hasPermission('ficha_ingreso.ver'));
 
   readonly texts = PACIENTES_TEXTS;
   readonly paciente = signal<Paciente | null>(null);
@@ -51,6 +58,8 @@ export class PacienteFichaPageComponent implements OnInit {
   readonly editOpen = signal(false);
   readonly statusOpen = signal(false);
   readonly tutorOpen = signal(false);
+  readonly contactoOpen = signal(false);
+  readonly contactoEditando = signal<ContactoEmergencia | null>(null);
 
   private pacienteId = 0;
 
@@ -123,6 +132,10 @@ export class PacienteFichaPageComponent implements OnInit {
     this.statusOpen.set(false);
   }
 
+  openFichaIngreso(): void {
+    void this.router.navigate(['/pacientes', this.pacienteId, 'ficha-ingreso']);
+  }
+
   openTutors(): void {
     this.tutorOpen.set(true);
   }
@@ -144,9 +157,62 @@ export class PacienteFichaPageComponent implements OnInit {
     this.load();
   }
 
-  makePrincipal(tutor: TutorResumen): void {
+  openNewContact(): void {
+    this.contactoEditando.set(null);
+    this.contactoOpen.set(true);
+  }
+
+  editContact(contacto: ContactoEmergencia): void {
+    this.contactoEditando.set(contacto);
+    this.contactoOpen.set(true);
+  }
+
+  closeContact(): void {
+    this.contactoOpen.set(false);
+    this.contactoEditando.set(null);
+  }
+
+  onContactSaved(): void {
+    this.contactoOpen.set(false);
+    this.contactoEditando.set(null);
+    this.toast.success(this.texts.emergencyContactSaved, 'El contacto quedó registrado.');
+    this.load();
+  }
+
+  removeContact(contacto: ContactoEmergencia): void {
+    if (!window.confirm(`¿Eliminar el contacto de emergencia ${contacto.nombre_completo}?`)) {
+      return;
+    }
+
     this.service
-      .setPrincipalTutor(this.pacienteId, tutor.tutor_id)
+      .deleteContactoEmergencia(this.pacienteId, contacto.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.toast.success(this.texts.emergencyContactDeleted, 'La baja quedó registrada.');
+          this.load();
+        },
+        error: (apiError: PacientesApiError) => this.error.set(apiError),
+      });
+  }
+
+  makePrincipal(tutor: TutorResumen): void {
+    const paciente = this.paciente();
+    const principal = paciente?.tutores?.find((item) => item.es_principal);
+    let motivo: string | null = null;
+
+    if (principal && principal.tutor_id !== tutor.tutor_id) {
+      const ingresado = window.prompt('Motivo del cambio de tutor principal');
+
+      if (ingresado === null || ingresado.trim() === '') {
+        return;
+      }
+
+      motivo = ingresado.trim();
+    }
+
+    this.service
+      .setPrincipalTutor(this.pacienteId, tutor.tutor_id, motivo)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {

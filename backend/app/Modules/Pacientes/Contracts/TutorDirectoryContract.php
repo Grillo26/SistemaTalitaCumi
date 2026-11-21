@@ -24,8 +24,14 @@ interface TutorDirectoryContract
      */
     public function tutoresDePaciente(int $pacienteId): array;
 
+    /**
+     * Exige que exista un tutor principal ACTIVO.
+     */
     public function tieneTutorPrincipal(int $pacienteId): bool;
 
+    /**
+     * Tutor principal activo; null si no existe o está inactivo (04.02/RN-007).
+     */
     public function tutorPrincipal(int $pacienteId): ?TutorResumen;
 
     /**

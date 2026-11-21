@@ -32,6 +32,12 @@ final class UniqueViolationTranslator
             throw new DuplicateTutorException(['ci' => ['Ya existe un tutor con ese documento.']]);
         }
 
+        if (str_contains($message, 'tutor_nombre_telefono_uk')) {
+            throw new DuplicateTutorException([
+                'telefono' => ['Ya existe un tutor con el mismo nombre y teléfono principal.'],
+            ]);
+        }
+
         throw $exception;
     }
 }

@@ -2,6 +2,8 @@
 
 namespace Database\Factories;
 
+use App\Modules\Organizacion\Models\Branch;
+use App\Modules\Pacientes\Models\Parentesco;
 use App\Modules\Pacientes\Models\Tutor;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -18,13 +20,15 @@ class TutorFactory extends Factory
     public function definition(): array
     {
         return [
+            'sucursal_registro_id' => Branch::factory(),
             'nombre_completo' => fake()->name(),
             'ci' => (string) fake()->unique()->numerify('########'),
             'telefono' => fake()->numerify('7#######'),
             'telefono_alternativo' => null,
             'email' => null,
             'direccion' => null,
-            'parentesco' => fake()->randomElement(['Madre', 'Padre', 'Tía', 'Abuelo']),
+            'parentesco' => 'Madre',
+            'parentesco_id' => Parentesco::factory(),
             'activo' => true,
             'version' => 1,
         ];

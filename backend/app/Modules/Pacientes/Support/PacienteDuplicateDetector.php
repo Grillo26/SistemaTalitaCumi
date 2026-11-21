@@ -2,7 +2,6 @@
 
 namespace App\Modules\Pacientes\Support;
 
-use App\Modules\Pacientes\Enums\TipoCoincidencia;
 use App\Modules\Pacientes\Models\Paciente;
 use App\Modules\Pacientes\Rules\PacienteDuplicateRule;
 

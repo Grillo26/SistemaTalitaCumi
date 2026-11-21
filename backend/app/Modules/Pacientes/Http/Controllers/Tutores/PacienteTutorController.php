@@ -7,7 +7,9 @@ use App\Modules\Pacientes\Actions\Tutores\AssociateTutorAction;
 use App\Modules\Pacientes\Actions\Tutores\DissociateTutorAction;
 use App\Modules\Pacientes\Actions\Tutores\SetPrincipalTutorAction;
 use App\Modules\Pacientes\Http\Requests\Tutores\AssociateTutorRequest;
+use App\Modules\Pacientes\Http\Requests\Tutores\SetPrincipalTutorRequest;
 use App\Modules\Pacientes\Http\Resources\TutorResource;
+use App\Modules\Pacientes\Models\PacienteTutor;
 use App\Modules\Pacientes\Queries\Registro\GetPacienteQuery;
 use App\Modules\Pacientes\Queries\Tutores\GetTutorQuery;
 use App\Modules\Pacientes\Queries\Tutores\ListPacienteTutoresQuery;
@@ -16,7 +18,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * Tutores de un paciente (04.01/RF-010, 04.02/RF-004–RF-006).
+ * Tutores de un paciente (04.02/RF-004–RF-006).
  */
 final class PacienteTutorController
 {
@@ -30,8 +32,18 @@ final class PacienteTutorController
         $actor = $request->user();
         $paciente = $getPaciente($id, $actor);
 
+        $items = $query($paciente, $actor)
+            ->map(static fn (PacienteTutor $relacion): array => TutorResource::forPaciente(
+                $actor,
+                $relacion,
+                $request,
+            ))
+            ->filter(static fn (array $tutor): bool => $tutor !== [])
+            ->values()
+            ->all();
+
         return response()->json([
-            'data' => $query($paciente, $actor),
+            'data' => $items,
             'can' => PacienteAbilities::for($actor, $paciente),
         ]);
     }
@@ -49,15 +61,20 @@ final class PacienteTutorController
 
         $paciente = $getPaciente($id, $actor);
         $tutor = $getTutor((int) $data['tutor_id'], $actor);
-        $relation = $action($paciente, $tutor, (bool) ($data['es_principal'] ?? false), $actor, $request->ip());
+        $relation = $action(
+            $paciente,
+            $tutor,
+            (bool) ($data['es_principal'] ?? false),
+            $actor,
+            $request->ip(),
+            isset($data['parentesco_id']) ? (int) $data['parentesco_id'] : null,
+            null,
+            $data['motivo'] ?? null,
+        );
+        $relation->load(['tutor.parentescoCatalogo', 'tutor.sucursalRegistro', 'parentesco']);
 
         return response()->json([
-            'data' => [
-                'paciente_id' => (int) $relation->paciente_id,
-                'tutor_id' => (int) $relation->tutor_id,
-                'es_principal' => (bool) $relation->es_principal,
-                'tutor' => TutorResource::for($actor, $tutor, $request),
-            ],
+            'data' => TutorResource::forPaciente($actor, $relation, $request),
             'can' => PacienteAbilities::for($actor, $paciente),
         ], 201);
     }
@@ -65,7 +82,7 @@ final class PacienteTutorController
     public function setPrincipal(
         int $id,
         int $tutorId,
-        Request $request,
+        SetPrincipalTutorRequest $request,
         GetPacienteQuery $getPaciente,
         GetTutorQuery $getTutor,
         SetPrincipalTutorAction $action,
@@ -74,15 +91,17 @@ final class PacienteTutorController
         $actor = $request->user();
         $paciente = $getPaciente($id, $actor);
         $tutor = $getTutor($tutorId, $actor);
-        $relation = $action($paciente, $tutor, $actor, $request->ip());
+        $relation = $action(
+            $paciente,
+            $tutor,
+            $actor,
+            $request->ip(),
+            $request->validated()['motivo'] ?? null,
+        );
+        $relation->load(['tutor.parentescoCatalogo', 'tutor.sucursalRegistro', 'parentesco']);
 
         return response()->json([
-            'data' => [
-                'paciente_id' => (int) $relation->paciente_id,
-                'tutor_id' => (int) $relation->tutor_id,
-                'es_principal' => (bool) $relation->es_principal,
-                'tutor' => TutorResource::for($actor, $tutor, $request),
-            ],
+            'data' => TutorResource::forPaciente($actor, $relation, $request),
             'can' => PacienteAbilities::for($actor, $paciente),
         ]);
     }

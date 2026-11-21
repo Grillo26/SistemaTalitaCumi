@@ -3,7 +3,6 @@
 namespace Tests\Feature\Modules\Pacientes\Registro;
 
 use App\Modules\Pacientes\Models\BitacoraEntry;
-use App\Modules\Pacientes\Models\EstadoPacienteHistorial;
 use Tests\Feature\Modules\Pacientes\PacientesTestCase;
 
 final class PacienteStatusTest extends PacientesTestCase

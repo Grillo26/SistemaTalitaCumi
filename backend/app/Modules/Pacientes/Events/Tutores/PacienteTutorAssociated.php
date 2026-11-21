@@ -3,7 +3,7 @@
 namespace App\Modules\Pacientes\Events\Tutores;
 
 /**
- * Tutor asociado a un paciente (04.01/RF-010).
+ * Tutor asociado a un paciente (04.02/RF-004).
  */
 final readonly class PacienteTutorAssociated
 {
@@ -13,6 +13,7 @@ final readonly class PacienteTutorAssociated
     public function __construct(
         public int $pacienteId,
         public int $tutorId,
+        public int $parentescoId,
         public bool $esPrincipal,
         public array $branchIds,
         public ?int $actorId,

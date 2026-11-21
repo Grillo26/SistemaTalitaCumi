@@ -10,8 +10,8 @@ use App\Modules\Pacientes\Enums\EstadoPaciente;
 use App\Modules\Pacientes\Events\Registro\PacienteCreated;
 use App\Modules\Pacientes\Events\Registro\PacienteDuplicateConfirmed;
 use App\Modules\Pacientes\Exceptions\DuplicatePacienteDocumentException;
-use App\Modules\Pacientes\Exceptions\PacienteDuplicateConfirmationReasonRequiredException;
 use App\Modules\Pacientes\Exceptions\PacienteDiagnosticCatalogUnavailableException;
+use App\Modules\Pacientes\Exceptions\PacienteDuplicateConfirmationReasonRequiredException;
 use App\Modules\Pacientes\Exceptions\PacienteTutorRequiredException;
 use App\Modules\Pacientes\Exceptions\PotentialDuplicatePacienteException;
 use App\Modules\Pacientes\Exceptions\TutorNotFoundException;
@@ -25,8 +25,8 @@ use App\Modules\Pacientes\Support\PacienteAgeCalculator;
 use App\Modules\Pacientes\Support\PacienteDuplicateDetector;
 use App\Modules\Pacientes\Support\PacienteDuplicatePresenter;
 use App\Modules\Pacientes\Support\PacienteNormalizer;
-use App\Modules\Pacientes\Support\PacienteSnapshot;
 use App\Modules\Pacientes\Support\PacientesModule;
+use App\Modules\Pacientes\Support\PacienteSnapshot;
 use App\Modules\Pacientes\Support\TutorAccessScope;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
@@ -187,10 +187,10 @@ final class CreatePacienteAction
             ]);
 
             if ($existingTutor !== null) {
-                $this->associatePrincipalTutor($paciente, $existingTutor, $actor, $ip);
+                $this->associatePrincipalTutor($paciente, $existingTutor, $actor, $ip, $tutorInput);
             } else {
-                $tutor = ($this->createTutor)($tutorInput, $actor->id, $ip, $branchId);
-                $this->associatePrincipalTutor($paciente, $tutor, $actor, $ip);
+                $tutor = ($this->createTutor)($tutorInput, $actor, $ip, $branchId);
+                $this->associatePrincipalTutor($paciente, $tutor, $actor, $ip, $tutorInput);
             }
 
             $paciente->refresh()->load(['sucursalRegistro', 'relacionesTutor.tutor']);
@@ -224,8 +224,17 @@ final class CreatePacienteAction
         Tutor $tutor,
         User $actor,
         ?string $ip,
+        array $tutorInput,
     ): void {
-        ($this->associateTutor)($paciente, $tutor, true, $actor, $ip);
+        ($this->associateTutor)(
+            $paciente,
+            $tutor,
+            true,
+            $actor,
+            $ip,
+            isset($tutorInput['parentesco_id']) ? (int) $tutorInput['parentesco_id'] : null,
+            isset($tutorInput['parentesco']) ? (string) $tutorInput['parentesco'] : null,
+        );
     }
 
     private function assertDiagnosticAvailable(?int $tipoDiagnosticoId): void

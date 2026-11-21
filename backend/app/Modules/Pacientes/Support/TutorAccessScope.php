@@ -3,23 +3,28 @@
 namespace App\Modules\Pacientes\Support;
 
 use App\Models\User;
+use App\Modules\Organizacion\Contracts\BranchDirectoryContract;
 use App\Modules\Organizacion\Contracts\UserBranchAccessContract;
 use App\Modules\Organizacion\Exceptions\BranchAccessDeniedException;
 use App\Modules\Pacientes\Exceptions\TutorInactiveException;
 use App\Modules\Pacientes\Exceptions\TutorNotFoundException;
+use App\Modules\Pacientes\Exceptions\TutorSucursalRequiredException;
 use App\Modules\Pacientes\Models\Tutor;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Visibilidad de tutores (04.02/RF-015, 04.02/RN-010).
  *
- * Un tutor es global. Sin alcance global se ven tutores asociados a pacientes
- * de las sucursales accesibles, más tutores todavía sin pacientes (para poder
- * asociarlos). Fail-closed: sin sucursales no se ven tutores asociados.
+ * Un tutor es visible por su sucursal de registro (home branch) o por una
+ * sucursal de un paciente asociado. Fail-closed: un tutor sin pacientes y sin
+ * home branch solo lo ve el alcance global; nunca “todas las sucursales”.
  */
 final class TutorAccessScope
 {
-    public function __construct(private readonly UserBranchAccessContract $access) {}
+    public function __construct(
+        private readonly UserBranchAccessContract $access,
+        private readonly BranchDirectoryContract $branches,
+    ) {}
 
     /**
      * @return list<int>|null NULL = alcance global
@@ -33,28 +38,57 @@ final class TutorAccessScope
         return $this->access->accesibles($actor->id);
     }
 
-    public function assertCanCreate(User $actor): void
+    public function assertCanCreate(User $actor, ?int $sucursalId): int
     {
-        if ($this->accessibleBranchIds($actor) === []) {
+        $branchIds = $this->accessibleBranchIds($actor);
+
+        if ($branchIds === []) {
             throw new BranchAccessDeniedException;
         }
+
+        if ($sucursalId === null) {
+            if ($branchIds === null || count($branchIds) !== 1) {
+                throw new TutorSucursalRequiredException;
+            }
+
+            $sucursalId = $branchIds[0];
+        }
+
+        if ($branchIds !== null && ! in_array($sucursalId, $branchIds, true)) {
+            throw new BranchAccessDeniedException;
+        }
+
+        $this->branches->asegurarActiva($sucursalId);
+
+        return $sucursalId;
     }
 
-    public function apply(Builder $query, User $actor): Builder
+    public function apply(Builder $query, User $actor, ?int $sucursalId = null): Builder
     {
         $branchIds = $this->accessibleBranchIds($actor);
 
         if ($branchIds === null) {
-            return $query;
+            return $sucursalId === null
+                ? $query
+                : $query->where('sucursal_registro_id', $sucursalId);
         }
 
         if ($branchIds === []) {
             return $query->whereRaw('1 = 0');
         }
 
+        if ($sucursalId !== null) {
+            if (! in_array($sucursalId, $branchIds, true)) {
+                return $query->whereRaw('1 = 0');
+            }
+
+            // El filtro público es por sucursal de registro (home branch).
+            return $query->where('sucursal_registro_id', $sucursalId);
+        }
+
         return $query->where(function (Builder $query) use ($branchIds): void {
             $query
-                ->whereDoesntHave('relacionesPaciente')
+                ->whereIn('sucursal_registro_id', $branchIds)
                 ->orWhereHas(
                     'relacionesPaciente.paciente',
                     static fn (Builder $pacientes) => $pacientes
@@ -75,7 +109,8 @@ final class TutorAccessScope
             return false;
         }
 
-        if (! $tutor->relacionesPaciente()->exists()) {
+        if ($tutor->sucursal_registro_id !== null
+            && in_array((int) $tutor->sucursal_registro_id, $branchIds, true)) {
             return true;
         }
 

@@ -2,19 +2,22 @@
 
 namespace App\Modules\Pacientes\Models;
 
+use App\Modules\Organizacion\Models\Branch;
 use App\Modules\Pacientes\Support\PacienteNormalizer;
 use Database\Factories\TutorFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * Tutor — maestro global de 04.02 (núcleo).
+ * Tutor — maestro global de 04.02.
  *
- * No usa SoftDeletes. En esta entrega se crea activo; el flujo completo de
- * activación/desactivación pertenece a 04.02.
+ * No usa SoftDeletes: se desactiva y conserva el historial. La sucursal de
+ * registro (home branch) define su visibilidad base; las sucursales de los
+ * pacientes asociados también otorgan visibilidad.
  */
 class Tutor extends Model
 {
@@ -24,6 +27,7 @@ class Tutor extends Model
     protected $table = 'tutor';
 
     protected $fillable = [
+        'sucursal_registro_id',
         'nombre_completo',
         'ci',
         'telefono',
@@ -31,6 +35,7 @@ class Tutor extends Model
         'email',
         'direccion',
         'parentesco',
+        'parentesco_id',
         'activo',
         'version',
         'motivo_estado',
@@ -68,6 +73,20 @@ class Tutor extends Model
         return $this->activo ? 'activo' : 'inactivo';
     }
 
+    public function sucursalRegistro(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class, 'sucursal_registro_id');
+    }
+
+    /**
+     * Catálogo de parentesco. Se evita el nombre `parentesco` porque la tabla
+     * conserva la columna legacy del mismo nombre (texto libre).
+     */
+    public function parentescoCatalogo(): BelongsTo
+    {
+        return $this->belongsTo(Parentesco::class, 'parentesco_id');
+    }
+
     public function relacionesPaciente(): HasMany
     {
         return $this->hasMany(PacienteTutor::class);
@@ -80,7 +99,7 @@ class Tutor extends Model
             'paciente_tutor',
             'tutor_id',
             'paciente_id',
-        )->withPivot('es_principal');
+        )->withPivot(['parentesco_id', 'es_principal']);
     }
 
     public function scopeBuscar(Builder $query, ?string $term): Builder

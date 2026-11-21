@@ -1,0 +1,157 @@
+<app-modal
+  [open]="open"
+  [title]="isEdit ? texts.edit : texts.create"
+  size="lg"
+  [showFooter]="true"
+  (closed)="close()"
+>
+  <div class="space-y-5">
+    @if (error(); as apiError) {
+      <app-alert variant="error" title="No se pudo guardar el tutor" [message]="apiError.message" />
+    }
+
+    @if (isEdit && !identityEditable) {
+      <app-alert variant="warning" title="Edición limitada" [message]="texts.editContactOnly" />
+    }
+
+    <div class="grid gap-4 md:grid-cols-2">
+      <div class="md:col-span-2">
+        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-form-nombre">
+          Nombre completo *
+        </label>
+        <input
+          id="tutor-form-nombre"
+          app-input
+          type="text"
+          [formControl]="form.controls.nombre_completo"
+        />
+        @if (fieldError('nombre_completo'); as message) {
+          <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+        }
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          Parentesco de referencia *
+        </label>
+        <app-select-field
+          [options]="parentescoOptions"
+          [value]="form.controls.parentesco_id.value"
+          placeholder="Seleccioná el parentesco"
+          ariaLabel="Parentesco de referencia"
+          [disabled]="!canEditIdentity"
+          (valueChange)="form.controls.parentesco_id.setValue($event)"
+        />
+        @if (fieldError('parentesco_id'); as message) {
+          <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+        }
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-form-ci">
+          Documento
+        </label>
+        <input
+          id="tutor-form-ci"
+          app-input
+          type="text"
+          [formControl]="form.controls.ci"
+          placeholder="Opcional"
+        />
+        @if (fieldError('ci'); as message) {
+          <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+        }
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-form-telefono">
+          Teléfono principal *
+        </label>
+        <input
+          id="tutor-form-telefono"
+          app-input
+          type="text"
+          [formControl]="form.controls.telefono"
+        />
+        @if (fieldError('telefono'); as message) {
+          <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+        }
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-form-telefono-alt">
+          Teléfono alternativo
+        </label>
+        <input
+          id="tutor-form-telefono-alt"
+          app-input
+          type="text"
+          [formControl]="form.controls.telefono_alternativo"
+        />
+        @if (fieldError('telefono_alternativo'); as message) {
+          <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+        }
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-form-email">
+          Correo
+        </label>
+        <input
+          id="tutor-form-email"
+          app-input
+          type="email"
+          [formControl]="form.controls.email"
+          placeholder="Opcional"
+        />
+        @if (fieldError('email'); as message) {
+          <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+        }
+      </div>
+
+      @if (!isEdit) {
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Sucursal de registro
+          </label>
+          <app-select-field
+            [options]="sucursalOptions"
+            [value]="form.controls.sucursal_registro_id.value"
+            placeholder="Seleccioná la sucursal"
+            ariaLabel="Sucursal de registro del tutor"
+            (valueChange)="form.controls.sucursal_registro_id.setValue($event)"
+          />
+          @if (fieldError('sucursal_registro_id'); as message) {
+            <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+          }
+        </div>
+      }
+
+      <div class="md:col-span-2">
+        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-form-direccion">
+          Dirección
+        </label>
+        <textarea
+          id="tutor-form-direccion"
+          app-textarea
+          rows="2"
+          [formControl]="form.controls.direccion"
+        ></textarea>
+        @if (fieldError('direccion'); as message) {
+          <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+        }
+      </div>
+    </div>
+
+    <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.phoneHint }}</p>
+  </div>
+
+  <div modal-footer class="flex flex-wrap items-center justify-end gap-2">
+    <button app-button variant="outline" type="button" (click)="close()" [disabled]="saving()">
+      {{ texts.cancel }}
+    </button>
+    <button app-button variant="default" type="button" (click)="submit()" [disabled]="saving()">
+      {{ saving() ? texts.saving : texts.save }}
+    </button>
+  </div>
+</app-modal>

@@ -20,6 +20,8 @@ final class PacientesAuditAction
 
     public const CONFIRM_DUPLICATE = 'CONFIRMAR_DUPLICADO';
 
+    public const DELETE = 'ELIMINAR';
+
     public const ASSOCIATE_TUTOR = 'ASOCIAR';
 
     public const DISSOCIATE_TUTOR = 'DESASOCIAR';

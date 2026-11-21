@@ -5,7 +5,9 @@ namespace App\Modules\Pacientes\Contracts;
 use App\Modules\Pacientes\Exceptions\TutorNotFoundException;
 use App\Modules\Pacientes\Exceptions\TutorPrincipalRequiredException;
 use App\Modules\Pacientes\Models\PacienteTutor;
+use App\Modules\Pacientes\Models\Parentesco;
 use App\Modules\Pacientes\Models\Tutor;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Implementación Eloquent del directorio de tutores.
@@ -24,20 +26,20 @@ final class EloquentTutorDirectory implements TutorDirectoryContract
 
     public function resumen(int $tutorId): TutorResumen
     {
-        $tutor = Tutor::query()->find($tutorId);
+        $tutor = Tutor::query()->with('parentescoCatalogo')->find($tutorId);
 
         if ($tutor === null) {
             throw new TutorNotFoundException($tutorId);
         }
 
-        return $this->toResumen($tutor);
+        return $this->toResumen($tutor, false, $tutor->parentescoCatalogo);
     }
 
     public function tutoresDePaciente(int $pacienteId): array
     {
         return PacienteTutor::query()
             ->where('paciente_id', $pacienteId)
-            ->with('tutor')
+            ->with(['tutor.parentescoCatalogo', 'parentesco'])
             ->orderByDesc('es_principal')
             ->orderBy('tutor_id')
             ->get()
@@ -45,6 +47,7 @@ final class EloquentTutorDirectory implements TutorDirectoryContract
             ->map(fn (PacienteTutor $relacion): TutorResumen => $this->toResumen(
                 $relacion->tutor,
                 (bool) $relacion->es_principal,
+                $relacion->parentesco ?? $relacion->tutor->parentescoCatalogo,
             ))
             ->values()
             ->all();
@@ -52,9 +55,11 @@ final class EloquentTutorDirectory implements TutorDirectoryContract
 
     public function tieneTutorPrincipal(int $pacienteId): bool
     {
-        return PacienteTutor::query()
-            ->where('paciente_id', $pacienteId)
-            ->where('es_principal', true)
+        return DB::table('paciente_tutor')
+            ->join('tutor', 'tutor.id', '=', 'paciente_tutor.tutor_id')
+            ->where('paciente_tutor.paciente_id', $pacienteId)
+            ->where('paciente_tutor.es_principal', true)
+            ->where('tutor.activo', true)
             ->exists();
     }
 
@@ -63,10 +68,18 @@ final class EloquentTutorDirectory implements TutorDirectoryContract
         $relacion = PacienteTutor::query()
             ->where('paciente_id', $pacienteId)
             ->where('es_principal', true)
-            ->with('tutor')
+            ->with(['tutor.parentescoCatalogo', 'parentesco'])
             ->first();
 
-        return $relacion?->tutor === null ? null : $this->toResumen($relacion->tutor, true);
+        if ($relacion?->tutor === null || ! $relacion->tutor->activo) {
+            return null;
+        }
+
+        return $this->toResumen(
+            $relacion->tutor,
+            true,
+            $relacion->parentesco ?? $relacion->tutor->parentescoCatalogo,
+        );
     }
 
     public function asegurarTutorPrincipal(int $pacienteId): void
@@ -76,8 +89,11 @@ final class EloquentTutorDirectory implements TutorDirectoryContract
         }
     }
 
-    private function toResumen(Tutor $tutor, bool $esPrincipal = false): TutorResumen
-    {
+    private function toResumen(
+        Tutor $tutor,
+        bool $esPrincipal = false,
+        ?Parentesco $parentesco = null,
+    ): TutorResumen {
         return new TutorResumen(
             id: (int) $tutor->id,
             nombreCompleto: $tutor->nombre_completo,
@@ -86,9 +102,11 @@ final class EloquentTutorDirectory implements TutorDirectoryContract
             telefonoAlternativo: $tutor->telefono_alternativo,
             email: $tutor->email,
             direccion: $tutor->direccion,
-            parentesco: $tutor->parentesco,
+            parentescoId: $parentesco?->id,
+            parentesco: $parentesco?->nombre ?? $tutor->parentescoCatalogo?->nombre ?? $tutor->parentesco,
             activo: (bool) $tutor->activo,
             esPrincipal: $esPrincipal,
+            sucursalRegistroId: $tutor->sucursal_registro_id === null ? null : (int) $tutor->sucursal_registro_id,
         );
     }
 }

@@ -9,9 +9,12 @@ final class DuplicateTutorException extends PacientesDomainException
 {
     /**
      * @param  array<string, list<string>>  $errors
+     * @param  array<string, mixed>  $data
      */
-    public function __construct(private readonly array $errors = [])
-    {
+    public function __construct(
+        private readonly array $errors = [],
+        private readonly array $data = [],
+    ) {
         parent::__construct('Ya existe un tutor con esos datos. Buscalo y asocialo al paciente en lugar de crearlo de nuevo.');
     }
 
@@ -27,10 +30,16 @@ final class DuplicateTutorException extends PacientesDomainException
 
     public function render(Request $request): JsonResponse
     {
-        return response()->json([
+        $body = [
             'message' => $this->getMessage(),
             'code' => $this->errorCode(),
             'errors' => $this->errors,
-        ], $this->status());
+        ];
+
+        if ($this->data !== []) {
+            $body['data'] = $this->data;
+        }
+
+        return response()->json($body, $this->status());
     }
 }

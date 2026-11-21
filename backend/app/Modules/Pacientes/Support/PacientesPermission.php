@@ -28,13 +28,28 @@ final class PacientesPermission
 
     public const TUTOR_CREATE = 'tutor.crear';
 
+    /** Edición completa: identidad y contacto. */
     public const TUTOR_EDIT = 'tutor.editar';
 
-    /** Reservado para el flujo completo de 04.02. */
+    /** Edición de teléfonos, email y dirección. */
+    public const TUTOR_EDIT_CONTACT = 'tutor.editar_contacto';
+
+    /** Ver teléfonos, email y dirección completos. */
+    public const TUTOR_VIEW_CONTACT = 'tutor.ver_contacto';
+
+    /** Asociar, desasociar y designar tutor principal. */
+    public const TUTOR_ASSOCIATE = 'tutor.asociar';
+
     public const TUTOR_CHANGE_STATUS = 'tutor.cambiar_estado';
 
     /** Reservado para 04.02/RF-016. */
     public const TUTOR_EXPORT = 'tutor.exportar';
+
+    /** Ver los contactos de emergencia y su teléfono completo. */
+    public const CONTACT_EMERGENCY_VIEW = 'paciente.ver_contacto_emergencia';
+
+    /** Crear, editar y eliminar contactos de emergencia. */
+    public const CONTACT_EMERGENCY_EDIT = 'paciente.editar_contacto_emergencia';
 
     /**
      * Permiso transversal del módulo 01; se reutiliza sin duplicarlo.
@@ -42,6 +57,8 @@ final class PacientesPermission
     public const GLOBAL_SCOPE = 'sucursal.alcance_global';
 
     /**
+     * Permisos de 04.01.
+     *
      * @return list<string>
      */
     public static function all(): array
@@ -53,11 +70,38 @@ final class PacientesPermission
             self::PATIENT_CHANGE_STATUS,
             self::PATIENT_VIEW_SENSITIVE,
             self::PATIENT_EXPORT,
+        ];
+    }
+
+    /**
+     * Permisos de 04.02.
+     *
+     * @return list<string>
+     */
+    public static function tutorAll(): array
+    {
+        return [
             self::TUTOR_VIEW,
             self::TUTOR_CREATE,
             self::TUTOR_EDIT,
+            self::TUTOR_EDIT_CONTACT,
+            self::TUTOR_VIEW_CONTACT,
+            self::TUTOR_ASSOCIATE,
             self::TUTOR_CHANGE_STATUS,
             self::TUTOR_EXPORT,
+        ];
+    }
+
+    /**
+     * Permisos de contactos de emergencia (04.02/RF-012).
+     *
+     * @return list<string>
+     */
+    public static function contactoEmergenciaAll(): array
+    {
+        return [
+            self::CONTACT_EMERGENCY_VIEW,
+            self::CONTACT_EMERGENCY_EDIT,
         ];
     }
 }

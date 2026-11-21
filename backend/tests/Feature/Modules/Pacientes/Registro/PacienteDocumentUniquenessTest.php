@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Modules\Pacientes\Registro;
 
-use App\Modules\Pacientes\Models\Tutor;
 use Tests\Feature\Modules\Pacientes\PacientesTestCase;
 
 final class PacienteDocumentUniquenessTest extends PacientesTestCase
@@ -13,8 +12,8 @@ final class PacienteDocumentUniquenessTest extends PacientesTestCase
         $user = $this->actingAsRole('recepcion');
         $this->withBranch($user, $branch);
 
-        $tutorA = $this->tutor();
-        $tutorB = $this->tutor();
+        $tutorA = $this->tutor(['sucursal_registro_id' => $branch->id]);
+        $tutorB = $this->tutor(['sucursal_registro_id' => $branch->id]);
 
         $this->postJson('/api/pacientes/pacientes', $this->pacientePayload([
             'ci' => 'ABC-1',
@@ -36,8 +35,8 @@ final class PacienteDocumentUniquenessTest extends PacientesTestCase
         $user = $this->actingAsRole('recepcion');
         $this->withBranch($user, $branch);
 
-        $tutorA = $this->tutor();
-        $tutorB = $this->tutor();
+        $tutorA = $this->tutor(['sucursal_registro_id' => $branch->id]);
+        $tutorB = $this->tutor(['sucursal_registro_id' => $branch->id]);
 
         $this->postJson('/api/pacientes/pacientes', $this->pacientePayload([
             'ci' => null,

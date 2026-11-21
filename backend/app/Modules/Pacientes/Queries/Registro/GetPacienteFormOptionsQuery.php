@@ -7,8 +7,10 @@ use App\Modules\Organizacion\Contracts\UserBranchAccessContract;
 use App\Modules\Organizacion\Models\Branch;
 use App\Modules\Pacientes\Enums\EstadoPaciente;
 use App\Modules\Pacientes\Enums\Sexo;
+use App\Modules\Pacientes\Models\Parentesco;
 use App\Modules\Pacientes\Support\PacienteAbilities;
 use App\Modules\Pacientes\Support\PacientesModule;
+use App\Modules\Pacientes\Support\PacientesPermission;
 
 /**
  * Opciones para formularios y filtros de pacientes.
@@ -73,7 +75,17 @@ final class GetPacienteFormOptionsQuery
                     ? 'Tutores disponibles.'
                     : 'Disponible con el submódulo de tutores y contactos (04.02).',
             ],
-            'puede_ver_sensibles' => $actor->can(\App\Modules\Pacientes\Support\PacientesPermission::PATIENT_VIEW_SENSITIVE),
+            'parentescos' => Parentesco::query()
+                ->activo()
+                ->ordenado()
+                ->get(['id', 'nombre'])
+                ->map(static fn (Parentesco $parentesco): array => [
+                    'id' => (int) $parentesco->id,
+                    'nombre' => $parentesco->nombre,
+                ])
+                ->values()
+                ->all(),
+            'puede_ver_sensibles' => $actor->can(PacientesPermission::PATIENT_VIEW_SENSITIVE),
             'can' => PacienteAbilities::collection($actor),
         ];
     }

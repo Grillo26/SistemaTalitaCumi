@@ -14,6 +14,7 @@ final readonly class PacienteTutorPrincipalChanged
         public int $pacienteId,
         public int $tutorId,
         public ?int $anteriorTutorId,
+        public ?string $motivo,
         public array $branchIds,
         public ?int $actorId,
         public ?string $ip,

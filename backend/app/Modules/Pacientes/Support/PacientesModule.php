@@ -15,9 +15,10 @@ final class PacientesModule
     public const AUDIT_MODULE = 'pacientes';
 
     /**
-     * 04.02 núcleo implementado en esta entrega: alta, búsqueda y asociación
-     * de tutores. La ficha/listado completo y los contactos de emergencia
-     * siguen pendientes.
+     * 04.02 Fases A y B implementadas: tutores, asociación, estado,
+     * duplicados, enmascarado, auditoría, contactos de emergencia por
+     * paciente y exportación CSV de tutores. El PDF y el consumo por el
+     * módulo 09 quedan pendientes.
      */
     public const TUTORES_DISPONIBLES = true;
 
@@ -31,6 +32,16 @@ final class PacientesModule
      * El filtro/visibilidad por inscripción vigente pertenece al módulo 06.
      */
     public const INSCRIPCIONES_DISPONIBLES = false;
+
+    /**
+     * Contactos de emergencia adicionales por paciente (04.02/RF-012).
+     */
+    public const CONTACTOS_EMERGENCIA_DISPONIBLES = true;
+
+    /**
+     * Ficha de ingreso administrativa (04.03 Fase A).
+     */
+    public const FICHA_INGRESO_DISPONIBLE = true;
 
     /**
      * Exportación PDF/Excel pendiente de infraestructura.

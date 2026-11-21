@@ -34,6 +34,19 @@
 
     @if (mode() === 'buscar') {
       <div class="space-y-3">
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Parentesco con el paciente
+          </label>
+          <app-select-field
+            [options]="parentescoOptions"
+            [value]="parentescoControl.value"
+            placeholder="Usar el parentesco del tutor"
+            ariaLabel="Parentesco con el paciente"
+            (valueChange)="parentescoControl.setValue($event)"
+          />
+        </div>
+
         <input
           app-input
           type="text"
@@ -68,9 +81,15 @@
           }
         </div>
         <div>
-          <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-modal-parentesco">Parentesco *</label>
-          <input id="tutor-modal-parentesco" app-input type="text" [formControl]="form.controls.parentesco" />
-          @if (fieldError('parentesco'); as message) {
+          <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Parentesco *</label>
+          <app-select-field
+            [options]="parentescoOptions"
+            [value]="form.controls.parentesco_id.value"
+            placeholder="Seleccioná el parentesco"
+            ariaLabel="Parentesco del tutor"
+            (valueChange)="form.controls.parentesco_id.setValue($event)"
+          />
+          @if (fieldError('parentesco_id'); as message) {
             <p class="mt-1 text-xs text-red-500">{{ message }}</p>
           }
         </div>

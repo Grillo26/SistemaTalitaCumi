@@ -1,0 +1,175 @@
+<div>
+  <app-page-breadcrumb pageTitle="Ficha de tutor" />
+
+  <div class="space-y-5 sm:space-y-6">
+    @if (error(); as apiError) {
+      <app-alert variant="error" title="No se pudo cargar la ficha" [message]="apiError.message" />
+    }
+
+    @if (loading()) {
+      <app-component-card>
+        <p class="py-10 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.loading }}</p>
+      </app-component-card>
+    } @else if (notFound()) {
+      <app-component-card>
+        <div class="space-y-4 py-8 text-center">
+          <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.notFound }}</p>
+          <button app-button variant="outline" type="button" (click)="back()">{{ texts.back }}</button>
+        </div>
+      </app-component-card>
+    } @else if (tutor(); as t) {
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div class="flex flex-wrap items-center gap-2">
+            <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">{{ t.nombre_completo }}</h1>
+            <app-badge [color]="estadoColor(t.activo)" variant="light" size="sm">
+              {{ t.activo ? texts.active : texts.inactive }}
+            </app-badge>
+          </div>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            {{ t.parentesco || texts.noParentesco }}
+            @if (t.sucursal_registro) {
+              · {{ t.sucursal_registro.nombre || 'Sucursal ' + t.sucursal_registro.id }}
+            }
+          </p>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <button app-button variant="outline" type="button" (click)="back()">{{ texts.back }}</button>
+          @if (t.can.change_status) {
+            <button app-button variant="outline" type="button" (click)="openStatus()">{{ texts.status }}</button>
+          }
+          @if (t.can.edit_data || t.can.edit_contact) {
+            <button app-button variant="default" type="button" (click)="openEdit()">{{ texts.edit }}</button>
+          }
+        </div>
+      </div>
+
+      @if (!t.can.edit_data && t.can.edit_contact) {
+        <app-alert variant="warning" title="Edición limitada" [message]="texts.editContactOnly" />
+      }
+
+      <div class="grid gap-5 xl:grid-cols-2">
+        <app-component-card [title]="texts.identity">
+          <dl class="space-y-3 text-sm">
+            <div class="flex flex-col gap-1 sm:flex-row sm:justify-between">
+              <dt class="text-gray-500 dark:text-gray-400">Documento</dt>
+              <dd class="font-medium text-gray-800 dark:text-white/90">{{ t.ci || '—' }}</dd>
+            </div>
+            <div class="flex flex-col gap-1 sm:flex-row sm:justify-between">
+              <dt class="text-gray-500 dark:text-gray-400">Parentesco de referencia</dt>
+              <dd class="font-medium text-gray-800 dark:text-white/90">{{ t.parentesco || texts.noParentesco }}</dd>
+            </div>
+            <div class="flex flex-col gap-1 sm:flex-row sm:justify-between">
+              <dt class="text-gray-500 dark:text-gray-400">{{ texts.branch }}</dt>
+              <dd class="font-medium text-gray-800 dark:text-white/90">
+                {{ t.sucursal_registro?.nombre || '—' }}
+              </dd>
+            </div>
+            <div class="flex flex-col gap-1 sm:flex-row sm:justify-between">
+              <dt class="text-gray-500 dark:text-gray-400">Creado</dt>
+              <dd class="font-medium text-gray-800 dark:text-white/90">{{ formatDateTime(t.created_at) }}</dd>
+            </div>
+            <div class="flex flex-col gap-1 sm:flex-row sm:justify-between">
+              <dt class="text-gray-500 dark:text-gray-400">Última modificación</dt>
+              <dd class="font-medium text-gray-800 dark:text-white/90">{{ formatDateTime(t.updated_at) }}</dd>
+            </div>
+          </dl>
+        </app-component-card>
+
+        <app-component-card [title]="texts.contact">
+          <dl class="space-y-3 text-sm">
+            <div class="flex flex-col gap-1 sm:flex-row sm:justify-between">
+              <dt class="text-gray-500 dark:text-gray-400">Teléfono principal</dt>
+              <dd class="font-medium text-gray-800 dark:text-white/90">{{ t.telefono || '—' }}</dd>
+            </div>
+            <div class="flex flex-col gap-1 sm:flex-row sm:justify-between">
+              <dt class="text-gray-500 dark:text-gray-400">Teléfono alternativo</dt>
+              <dd class="font-medium text-gray-800 dark:text-white/90">{{ t.telefono_alternativo || '—' }}</dd>
+            </div>
+            <div class="flex flex-col gap-1 sm:flex-row sm:justify-between">
+              <dt class="text-gray-500 dark:text-gray-400">Correo</dt>
+              <dd class="font-medium text-gray-800 dark:text-white/90">{{ t.email || '—' }}</dd>
+            </div>
+            <div class="flex flex-col gap-1 sm:flex-row sm:justify-between">
+              <dt class="text-gray-500 dark:text-gray-400">Dirección</dt>
+              <dd class="text-end font-medium text-gray-800 dark:text-white/90">{{ t.direccion || '—' }}</dd>
+            </div>
+          </dl>
+        </app-component-card>
+      </div>
+
+      @if (!t.activo) {
+        <app-component-card title="Estado">
+          <dl class="space-y-3 text-sm">
+            <div class="flex flex-col gap-1 sm:flex-row sm:justify-between">
+              <dt class="text-gray-500 dark:text-gray-400">Motivo de desactivación</dt>
+              <dd class="font-medium text-gray-800 dark:text-white/90">{{ t.motivo_estado || '—' }}</dd>
+            </div>
+            <div class="flex flex-col gap-1 sm:flex-row sm:justify-between">
+              <dt class="text-gray-500 dark:text-gray-400">Fecha del cambio</dt>
+              <dd class="font-medium text-gray-800 dark:text-white/90">{{ formatDateTime(t.estado_cambiado_en) }}</dd>
+            </div>
+          </dl>
+        </app-component-card>
+      }
+
+      <app-component-card [title]="texts.patients">
+        @if (!t.can.view_patients) {
+          <p class="text-sm text-gray-500 dark:text-gray-400">
+            No tenés permiso para ver los pacientes asociados.
+          </p>
+        } @else {
+          <div class="space-y-3">
+            @for (paciente of t.pacientes ?? []; track paciente.id) {
+              <div class="flex flex-col gap-2 rounded-lg border border-gray-200 p-3 dark:border-gray-800 sm:flex-row sm:items-center sm:justify-between">
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-sm font-medium text-gray-800 dark:text-white/90">{{ paciente.nombre_completo }}</span>
+                    @if (paciente.es_principal) {
+                      <app-badge color="success" variant="light" size="sm">{{ texts.principal }}</app-badge>
+                    }
+                    <app-badge color="gray" variant="light" size="sm">{{ paciente.estado_label }}</app-badge>
+                  </div>
+                  <p class="mt-1 text-xs text-gray-500">
+                    {{ paciente.codigo || 'Sin código' }} · {{ paciente.parentesco || texts.noParentesco }}
+                  </p>
+                </div>
+                <button app-button variant="ghost" size="sm" type="button" (click)="openPatient(paciente)">
+                  Ver paciente
+                </button>
+              </div>
+            } @empty {
+              <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.noPatients }}</p>
+            }
+          </div>
+        }
+      </app-component-card>
+
+      <p class="text-xs text-gray-400">{{ texts.auditNotice }}</p>
+
+      @if (options(); as opts) {
+        @if (editOpen()) {
+          <app-tutor-form-modal
+            [open]="true"
+            mode="edit"
+            [tutor]="t"
+            [options]="opts"
+            [identityEditable]="t.can.edit_data"
+            (closed)="closeEdit()"
+            (saved)="onSaved($event)"
+          />
+        }
+
+        @if (statusOpen()) {
+          <app-tutor-status-modal
+            [open]="true"
+            [tutor]="t"
+            (closed)="closeStatus()"
+            (saved)="onSaved($event)"
+          />
+        }
+      }
+    }
+  </div>
+</div>

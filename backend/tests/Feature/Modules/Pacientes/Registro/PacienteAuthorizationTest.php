@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Modules\Pacientes\Registro;
 
-use App\Modules\Pacientes\Models\Paciente;
+use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\Feature\Modules\Pacientes\PacientesTestCase;
@@ -65,7 +65,7 @@ final class PacienteAuthorizationTest extends PacientesTestCase
         $this->withBranch($recepcion, $branch);
         Role::findByName('recepcion', 'web')->revokePermissionTo('paciente.ver_sensibles');
         app(PermissionRegistrar::class)->forgetCachedPermissions();
-        \Laravel\Sanctum\Sanctum::actingAs($recepcion);
+        Sanctum::actingAs($recepcion);
 
         $this->getJson('/api/pacientes/pacientes/'.$created['id'])
             ->assertOk()

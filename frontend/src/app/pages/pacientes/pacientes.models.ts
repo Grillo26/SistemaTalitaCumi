@@ -17,6 +17,21 @@ export interface SucursalResumen {
   activo?: boolean;
 }
 
+export interface TutorAbilities {
+  edit_data: boolean;
+  edit_contact: boolean;
+  change_status: boolean;
+  view_contact: boolean;
+  delete: boolean;
+  manage_tutors: boolean;
+  view_patients: boolean;
+}
+
+export interface TutorPageAbilities extends TutorAbilities {
+  create: boolean;
+  export: boolean;
+}
+
 export interface TutorResumen {
   tutor_id: number;
   es_principal: boolean;
@@ -26,8 +41,15 @@ export interface TutorResumen {
   telefono_alternativo: string | null;
   email: string | null;
   direccion: string | null;
+  parentesco_id: number | null;
   parentesco: string | null;
   activo: boolean;
+  estado: 'activo' | 'inactivo';
+  sucursal_registro: SucursalResumen | null;
+  version: number;
+  created_at: string | null;
+  updated_at: string | null;
+  can: TutorAbilities;
 }
 
 export interface PacienteRowAbilities {
@@ -36,6 +58,9 @@ export interface PacienteRowAbilities {
   view_sensibles: boolean;
   delete: boolean;
   view_tutors: boolean;
+  manage_tutors: boolean;
+  view_emergency_contacts: boolean;
+  manage_emergency_contacts: boolean;
 }
 
 export interface PacientePageAbilities {
@@ -46,6 +71,34 @@ export interface PacientePageAbilities {
   export: boolean;
   tutors: boolean;
   diagnostics: boolean;
+  manage_tutors: boolean;
+  view_emergency_contacts: boolean;
+  manage_emergency_contacts: boolean;
+}
+
+export interface ContactoEmergencia {
+  id: number;
+  paciente_id: number;
+  nombre_completo: string;
+  parentesco_id: number | null;
+  parentesco: string | null;
+  telefono: string;
+  version: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ContactoEmergenciaCreatePayload {
+  nombre_completo: string;
+  parentesco_id: number;
+  telefono: string;
+}
+
+export interface ContactoEmergenciaUpdatePayload {
+  nombre_completo?: string;
+  parentesco_id?: number;
+  telefono?: string;
+  version: number;
 }
 
 export interface Paciente {
@@ -76,6 +129,7 @@ export interface Paciente {
   tutores_disponibles?: boolean;
   tutores_mensaje?: string | null;
   tutores?: TutorResumen[] | null;
+  contactos_emergencia?: ContactoEmergencia[];
 }
 
 export interface PacientePaginationMeta {
@@ -144,6 +198,7 @@ export interface PacienteOptions {
   tipos_diagnostico: PacienteModuleAvailability & { items: unknown[] };
   inscripciones: PacienteModuleAvailability;
   tutores: PacienteModuleAvailability;
+  parentescos: TutorParentescoOption[];
   puede_ver_sensibles: boolean;
   can: PacientePageAbilities;
 }
@@ -161,12 +216,13 @@ export interface TutorPrincipalNewPayload {
   telefono_alternativo: string | null;
   email: string | null;
   direccion: string | null;
-  parentesco: string;
+  parentesco_id: number;
 }
 
 export interface TutorPrincipalExistingPayload {
   modo: 'existente';
   tutor_id: number;
+  parentesco_id?: number | null;
 }
 
 export type TutorPrincipalPayload = TutorPrincipalNewPayload | TutorPrincipalExistingPayload;
@@ -208,32 +264,49 @@ export interface PacienteStatusPayload {
   version: number;
 }
 
+export interface TutorPaciente {
+  id: number;
+  codigo: string | null;
+  nombre_completo: string;
+  estado: PacienteEstado;
+  estado_label: string;
+  sucursal_registro_id: number;
+  es_principal: boolean;
+  parentesco_id: number | null;
+  parentesco: string | null;
+}
+
 export interface Tutor {
   id: number;
+  sucursal_registro: SucursalResumen | null;
   nombre_completo: string;
   ci: string | null;
   telefono: string;
   telefono_alternativo: string | null;
   email: string | null;
   direccion: string | null;
+  parentesco_id: number | null;
   parentesco: string | null;
   activo: boolean;
   estado: 'activo' | 'inactivo';
   version: number;
+  motivo_estado?: string | null;
+  estado_cambiado_en?: string | null;
   created_at: string | null;
   updated_at: string | null;
-  can: {
-    edit: boolean;
-    change_status: boolean;
-  };
+  pacientes?: TutorPaciente[];
+  can: TutorAbilities;
 }
+
+export type TutorSort = 'nombre_completo' | 'ci' | 'activo' | 'updated_at';
 
 export interface TutorListParams {
   search?: string;
   activo?: boolean;
+  sucursal_registro_id?: number;
   page?: number;
   per_page?: number;
-  sort?: 'nombre_completo' | 'ci' | 'activo' | 'updated_at';
+  sort?: TutorSort;
   direction?: 'asc' | 'desc';
 }
 
@@ -246,22 +319,12 @@ export interface TutorListResponse {
     next: string | null;
   };
   meta: PacientePaginationMeta;
-  can: {
-    create: boolean;
-    edit: boolean;
-    change_status: boolean;
-    export: boolean;
-  };
+  can: TutorPageAbilities;
 }
 
 export interface TutorResponse {
   data: Tutor;
-  can: {
-    create: boolean;
-    edit: boolean;
-    change_status: boolean;
-    export: boolean;
-  };
+  can: TutorPageAbilities;
 }
 
 export interface TutorCreatePayload {
@@ -271,7 +334,42 @@ export interface TutorCreatePayload {
   telefono_alternativo: string | null;
   email: string | null;
   direccion: string | null;
-  parentesco: string;
+  parentesco_id: number;
+  sucursal_registro_id?: number;
+}
+
+export interface TutorUpdatePayload {
+  nombre_completo?: string;
+  ci?: string | null;
+  telefono?: string;
+  telefono_alternativo?: string | null;
+  email?: string | null;
+  direccion?: string | null;
+  parentesco_id?: number;
+  version: number;
+}
+
+export interface TutorStatusPayload {
+  activo: boolean;
+  motivo: string | null;
+  version: number;
+}
+
+export interface TutorParentescoOption {
+  id: number;
+  nombre: string;
+}
+
+export interface TutorOptions {
+  parentescos: TutorParentescoOption[];
+  sucursales: PacienteSucursalOption[];
+  estados: { value: 'activo' | 'inactivo'; label: string }[];
+  can: TutorPageAbilities;
+}
+
+export interface TutorOptionsResponse {
+  data: TutorOptions;
+  can: TutorPageAbilities;
 }
 
 export interface PacienteTutorAssociation {
@@ -334,6 +432,9 @@ export const EMPTY_PACIENTE_ABILITIES: PacientePageAbilities = {
   export: false,
   tutors: false,
   diagnostics: false,
+  manage_tutors: false,
+  view_emergency_contacts: false,
+  manage_emergency_contacts: false,
 };
 
 export const EMPTY_PACIENTE_ROW_ABILITIES: PacienteRowAbilities = {
@@ -342,6 +443,25 @@ export const EMPTY_PACIENTE_ROW_ABILITIES: PacienteRowAbilities = {
   view_sensibles: false,
   delete: false,
   view_tutors: false,
+  manage_tutors: false,
+  view_emergency_contacts: false,
+  manage_emergency_contacts: false,
+};
+
+export const EMPTY_TUTOR_ABILITIES: TutorAbilities = {
+  edit_data: false,
+  edit_contact: false,
+  change_status: false,
+  view_contact: false,
+  delete: false,
+  manage_tutors: false,
+  view_patients: false,
+};
+
+export const EMPTY_TUTOR_PAGE_ABILITIES: TutorPageAbilities = {
+  ...EMPTY_TUTOR_ABILITIES,
+  create: false,
+  export: false,
 };
 
 export const PACIENTES_TEXTS = {
@@ -358,6 +478,7 @@ export const PACIENTES_TEXTS = {
   cancel: 'Cancelar',
   close: 'Cerrar',
   back: 'Volver',
+  fichaIngreso: 'Ficha de ingreso',
   deleteUnavailable: 'Los pacientes no se eliminan. Cambiá el estado a retirado.',
   tutorsUnavailable: 'Disponible con el submódulo de tutores y contactos (04.02).',
   diagnosticsUnavailable: 'Disponible con el catálogo de diagnósticos (módulo 05).',
@@ -373,6 +494,16 @@ export const PACIENTES_TEXTS = {
   newTutor: 'Crear tutor nuevo',
   tutorSearch: 'Buscar tutor por nombre, documento o teléfono...',
   noTutorsFound: 'No se encontraron tutores.',
+  emergencyContacts: 'Contactos de emergencia',
+  emergencyContactsDesc: 'Personas adicionales a las que contactar ante una emergencia.',
+  addEmergencyContact: 'Agregar contacto',
+  editEmergencyContact: 'Editar contacto',
+  deleteEmergencyContact: 'Eliminar contacto',
+  noEmergencyContacts: 'Sin contactos de emergencia registrados.',
+  emergencyContactName: 'Nombre completo',
+  emergencyContactPhone: 'Teléfono',
+  emergencyContactSaved: 'Contacto guardado',
+  emergencyContactDeleted: 'Contacto eliminado',
   duplicateTitle: 'Posible duplicado',
   duplicateHardTitle: 'Documento ya registrado',
   duplicateConfirm: 'No es el mismo, continuar',
@@ -384,4 +515,47 @@ export const PACIENTES_TEXTS = {
   auditUnavailable: 'No se pudo registrar la consulta en la bitácora. Por seguridad no se muestra la ficha. Reintentá.',
   notFound: 'El paciente no existe o está fuera de tu alcance.',
   networkError: 'No se pudo conectar con el servidor. Reintentá la operación.',
+} as const;
+
+export const TUTORES_TEXTS = {
+  title: 'Tutores',
+  description: 'Contactos familiares, teléfonos y pacientes asociados.',
+  searchPlaceholder: 'Buscar por nombre, documento o teléfono...',
+  loading: 'Cargando tutores...',
+  noResults: 'No hay tutores para los filtros seleccionados.',
+  create: 'Nuevo tutor',
+  edit: 'Editar tutor',
+  status: 'Cambiar estado',
+  export: 'Exportar Excel',
+  exporting: 'Exportando...',
+  exportSuccess: 'Exportación generada',
+  view: 'Ver ficha',
+  back: 'Volver a tutores',
+  save: 'Guardar',
+  saving: 'Guardando...',
+  cancel: 'Cancelar',
+  close: 'Cerrar',
+  editContactOnly: 'Solo podés editar los datos de contacto de este tutor.',
+  deactivateReason: 'Motivo de la desactivación *',
+  statusReason: 'Motivo',
+  active: 'Activo',
+  inactive: 'Inactivo',
+  principal: 'Principal',
+  noPatients: 'Sin pacientes asociados.',
+  patients: 'Pacientes asociados',
+  contact: 'Contacto',
+  identity: 'Identificación',
+  branch: 'Sucursal de registro',
+  allBranches: 'Todas las sucursales',
+  allStates: 'Todos los estados',
+  noParentesco: 'Sin parentesco',
+  auditNotice: 'La consulta de la ficha queda registrada en la bitácora.',
+  auditUnavailable:
+    'No se pudo registrar la consulta en la bitácora. Por seguridad no se muestra la ficha. Reintentá.',
+  notFound: 'El tutor no existe o está fuera de tu alcance.',
+  versionConflict: 'Otro usuario modificó la ficha. Recargá los datos antes de guardar.',
+  duplicate: 'Ya existe un tutor con datos similares.',
+  phoneHint: '8 dígitos. Móvil: empieza en 6 o 7. Alternativo: también 2, 3 o 4.',
+  statusReasonRequired: 'Indicá el motivo para desactivar al tutor.',
+  deleteUnavailable: 'Los tutores no se eliminan. Desactivalos para conservar el historial.',
 } as const;

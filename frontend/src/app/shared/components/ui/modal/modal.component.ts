@@ -107,13 +107,16 @@ let nextModalId = 0;
             <ng-content select="[modal-body]"></ng-content>
           </div>
 
-          @if (customFooter) {
-            <div class="shrink-0">
-              <ng-content select="[modal-footer]"></ng-content>
-            </div>
-          } @else if (showFooter) {
+          <!--
+            Un solo ng-content para el pie. Si se declaran dos slots con el
+            mismo selector en ramas @if distintas, Angular asigna el contenido
+            al primero aunque esa rama no se renderice.
+          -->
+          @if (customFooter || showFooter) {
             <div
-              class="shrink-0 border-t border-gray-100 p-6 pt-4 dark:border-gray-800"
+              [class]="customFooter
+                ? 'shrink-0'
+                : 'shrink-0 border-t border-gray-100 p-6 pt-4 dark:border-gray-800'"
             >
               <ng-content select="[modal-footer]"></ng-content>
             </div>

@@ -105,12 +105,17 @@ class Paciente extends Model
             'paciente_tutor',
             'paciente_id',
             'tutor_id',
-        )->withPivot('es_principal');
+        )->withPivot(['parentesco_id', 'es_principal']);
     }
 
     public function estadoHistorial(): HasMany
     {
         return $this->hasMany(EstadoPacienteHistorial::class);
+    }
+
+    public function contactosEmergencia(): HasMany
+    {
+        return $this->hasMany(ContactoEmergencia::class);
     }
 
     public function tutorPrincipal(): ?Tutor

@@ -1,0 +1,63 @@
+<app-modal
+  [open]="open"
+  [title]="texts.status"
+  size="md"
+  [showFooter]="true"
+  (closed)="close()"
+>
+  <div class="space-y-5">
+    @if (error(); as apiError) {
+      <app-alert variant="error" title="No se pudo cambiar el estado" [message]="apiError.message" />
+    }
+
+    <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-900">
+      <p class="text-sm text-gray-600 dark:text-gray-400">Estado actual</p>
+      <p class="mt-1 text-base font-semibold text-gray-800 dark:text-white/90">
+        {{ tutor.activo ? texts.active : texts.inactive }}
+      </p>
+      <p class="mt-1 text-xs text-gray-500">{{ tutor.nombre_completo }}</p>
+    </div>
+
+    <div>
+      <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Nuevo estado *</label>
+      <app-select-field
+        [options]="statusOptions"
+        [value]="target()"
+        placeholder="Seleccioná el nuevo estado"
+        ariaLabel="Nuevo estado del tutor"
+        (valueChange)="target.set($any($event)); error.set(null)"
+      />
+    </div>
+
+    <div>
+      <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-status-motivo">
+        Motivo {{ target() === 'inactivo' ? '*' : '(opcional)' }}
+      </label>
+      <textarea
+        id="tutor-status-motivo"
+        app-textarea
+        rows="3"
+        [value]="motivo()"
+        (input)="motivo.set($any($event.target).value)"
+        placeholder="Explicá el motivo del cambio"
+      ></textarea>
+      @if (target() === 'inactivo') {
+        <p class="mt-1 text-xs text-gray-500">
+          Obligatorio al desactivar. Si el tutor es principal de un paciente activo, primero designá otro principal.
+        </p>
+      }
+      @if (fieldError('motivo'); as message) {
+        <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+      }
+    </div>
+  </div>
+
+  <div modal-footer class="flex flex-wrap items-center justify-end gap-2">
+    <button app-button variant="outline" type="button" (click)="close()" [disabled]="saving()">
+      {{ texts.cancel }}
+    </button>
+    <button app-button variant="default" type="button" (click)="submit()" [disabled]="saving()">
+      {{ saving() ? texts.saving : texts.save }}
+    </button>
+  </div>
+</app-modal>

@@ -1,0 +1,47 @@
+<app-modal
+  [open]="open"
+  [title]="esArchivar ? texts.archiveTitle : texts.reactivateTitle"
+  size="md"
+  [showFooter]="true"
+  (closed)="close()"
+>
+  <div class="space-y-5">
+    @if (error(); as apiError) {
+      <app-alert variant="error" title="No se pudo cambiar el estado" [message]="apiError.message" />
+    }
+
+    <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-900">
+      <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+        {{ ficha.fecha_ingreso }} · {{ ficha.estado_label }}
+      </p>
+      <p class="mt-1 text-xs text-gray-500">
+        {{ esArchivar ? texts.archiveHelp : 'La ficha volverá a su estado anterior.' }}
+      </p>
+    </div>
+
+    <div>
+      <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="ficha-estado-motivo">
+        {{ esArchivar ? texts.archiveReason : texts.reactivateReason }}
+      </label>
+      <textarea
+        id="ficha-estado-motivo"
+        app-textarea
+        rows="3"
+        [formControl]="form.controls.motivo"
+        placeholder="Explicá el motivo"
+      ></textarea>
+      @if (fieldError('motivo'); as message) {
+        <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+      }
+    </div>
+  </div>
+
+  <div modal-footer class="flex flex-wrap items-center justify-end gap-2">
+    <button app-button variant="outline" type="button" (click)="close()" [disabled]="saving()">
+      {{ texts.cancel }}
+    </button>
+    <button app-button variant="default" type="button" (click)="submit()" [disabled]="saving()">
+      {{ saving() ? texts.saving : (esArchivar ? texts.archive : texts.reactivate) }}
+    </button>
+  </div>
+</app-modal>

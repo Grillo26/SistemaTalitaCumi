@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * Asociación paciente–tutor (04.01/RF-010, 04.02/RN-003).
+ * Asociación paciente–tutor (04.02/RF-004, 04.02/RN-003).
  */
 class PacienteTutor extends Model
 {
@@ -25,6 +25,7 @@ class PacienteTutor extends Model
     protected $fillable = [
         'paciente_id',
         'tutor_id',
+        'parentesco_id',
         'es_principal',
     ];
 
@@ -46,5 +47,10 @@ class PacienteTutor extends Model
     public function tutor(): BelongsTo
     {
         return $this->belongsTo(Tutor::class);
+    }
+
+    public function parentesco(): BelongsTo
+    {
+        return $this->belongsTo(Parentesco::class);
     }
 }

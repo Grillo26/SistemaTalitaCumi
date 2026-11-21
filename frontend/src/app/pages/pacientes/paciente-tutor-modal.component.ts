@@ -15,8 +15,14 @@ import { AlertComponent } from '../../shared/components/ui/alert/alert.component
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { InputDirective } from '../../shared/components/ui/input/input.directive';
 import { ModalComponent } from '../../shared/components/ui/modal/modal.component';
+import { SelectFieldComponent } from '../../shared/components/ui/select/select-field.component';
 import { TextareaDirective } from '../../shared/components/ui/textarea/textarea.directive';
-import { PACIENTES_TEXTS, PacientesApiError, Tutor } from './pacientes.models';
+import {
+  PACIENTES_TEXTS,
+  PacientesApiError,
+  Tutor,
+  TutorOptions,
+} from './pacientes.models';
 import { PacientesService } from './pacientes.service';
 
 type TutorModalMode = 'buscar' | 'nuevo';
@@ -29,6 +35,7 @@ type TutorModalMode = 'buscar' | 'nuevo';
     AlertComponent,
     ButtonComponent,
     InputDirective,
+    SelectFieldComponent,
     TextareaDirective,
   ],
   templateUrl: './paciente-tutor-modal.component.html',
@@ -41,6 +48,7 @@ export class PacienteTutorModalComponent implements OnInit {
   @Input({ required: true }) open = false;
   @Input({ required: true }) pacienteId = 0;
   @Input({ required: true }) pacienteNombre = '';
+  @Input() sucursalId: number | null = null;
 
   @Output() closed = new EventEmitter<void>();
   @Output() saved = new EventEmitter<void>();
@@ -48,10 +56,12 @@ export class PacienteTutorModalComponent implements OnInit {
   readonly texts = PACIENTES_TEXTS;
   readonly mode = signal<TutorModalMode>('buscar');
   readonly results = signal<Tutor[]>([]);
+  readonly options = signal<TutorOptions | null>(null);
   readonly saving = signal(false);
   readonly error = signal<PacientesApiError | null>(null);
 
   readonly searchControl = this.fb.nonNullable.control('');
+  readonly parentescoControl = this.fb.nonNullable.control('');
   readonly form = this.fb.nonNullable.group({
     nombre_completo: ['', [Validators.required, Validators.maxLength(200)]],
     ci: [''],
@@ -59,10 +69,25 @@ export class PacienteTutorModalComponent implements OnInit {
     telefono_alternativo: [''],
     email: [''],
     direccion: [''],
-    parentesco: ['', [Validators.required, Validators.maxLength(50)]],
+    parentesco_id: ['', [Validators.required]],
   });
 
+  get parentescoOptions(): { value: string; label: string }[] {
+    return (this.options()?.parentescos ?? []).map((parentesco) => ({
+      value: String(parentesco.id),
+      label: parentesco.nombre,
+    }));
+  }
+
   ngOnInit(): void {
+    this.service
+      .getTutorOptions()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => this.options.set(response.data),
+        error: () => undefined,
+      });
+
     this.searchControl.valueChanges
       .pipe(debounceTime(350), distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
       .subscribe((term) => this.search(term));
@@ -99,7 +124,12 @@ export class PacienteTutorModalComponent implements OnInit {
     this.error.set(null);
 
     this.service
-      .associateTutor(this.pacienteId, tutor.id)
+      .associateTutor(
+        this.pacienteId,
+        tutor.id,
+        false,
+        this.parentescoControl.value ? Number(this.parentescoControl.value) : null,
+      )
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
@@ -126,6 +156,13 @@ export class PacienteTutorModalComponent implements OnInit {
     }
 
     const value = this.form.getRawValue();
+    const parentescoId = Number(value.parentesco_id);
+    const sucursalId =
+      this.sucursalId ??
+      (this.options()?.sucursales.length === 1
+        ? this.options()?.sucursales[0].id ?? null
+        : null);
+
     this.saving.set(true);
     this.error.set(null);
 
@@ -137,13 +174,14 @@ export class PacienteTutorModalComponent implements OnInit {
         telefono_alternativo: value.telefono_alternativo.trim() || null,
         email: value.email.trim() || null,
         direccion: value.direccion.trim() || null,
-        parentesco: value.parentesco.trim(),
+        parentesco_id: parentescoId,
+        sucursal_registro_id: sucursalId ?? undefined,
       })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response) => {
           this.service
-            .associateTutor(this.pacienteId, response.data.id)
+            .associateTutor(this.pacienteId, response.data.id, false, parentescoId)
             .pipe(takeUntilDestroyed(this.destroyRef))
             .subscribe({
               next: () => {

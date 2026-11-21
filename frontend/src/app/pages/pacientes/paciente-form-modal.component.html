@@ -288,8 +288,17 @@
               <input id="tutor-nombre" app-input type="text" [formControl]="form.controls.tutor_nombre" />
             </div>
             <div>
-              <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-parentesco">Parentesco *</label>
-              <input id="tutor-parentesco" app-input type="text" [formControl]="form.controls.tutor_parentesco" />
+              <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Parentesco *</label>
+              <app-select-field
+                [options]="parentescoOptions"
+                [value]="form.controls.tutor_parentesco_id.value"
+                placeholder="Seleccioná el parentesco"
+                ariaLabel="Parentesco del tutor"
+                (valueChange)="form.controls.tutor_parentesco_id.setValue($event)"
+              />
+              @if (fieldError('tutor_principal.parentesco_id'); as message) {
+                <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+              }
             </div>
             <div>
               <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-telefono">Teléfono principal *</label>

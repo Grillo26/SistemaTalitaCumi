@@ -4,6 +4,7 @@ namespace App\Modules\Pacientes\Http\Resources;
 
 use App\Models\User;
 use App\Modules\Organizacion\Models\Branch;
+use App\Modules\Pacientes\Models\ContactoEmergencia;
 use App\Modules\Pacientes\Models\Paciente;
 use App\Modules\Pacientes\Models\PacienteTutor;
 use App\Modules\Pacientes\Support\PacienteAbilities;
@@ -52,8 +53,12 @@ final class PacienteResource extends JsonResource
             ? null
             : 'Disponible con el submódulo de tutores y contactos (04.02).';
         $data['tutores'] = PacientesModule::TUTORES_DISPONIBLES
-            ? self::tutores($paciente)
+            ? self::tutores($paciente, $actor, $request)
             : null;
+        $data['contactos_emergencia'] = PacientesModule::CONTACTOS_EMERGENCIA_DISPONIBLES
+            && $actor->can(PacientesPermission::CONTACT_EMERGENCY_VIEW)
+                ? self::contactosEmergencia($paciente, $actor, $request)
+                : [];
         $data['can'] = PacienteAbilities::for($actor, $paciente);
 
         return $data;
@@ -111,9 +116,13 @@ final class PacienteResource extends JsonResource
     /**
      * @return list<array<string, mixed>>
      */
-    private static function tutores(Paciente $paciente): array
+    private static function tutores(Paciente $paciente, User $actor, Request $request): array
     {
-        $paciente->loadMissing('relacionesTutor.tutor');
+        $paciente->loadMissing([
+            'relacionesTutor.tutor.parentescoCatalogo',
+            'relacionesTutor.tutor.sucursalRegistro',
+            'relacionesTutor.parentesco',
+        ]);
 
         return $paciente->relacionesTutor
             ->filter(static fn (PacienteTutor $relacion): bool => $relacion->tutor !== null)
@@ -122,18 +131,30 @@ final class PacienteResource extends JsonResource
                 $relacion->es_principal ? 0 : 1,
                 mb_strtolower((string) $relacion->tutor->nombre_completo),
             ))
-            ->map(static fn (PacienteTutor $relacion): array => [
-                'tutor_id' => (int) $relacion->tutor_id,
-                'es_principal' => (bool) $relacion->es_principal,
-                'nombre_completo' => $relacion->tutor->nombre_completo,
-                'ci' => $relacion->tutor->ci,
-                'telefono' => $relacion->tutor->telefono,
-                'telefono_alternativo' => $relacion->tutor->telefono_alternativo,
-                'email' => $relacion->tutor->email,
-                'direccion' => $relacion->tutor->direccion,
-                'parentesco' => $relacion->tutor->parentesco,
-                'activo' => (bool) $relacion->tutor->activo,
-            ])
+            ->map(static fn (PacienteTutor $relacion): array => TutorResource::forPaciente(
+                $actor,
+                $relacion,
+                $request,
+            ))
+            ->filter(static fn (array $tutor): bool => $tutor !== [])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private static function contactosEmergencia(Paciente $paciente, User $actor, Request $request): array
+    {
+        $paciente->loadMissing('contactosEmergencia.parentesco');
+
+        return $paciente->contactosEmergencia
+            ->sortBy(static fn (ContactoEmergencia $contacto): string => mb_strtolower((string) $contacto->nombre_completo))
+            ->map(static fn (ContactoEmergencia $contacto): array => ContactoEmergenciaResource::for(
+                $actor,
+                $contacto,
+                $request,
+            ))
             ->values()
             ->all();
     }

@@ -2,8 +2,12 @@
 
 namespace Tests\Feature\Modules\Pacientes;
 
+use App\Modules\Seguridad\Models\AccionAuditada;
+use Database\Seeders\ContactosEmergenciaAccionAuditadaSeeder;
+use Database\Seeders\FichaIngresoAccionAuditadaSeeder;
 use Database\Seeders\PacientesAccionAuditadaSeeder;
 use Database\Seeders\PacientesPermissionSeeder;
+use Database\Seeders\TutoresAccionAuditadaSeeder;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -22,6 +26,10 @@ final class PacienteSeederTest extends PacientesTestCase
         $this->assertTrue($recepcion->hasPermissionTo('paciente.crear'));
         $this->assertTrue($recepcion->hasPermissionTo('paciente.cambiar_estado'));
         $this->assertTrue($recepcion->hasPermissionTo('tutor.crear'));
+        $this->assertTrue($recepcion->hasPermissionTo('paciente.ver_contacto_emergencia'));
+        $this->assertTrue($recepcion->hasPermissionTo('paciente.editar_contacto_emergencia'));
+        $this->assertTrue($administracion->hasPermissionTo('paciente.ver_contacto_emergencia'));
+        $this->assertTrue($administracion->hasPermissionTo('paciente.editar_contacto_emergencia'));
     }
 
     public function test_reseeding_does_not_restore_revoked_permissions(): void
@@ -35,14 +43,20 @@ final class PacienteSeederTest extends PacientesTestCase
         $this->assertFalse($recepcion->fresh()->hasPermissionTo('paciente.crear'));
     }
 
-    public function test_audited_action_catalog_is_idempotent(): void
+    public function test_audited_action_catalogs_are_idempotent(): void
     {
         $this->seed(PacientesAccionAuditadaSeeder::class);
         $this->seed(PacientesAccionAuditadaSeeder::class);
+        $this->seed(TutoresAccionAuditadaSeeder::class);
+        $this->seed(TutoresAccionAuditadaSeeder::class);
+        $this->seed(ContactosEmergenciaAccionAuditadaSeeder::class);
+        $this->seed(ContactosEmergenciaAccionAuditadaSeeder::class);
+        $this->seed(FichaIngresoAccionAuditadaSeeder::class);
+        $this->seed(FichaIngresoAccionAuditadaSeeder::class);
 
         $this->assertSame(
-            10,
-            \App\Modules\Seguridad\Models\AccionAuditada::query()
+            22,
+            AccionAuditada::query()
                 ->where('modulo', 'pacientes')
                 ->count(),
         );
