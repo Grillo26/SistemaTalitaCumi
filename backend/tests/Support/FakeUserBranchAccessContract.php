@@ -7,8 +7,8 @@ use App\Modules\Organizacion\Contracts\UserBranchAccessContract;
 /**
  * Doble de prueba para el contrato de alcance por sucursal.
  *
- * Se usa solo en tests para simular el módulo 02. La implementación de
- * producción es StubUserBranchAccessContract (falla explícitamente).
+ * Se usa solo en tests para simular distintas asignaciones. La
+ * implementación de producción es EloquentUserBranchAccess.
  */
 final class FakeUserBranchAccessContract implements UserBranchAccessContract
 {

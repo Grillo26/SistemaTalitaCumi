@@ -2,6 +2,7 @@ import {
   Component,
   ElementRef,
   HostListener,
+  computed,
   inject,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -20,6 +21,11 @@ export class UserDropdownComponent {
   private readonly elementRef = inject(ElementRef<HTMLElement>);
 
   readonly user = this.auth.user;
+  readonly canSeeConfiguration = computed(
+    () =>
+      this.auth.hasPermission('parametro.ver') ||
+      this.auth.hasPermission('parametro.ver_operativos'),
+  );
   isOpen = false;
 
   get initials(): string {
@@ -43,7 +49,7 @@ export class UserDropdownComponent {
   }
 
   async logout(): Promise<void> {
-    this.auth.logout();
+    await this.auth.logout();
     this.closeDropdown();
     await this.router.navigateByUrl('/login');
   }

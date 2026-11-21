@@ -2,7 +2,6 @@ import {
   Component,
   DestroyRef,
   ElementRef,
-  HostListener,
   OnInit,
   ViewChild,
   computed,
@@ -24,6 +23,7 @@ import { ButtonComponent } from '../../../shared/components/ui/button/button.com
 import { ComponentCardComponent } from '../../../shared/components/common/component-card/component-card.component';
 import { PageBreadcrumbComponent } from '../../../shared/components/common/page-breadcrumb/page-breadcrumb.component';
 import { InputDirective } from '../../../shared/components/ui/input/input.directive';
+import { ModalComponent } from '../../../shared/components/ui/modal/modal.component';
 import { PaginationComponent } from '../../../shared/components/ui/pagination/pagination.component';
 import { SelectFieldComponent } from '../../../shared/components/ui/select/select-field.component';
 import { SwitchComponent } from '../../../shared/components/ui/switch/switch.component';
@@ -53,6 +53,7 @@ import { ParameterTimeInputComponent } from './parameter-time-input.component';
     BadgeComponent,
     ButtonComponent,
     InputDirective,
+    ModalComponent,
     SelectFieldComponent,
     SwitchComponent,
     TextareaDirective,
@@ -149,28 +150,6 @@ export class ConfiguracionPageComponent implements OnInit {
       .subscribe(() => this.load());
   }
 
-  @HostListener('document:keydown.escape')
-  onEscape(): void {
-    if (this.historyOpen()) {
-      this.closeHistory();
-      return;
-    }
-
-    if (this.restoreOpen()) {
-      this.closeRestore();
-      return;
-    }
-
-    if (this.editOpen()) {
-      this.closeEdit();
-      return;
-    }
-
-    if (this.detailOpen()) {
-      this.closeDetail();
-    }
-  }
-
   load(): void {
     this.loading.set(true);
     this.error.set(null);
@@ -233,6 +212,7 @@ export class ConfiguracionPageComponent implements OnInit {
       return;
     }
 
+    this.detailOpen.set(false);
     this.editing.set(parameter);
     this.editOpen.set(true);
     this.editError.set(null);
@@ -339,6 +319,7 @@ export class ConfiguracionPageComponent implements OnInit {
       return;
     }
 
+    this.detailOpen.set(false);
     this.restoreTarget.set(parameter);
     this.restoreOpen.set(true);
     this.restoreForm.reset({ motivo: '', confirmado: false });
@@ -444,6 +425,7 @@ export class ConfiguracionPageComponent implements OnInit {
       return;
     }
 
+    this.detailOpen.set(false);
     this.historyTarget.set(parameter);
     this.historyOpen.set(true);
     this.historyEntries.set([]);

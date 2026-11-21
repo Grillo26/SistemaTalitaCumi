@@ -2,7 +2,7 @@
 
 Frontend del **Sistema de Gestión TalitaCumi**, un sistema de turnos, inscripciones y cobros para un centro de desarrollo infantil. Está construido con Angular standalone y Tailwind CSS, tomando como base visual y técnica el template TailAdmin Angular.
 
-> Esta entrega incluye la base del sistema, el login simulado y las páginas de referencia de componentes. Los módulos del negocio están creados como rutas vacías listas para implementarse.
+> Esta entrega incluye la base del sistema, autenticación real (Fase 1 del módulo 02) y las páginas de referencia de componentes. Los módulos del negocio están creados como rutas vacías listas para implementarse.
 
 ---
 
@@ -47,18 +47,18 @@ npm start -- --port 4300
 
 ---
 
-## Acceso demo
+## Acceso y autenticación
 
 La aplicación abre en el login si no hay una sesión activa.
 
 - Ruta: `/login`
-- Correo: cualquiera con formato válido (por ejemplo `recepcion@talitacumi.bo`)
-- Contraseña: cualquiera
-- “Recordarme” guarda la sesión en `localStorage`; sin marcarlo se guarda en `sessionStorage`.
+- El acceso es exclusivo para usuarios creados por el backend.
+- El primer Superadmin se crea con `php artisan seguridad:crear-superadmin` (ver README del backend). No hay contraseñas de demostración.
+- “Recordar mi correo” guarda **solo el identificador** en `localStorage` para prellenar el formulario. El token se guarda en `sessionStorage` y nunca en `localStorage`.
+- Si el usuario tiene una contraseña temporal (`debe_cambiar_password`), el sistema lo redirige a `/cambiar-password` y bloquea el resto de las pantallas hasta que la cambie.
+- El cierre de sesión está en el menú de usuario del header y también en el mismo menú está “Cambiar contraseña”.
 
-Al ingresar se carga el layout principal y la página de Inicio. El cierre de sesión está en el menú de usuario del header.
-
-> La autenticación es simulada. No hay validación contra backend todavía.
+> La autenticación es real contra `/api/auth/*`. Los servicios de 01/02/03 consumen la API con el token mediante un interceptor HTTP.
 
 ---
 
@@ -68,7 +68,8 @@ Al ingresar se carga el layout principal y la página de Inicio. El cierre de se
 
 | Ruta | Descripción |
 |---|---|
-| `/login` | Inicio de sesión |
+| `/login` | Inicio de sesión real |
+| `/cambiar-password` | Cambio de contraseña propio o forzado |
 | `/` | Inicio (protegido) |
 
 ### Módulos del sistema
@@ -90,8 +91,11 @@ Todas las rutas están dentro del layout principal y protegidas por `authGuard`.
 | `/organizacion/sucursales` | Organización y sucursales |
 | `/organizacion/salas-ambientes` | Salas y ambientes |
 | `/organizacion/configuracion` | Configuración general y parámetros |
+| `/seguridad/usuarios` | Usuarios, roles asignados y alcance por sucursal |
+| `/seguridad/roles-permisos` | Matriz de roles y permisos |
+| `/seguridad/bitacora` | Consulta y reconstrucción de bitácora |
 
-Los módulos sin implementar muestran un estado vacío reutilizable (`app-module-placeholder`). Las rutas `/organizacion/sucursales`, `/organizacion/salas-ambientes` y `/organizacion/configuracion` ya están implementadas y consumen la API real del backend.
+Los módulos sin implementar muestran un estado vacío reutilizable (`app-module-placeholder`). Las rutas `/organizacion/sucursales`, `/organizacion/salas-ambientes`, `/organizacion/configuracion`, `/seguridad/usuarios`, `/seguridad/roles-permisos` y `/seguridad/bitacora` ya están implementadas y consumen la API real del backend.
 
 ### Páginas de referencia
 
@@ -283,25 +287,41 @@ La página de login usa `app-theme-toggle-two` (botón circular sobre el conteni
 
 ---
 
-### 4. Autenticación simulada
+### 4. Autenticación real
 
 **Archivos:**
 
+- `src/app/core/models/auth.models.ts`
+- `src/app/core/services/session-store.service.ts`
 - `src/app/core/services/auth.service.ts`
+- `src/app/core/interceptors/auth.interceptor.ts`
 - `src/app/core/guards/auth.guard.ts`
 - `src/app/core/guards/guest.guard.ts`
+- `src/app/core/guards/permission.guard.ts`
+- `src/app/pages/seguridad/cambiar-password/`
+- `src/app/pages/other-page/forbidden/`
 
 **API de `AuthService`:**
 
 ```ts
-readonly user = this.auth.user;                  // Signal<SessionUser | null>
+readonly user = this.auth.user;                          // Signal<SessionUser | null>
 readonly isAuthenticated = this.auth.isAuthenticated;
+readonly mustChangePassword = this.auth.mustChangePassword;
+readonly permissions = this.auth.permissions;
 
-await this.auth.login(email, remember);          // simula login
-this.auth.logout();
+await this.auth.initialize();                            // rehidrata con GET /api/auth/me
+await this.auth.login(identificador, password, remember);
+await this.auth.logout();
+await this.auth.changePassword(actual, nueva, confirmacion);
+this.auth.hasPermission('usuario.ver');
 ```
 
-`authGuard` protege el layout; `guestGuard` evita volver al login con sesión activa.
+- `SessionStore` guarda el token en `sessionStorage`; “Recordar mi correo” solo persiste el identificador en `localStorage`.
+- El login acepta nombre de usuario o correo. El correo es opcional en el alta y no se usa para envíos; el identificador principal es `username`.
+- `auth.initialize()` se ejecuta con `provideAppInitializer` antes de la primera navegación.
+- El interceptor adjunta `Authorization: Bearer`, limpia la sesión y redirige a `/login?expirada=1` ante un 401, y redirige a `/cambiar-password` ante `PASSWORD_CHANGE_REQUIRED`.
+- `authGuard` protege el layout y fuerza el cambio de contraseña; `guestGuard` evita volver al login con sesión activa; `permissionGuard` usa `route.data.permission` y redirige a `/error-403`.
+- La página `/cambiar-password` muestra la política vigente que llega en `me`, valida 422 por campo y conserva lo digitado si falla la red.
 
 ---
 
@@ -368,6 +388,54 @@ Los toasts se crean programáticamente y se apilan en la esquina inferior derech
 ```
 
 También se exporta `TABLE_IMPORTS` para importar todas las directivas juntas.
+
+---
+
+### 7.1 Modal compartido
+
+**Selector:** `app-modal`
+**Archivo:** `src/app/shared/components/ui/modal/modal.component.ts`
+
+Modal centrado con altura máxima del 90% del viewport, scroll interno y foco atrapado. Reemplaza los overlays Tailwind que estaban repetidos en las páginas de negocio.
+
+**Inputs:**
+
+| Input | Tipo | Default | Descripción |
+|---|---|---|---|
+| `open` | `boolean` | `true` | Controla la visibilidad. También se puede usar `@if` desde la página |
+| `title` | `string` | `''` | Título del header estándar |
+| `subtitle` | `string` | `''` | Subtítulo del header estándar |
+| `size` | `'sm' \| 'md' \| 'lg' \| 'xl'` | `'md'` | Ancho máximo del panel |
+| `customHeader` | `boolean` | `false` | Usa el header propio proyectado con `modal-header` |
+| `showClose` | `boolean` | `true` | Muestra el botón de cierre del header estándar |
+| `showFooter` | `boolean` | `false` | Muestra el wrapper de footer estándar |
+| `padded` | `boolean` | `true` | Agrega padding al cuerpo; desactivarlo para contenido que ya trae `p-*` |
+
+**Output:** `closed`
+
+```html
+<app-modal
+  [open]="open()"
+  title="Nueva sucursal"
+  subtitle="Los campos marcados con * son obligatorios."
+  size="lg"
+  (closed)="close()"
+>
+  <div modal-body>...</div>
+  <div modal-footer class="flex justify-end gap-2">...</div>
+</app-modal>
+```
+
+Para páginas con header propio:
+
+```html
+<app-modal [customHeader]="true" [showClose]="false" size="lg" (closed)="close()">
+  <div modal-header>...</div>
+  <div>...</div>
+</app-modal>
+```
+
+El componente bloquea el scroll del body, cierra con Escape/backdrop y usa `cdkTrapFocus` para devolver el foco al cerrar.
 
 ---
 
@@ -652,11 +720,11 @@ Inputs: `title`, `description`. Estado vacío de los módulos pendientes.
 - Sin eliminación física ni exportación PDF/Excel (RF-008 y RF-012 pendientes).
 - Errores `422` resaltados por campo, `409` de edición concurrente con opción de recargar, y `403`/`503` con alerta.
 
-**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-pagination`, `TABLE_IMPORTS`, `input[app-input]`, `app-select-field`, `textarea[app-textarea]`, `app-switch` y `ToastService`. Los diálogos son overlays Tailwind dentro de la página; no se agregó una primitiva compartida de modal.
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-pagination`, `app-modal`, `TABLE_IMPORTS`, `input[app-input]`, `app-select-field`, `textarea[app-textarea]`, `app-switch` y `ToastService`. Los diálogos usan el modal compartido centrado.
 
-**Permisos y alcance:** la API devuelve `can` (`create`, `update`, `update_contact`, `change_status`, `delete`) y la UI oculta las acciones no permitidas. No existe un guard de permisos en Angular; la seguridad real se valida en Laravel. Hasta que exista el módulo 02, Administración y Recepción reciben `503 MODULE_02_PENDING` por el contrato de alcance y la página muestra el error.
+**Permisos y alcance:** la API devuelve `can` (`create`, `update`, `update_contact`, `change_status`, `delete`) y la UI oculta las acciones no permitidas. Existe `permissionGuard` para rutas y el sidebar filtra por permiso; la seguridad real se valida en Laravel. El alcance por sucursal es real desde la Fase 2 del módulo 02: las listas se filtran por las sucursales asignadas y las operaciones fuera de alcance responden `403`.
 
-**Autenticación:** `AuthService` sigue siendo simulado. Los endpoints requieren `auth:sanctum`; sin login real, la página mostrará `401` hasta el módulo 02. No se usan datos mock.
+**Autenticación:** `AuthService` es real desde la Fase 1 del módulo 02; el token se adjunta con el interceptor y la página redirige al login si la sesión expira. No se usan datos mock.
 
 **Estado:** RF-001 a RF-008, RF-011 y RF-013 implementados o parciales según el backend; RF-009, RF-010, RF-012 y el alcance por usuario quedan pendientes.
 
@@ -695,11 +763,11 @@ Inputs: `title`, `description`. Estado vacío de los módulos pendientes.
 - Errores `422` por campo, duplicado de sala/ambiente con conflicto visible, `409` de concurrencia con recarga, y `403`/`503`/`401` con alerta.
 - Sin eliminación física y sin exportación PDF/Excel (RF-012 y RF-016 pendientes).
 
-**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-pagination`, `TABLE_IMPORTS`, `input[app-input]`, `app-select-field`, `textarea[app-textarea]`, `app-switch` y `ToastService`. Los diálogos son overlays Tailwind dentro de la página; no se agregó una primitiva compartida de modal ni tabs.
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-pagination`, `app-modal`, `TABLE_IMPORTS`, `input[app-input]`, `app-select-field`, `textarea[app-textarea]`, `app-switch` y `ToastService`. Los diálogos usan el modal compartido centrado; las tabs de secciones siguen siendo propias de la página.
 
-**Permisos y alcance:** la API devuelve `can` para catálogos, salas y ambientes; la UI oculta las acciones no permitidas. No existe un guard de permisos en Angular. El selector de sucursales reutiliza `SucursalesService` en modo lectura. Hasta el módulo 02, Administración y Recepción reciben `503 MODULE_02_PENDING` por el contrato de alcance.
+**Permisos y alcance:** la API devuelve `can` para catálogos, salas y ambientes; la UI oculta las acciones no permitidas. Existe `permissionGuard` para rutas y el sidebar filtra por permiso. El selector de sucursales reutiliza `SucursalesService` en modo lectura. El alcance por sucursal es real desde la Fase 2 del módulo 02.
 
-**Autenticación:** `AuthService` sigue siendo simulado. Los endpoints requieren `auth:sanctum`; sin login real, la página mostrará `401` hasta el módulo 02. No se usan datos mock.
+**Autenticación:** `AuthService` es real desde la Fase 1 del módulo 02; el token se adjunta con el interceptor y la página redirige al login si la sesión expira. No se usan datos mock.
 
 **Estado:** RF-001 a RF-011, RF-015 y RF-017 implementados o parciales según el backend; RF-012 (chequeo de asociaciones), RF-013/RF-014 (consumidores 06/07), RF-016 y el alcance por usuario quedan pendientes. El contrato `AmbienteDirectoryContract` está listo, pero la agenda actual no tiene `ambiente_id`; el módulo 07 deberá agregarlo.
 
@@ -743,13 +811,149 @@ Inputs: `title`, `description`. Estado vacío de los módulos pendientes.
 - Errores `422` por campo, `409` de concurrencia con opción de recargar, `403`/`401` con alerta. El formulario conserva lo digitado si falla la red.
 - Sin botón de exportación: RF-015 queda pendiente de infraestructura.
 
-**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-pagination`, `TABLE_IMPORTS`, `input[app-input]`, `app-select-field`, `textarea[app-textarea]`, `app-switch`, Flatpickr y `ToastService`. Los diálogos son overlays Tailwind dentro de la página; no se agregó una primitiva compartida de modal.
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-pagination`, `app-modal`, `TABLE_IMPORTS`, `input[app-input]`, `app-select-field`, `textarea[app-textarea]`, `app-switch`, Flatpickr y `ToastService`. Los diálogos usan el modal compartido centrado.
 
-**Permisos:** la API devuelve `can` (`view`, `view_all`, `view_operatives`, `update`, `update_logo`, `restore`, `export`). Recepción solo ve parámetros operativos con `visible_recepcion = true`; Administración ve todo en modo lectura; Superadmin edita y restaura. No existe un guard de permisos en Angular; la seguridad real se valida en Laravel.
+**Permisos:** la API devuelve `can` (`view`, `view_all`, `view_operatives`, `update`, `update_logo`, `restore`, `export`). Recepción solo ve parámetros operativos con `visible_recepcion = true`; Administración ve todo en modo lectura; Superadmin edita y restaura. Existe `permissionGuard` para rutas; la seguridad real se valida en Laravel.
 
-**Autenticación:** `AuthService` sigue siendo simulado. Los endpoints requieren `auth:sanctum`; sin login real, la página mostrará `401` hasta el módulo 02. No se usan datos mock.
+**Autenticación:** `AuthService` es real desde la Fase 1 del módulo 02; el token se adjunta con el interceptor y la página redirige al login si la sesión expira. No se usan datos mock.
 
 **Estado:** RF-001 a RF-014 y RF-016 implementados en backend y frontend; RF-015 (PDF/Excel) pendiente y sin botón. El logo de RF-009 está implementado con el disco `public`.
+
+---
+
+### 22. Usuarios y alcance por sucursal
+
+**Ruta:** `/seguridad/usuarios`
+**Entrada de sidebar:** `Seguridad → Usuarios` (visible con `usuario.ver`)
+
+**Archivos:**
+
+- `src/app/pages/seguridad/usuarios/usuarios.page.ts`
+- `src/app/pages/seguridad/usuarios/usuarios.page.html`
+- `src/app/pages/seguridad/usuarios/usuarios.routes.ts`
+- `src/app/pages/seguridad/usuarios/usuarios.service.ts`
+- `src/app/pages/seguridad/usuarios/usuarios.models.ts`
+- `src/app/pages/seguridad/usuarios/username.util.ts` (generación de usuario desde el nombre)
+
+**API consumida:**
+
+| Método | Endpoint | Acción |
+|---|---|---|
+| GET | `/api/seguridad/usuarios` | Listado paginado con búsqueda y filtros por rol, sucursal y estado |
+| GET | `/api/seguridad/usuarios/opciones` | Catálogo de roles y sucursales activas del alcance |
+| GET | `/api/seguridad/usuarios/{id}` | Ficha |
+| GET | `/api/seguridad/usuarios/{id}/historial` | Historial de eventos |
+| POST | `/api/seguridad/usuarios` | Alta con rol y sucursales; devuelve contraseña temporal |
+| PATCH | `/api/seguridad/usuarios/{id}` | Edición con versión |
+| POST | `/api/seguridad/usuarios/{id}/activar` | Activación |
+| POST | `/api/seguridad/usuarios/{id}/desactivar` | Desactivación con motivo |
+| POST | `/api/seguridad/usuarios/{id}/resetear-password` | Reseteo con temporal |
+| POST | `/api/seguridad/usuarios/{id}/desbloquear` | Desbloqueo con motivo |
+| POST | `/api/seguridad/usuarios/{id}/cerrar-sesiones` | Cierre remoto con motivo |
+| DELETE | `/api/seguridad/usuarios/{id}` | Siempre `409 USER_DELETE_NOT_ALLOWED` |
+
+**Funcionalidad:**
+
+- Listado paginado con búsqueda por nombre, correo, usuario o documento; filtros por rol, sucursal y estado (`activo`, `inactivo`, `bloqueado`).
+- Ficha con datos, rol, sucursales, estado, último acceso, sesiones activas, intentos fallidos y versión.
+- Alta/edición en modal compartido con rol único y selector de sucursales; el selector se refresca desde `/opciones` en cada apertura y solo muestra sucursales activas del alcance. El formulario conserva lo digitado si falla la red.
+- El nombre de usuario se autogenera desde el nombre completo en el alta (`Juan Pérez` → `juan.perez`), quitando tildes y normalizando espacios. Si se edita manualmente, deja de autocompletarse; en edición se conserva el existente.
+- El correo es opcional en el alta y la edición. Si se deja vacío se envía `null`; no se envían correos desde el sistema.
+- La contraseña temporal se muestra una sola vez, con botón de copiar; no se guarda en el frontend.
+- Activación/desactivación con motivo; desactivar invalida las sesiones del usuario.
+- Reseteo con cierre de sesiones y cambio forzado; desbloqueo y cierre remoto con motivo.
+- Historial con acción, actor, fecha, IP, motivo, resultado, marca de crítico y detalle antes/después.
+- Errores `422` por campo, `409` de versión con recarga, `403`/`401` con alerta.
+- Sin eliminación física y sin exportación (RF-U15 pendiente de infraestructura).
+
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-pagination`, `app-modal`, `TABLE_IMPORTS`, `input[app-input]`, `app-select-field`, `textarea[app-textarea]` y `ToastService`. Los diálogos usan el modal compartido centrado.
+
+**Permisos:** la API devuelve `can` (`create`, `export=false`) y un `can` por fila (`update`, `change_status`, `reset_password`, `unlock`, `close_sessions`, `delete=false`). Superadmin administra; Administración solo consulta usuarios de sus sucursales; Recepción no accede. El backend revalida permisos y alcance en cada endpoint.
+
+**Estado:** RF-U01 a RF-U14 y RF-U16 implementados en backend y frontend; RF-U15 (exportación) pendiente y sin botón. El alcance por sucursal es real desde la Fase 2 del módulo 02.
+
+---
+
+### 23. Roles y permisos
+
+**Ruta:** `/seguridad/roles-permisos`
+**Entrada de sidebar:** `Seguridad → Roles y permisos` (visible con `rol.ver`)
+
+**Archivos:**
+
+- `src/app/pages/seguridad/roles-permisos/roles-permisos.page.ts`
+- `src/app/pages/seguridad/roles-permisos/roles-permisos.page.html`
+- `src/app/pages/seguridad/roles-permisos/roles-permisos.routes.ts`
+- `src/app/pages/seguridad/roles-permisos/roles-permisos.service.ts`
+- `src/app/pages/seguridad/roles-permisos/roles-permisos.models.ts`
+- `src/app/pages/seguridad/roles-permisos/role-matrix-date-input.component.ts` (Flatpickr)
+
+**API consumida:**
+
+| Método | Endpoint | Acción |
+|---|---|---|
+| GET | `/api/seguridad/roles` | Matriz completa: roles, módulos, acciones y total |
+| GET | `/api/seguridad/roles/{id}` | Matriz de un rol |
+| GET | `/api/seguridad/roles/{id}/historial?fecha=AAAA-MM-DD` | Vigencia histórica desde bitácora |
+| PUT | `/api/seguridad/roles/{id}/permisos` | Edición con `version` |
+| DELETE | `/api/seguridad/roles/{id}` | Siempre `409 ROLE_DELETE_NOT_ALLOWED` |
+
+**Funcionalidad:**
+
+- Selector de rol con contador de permisos y versión.
+- Grilla por módulo y acción con checkboxes; el Superadmin edita y Administración consulta.
+- Permisos críticos del Superadmin bloqueados con candado y aviso.
+- Guardado con `version`; 409 de concurrencia con recarga; `MATRIX_UNCHANGED` y `CRITICAL_PERMISSION_PROTECTED` con mensajes claros.
+- Consulta de vigencia por fecha con selector Flatpickr y detalle de permisos vigentes.
+- Los cambios aplican en la siguiente operación (RN-22).
+- Sin creación/eliminación de roles y sin exportación (RF-R03 pendiente de infraestructura).
+
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert` y Flatpickr. No se agregó una primitiva compartida de tabs; el selector de roles usa botones Tailwind.
+
+**Permisos:** `rol.ver` para consultar; `rol.editar_permisos` para editar. Superadmin edita; Administración solo consulta; Recepción no accede. La API devuelve `can.edit` y `can.export=false`.
+
+**Estado:** RF-R01–R15 implementados en backend y frontend, salvo la exportación de RF-R03, pendiente de infraestructura.
+
+---
+
+### 24. Bitácora
+
+**Ruta:** `/seguridad/bitacora`
+**Entrada de sidebar:** `Seguridad → Bitácora` (visible con `bitacora.ver`)
+
+**Archivos:**
+
+- `src/app/pages/seguridad/bitacora/bitacora.page.ts`
+- `src/app/pages/seguridad/bitacora/bitacora.page.html`
+- `src/app/pages/seguridad/bitacora/bitacora.routes.ts`
+- `src/app/pages/seguridad/bitacora/bitacora.service.ts`
+- `src/app/pages/seguridad/bitacora/bitacora.models.ts`
+- `src/app/pages/seguridad/bitacora/bitacora-date-input.component.ts` (Flatpickr)
+
+**API consumida:**
+
+| Método | Endpoint | Acción |
+|---|---|---|
+| GET | `/api/seguridad/bitacora` | Listado paginado con filtros |
+| GET | `/api/seguridad/bitacora/opciones` | Usuarios, módulos, entidades, acciones, resultados y retención |
+| GET | `/api/seguridad/bitacora/reconstruir` | Estado de una entidad en una fecha |
+| GET | `/api/seguridad/bitacora/{id}` | Detalle del evento |
+
+**Funcionalidad:**
+
+- Filtros por fecha desde/hasta (Flatpickr), usuario, módulo, entidad, acción, resultado, criticidad y sucursal.
+- Paginación y tabla con usuario, módulo, entidad/ID, acción, resultado, crítico, IP y sucursal.
+- Detalle con antes/después en JSON, motivo, IP, actor y resultado.
+- Marca visual de eventos críticos.
+- Panel de reconstrucción por entidad, ID y fecha.
+- Nota de retención configurada y ausencia de purga manual.
+- Sin botón de exportación: RF-B09 pendiente de infraestructura.
+
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-pagination`, `app-modal`, `TABLE_IMPORTS`, `input[app-input]`, `app-select-field` y Flatpickr.
+
+**Permisos:** `bitacora.ver`. Superadmin ve todo; Administración ve eventos de sus sucursales, incluidos los eventos de seguridad de sus usuarios; la matriz de permisos queda solo para Superadmin. Recepción no accede. La API devuelve `can.export=false`.
+
+**Estado:** RF-B01–B08 y B10–B15 implementados en backend y frontend; RF-B09 (exportar bitácora) pendiente de infraestructura.
 
 ---
 
@@ -794,8 +998,9 @@ No se agregaron `swiper` ni `jsvectormap` porque sus componentes no forman parte
 - FAQs, Pricing Tables, File Manager.
 - Tasks y Kanban.
 - Coming Soon.
-- Carrusel, mapas vectoriales, avatares, modales compartidos, tabs, drawer, popovers y demás componentes no solicitados. Las páginas de sucursales, salas/ambientes y configuración usan overlays Tailwind propios.
+- Carrusel, mapas vectoriales, avatares, tabs y popovers no solicitados. Los diálogos de las páginas de negocio usan el modal compartido `app-modal`; las tabs de salas/ambientes siguen siendo propias de esa página.
 - Exportación PDF/Excel de parámetros (RF-015): sin librerías instaladas y sin botón en la UI.
+- Exportaciones de usuarios/matriz/bitácora y envío automático de contraseña temporal (pendiente de infraestructura).
 - Registro, recuperación de contraseña y verificación en dos pasos.
 - Widget promocional del sidebar.
 
@@ -819,10 +1024,12 @@ No se ejecutó `ng serve` ni se levantó el servidor.
 - Todos los componentes son standalone.
 - Se usa la sintaxis moderna `@if` / `@for`.
 - El layout y las rutas están preparados para implementar cada módulo de forma independiente.
-- El login y la sesión son simulados; al conectar Laravel se debe reemplazar `AuthService` por una implementación real.
-- La página `/organizacion/sucursales` ya consume la API real; mientras no exista login (módulo 02), la API responderá `401`. Administración y Recepción recibirán `503` por el contrato de alcance pendiente.
+- La autenticación es real desde la Fase 1 del módulo 02: token Sanctum en `sessionStorage`, interceptor HTTP, `authGuard`/`guestGuard`/`permissionGuard` y cambio de contraseña forzado. El alcance real por sucursal y la pantalla de usuarios están en la Fase 2; la matriz de roles y permisos en la Fase 3; la bitácora en la Fase 4.
+- La página `/organizacion/sucursales` ya consume la API real con el token del interceptor. El alcance por sucursal es real desde la Fase 2: Administración y Recepción ven solo sus sucursales asignadas; las operaciones fuera de alcance responden `403`.
 - La página `/organizacion/salas-ambientes` también consume la API real, con cuatro secciones y overlays propios. No se agregaron dependencias nuevas.
-- La página `/organizacion/configuracion` consume la API real, agrupa parámetros por categoría y usa overlays propios para ficha, edición, restauración e historial. `/configuracion` redirige a la ruta canónica.
-- No se agregaron datos mock ni dependencias nuevas para sucursales, salas/ambientes o configuración. La exportación PDF/Excel (RF-015) sigue fuera de alcance y no se muestra el botón.
+- La página `/organizacion/configuracion` consume la API real, agrupa parámetros por categoría (incluida la nueva categoría `seguridad`) y usa overlays propios para ficha, edición, restauración e historial. `/configuracion` redirige a la ruta canónica.
+- La pantalla `/cambiar-password` es la única operación permitida cuando el usuario tiene contraseña temporal; el resto de las rutas se redirige allí.
+- **Estado Fase 4:** consulta/detalle de bitácora, filtros, scoping, catálogo de acciones, reconstrucción por fecha y mecanismo de auditoría de datos sensibles/exportaciones implementados. Solo quedan las exportaciones PDF/Excel y los consumidores de los módulos 04/08/11.
+- No se agregaron datos mock ni dependencias nuevas para sucursales, salas/ambientes, configuración ni autenticación. La exportación PDF/Excel (RF-015) sigue fuera de alcance y no se muestra el botón.
 - `npm run build` se ejecutó correctamente después de implementar el módulo.
 - No se realizó commit.

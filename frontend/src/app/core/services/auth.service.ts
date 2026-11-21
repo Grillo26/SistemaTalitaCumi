@@ -1,75 +1,134 @@
-import { Injectable, computed, signal } from '@angular/core';
-
-const SESSION_KEY = 'talitacumi.session';
-
-export interface SessionUser {
-  name: string;
-  email: string;
-  role: string;
-}
+import { HttpClient } from '@angular/common/http';
+import { Injectable, computed, inject } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
+import { environment } from '../../../environments/environment';
+import {
+  ApiUser,
+  LoginResponse,
+  MeResponse,
+  SessionUser,
+} from '../models/auth.models';
+import { SessionStore } from './session-store.service';
 
 /**
- * Autenticación simulada para la maqueta del sistema.
- * Cualquier correo y contraseña son aceptados; la sesión se guarda localmente.
+ * Autenticación real contra /api/auth (módulo 02, Fase 1).
+ *
+ * Mantiene la API pública histórica (`user`, `isAuthenticated`, `logout`)
+ * y agrega `initialize`, `mustChangePassword`, `hasPermission` y
+ * `changePassword`.
  */
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private readonly userSignal = signal<SessionUser | null>(this.readSession());
+  private readonly http = inject(HttpClient);
+  private readonly store = inject(SessionStore);
 
-  readonly user = this.userSignal.asReadonly();
-  readonly isAuthenticated = computed(() => this.userSignal() !== null);
+  readonly user = this.store.user;
+  readonly isAuthenticated = computed(() => this.store.user() !== null);
+  readonly mustChangePassword = computed(
+    () => this.store.user()?.mustChangePassword === true,
+  );
+  readonly permissions = computed(
+    () => this.store.user()?.permissions ?? [],
+  );
 
-  async login(email: string, remember: boolean): Promise<SessionUser> {
-    await new Promise((resolve) => setTimeout(resolve, 650));
+  /**
+   * Rehidrata la sesión al arrancar la aplicación si hay token.
+   * Un 401 limpia la sesión; un fallo de red también, para no dejar la UI
+   * en un estado inconsistente.
+   */
+  async initialize(): Promise<void> {
+    if (this.store.token() === null) {
+      return;
+    }
 
-    const user: SessionUser = {
-      name: this.buildName(email),
-      email: email.trim(),
-      role: 'Recepción',
-    };
-
-    const primary = remember ? localStorage : sessionStorage;
-    const secondary = remember ? sessionStorage : localStorage;
-    primary.setItem(SESSION_KEY, JSON.stringify(user));
-    secondary.removeItem(SESSION_KEY);
-
-    this.userSignal.set(user);
-    return user;
-  }
-
-  logout(): void {
-    localStorage.removeItem(SESSION_KEY);
-    sessionStorage.removeItem(SESSION_KEY);
-    this.userSignal.set(null);
-  }
-
-  private readSession(): SessionUser | null {
     try {
-      const raw =
-        localStorage.getItem(SESSION_KEY) ?? sessionStorage.getItem(SESSION_KEY);
-
-      if (!raw) return null;
-      const parsed = JSON.parse(raw) as Partial<SessionUser>;
-      if (!parsed.email) return null;
-
-      return {
-        name: parsed.name?.trim() || this.buildName(parsed.email),
-        email: parsed.email,
-        role: parsed.role?.trim() || 'Recepción',
-      };
+      const response = await firstValueFrom(
+        this.http.get<MeResponse>(`${environment.apiUrl}/auth/me`),
+      );
+      this.store.setUser(this.mapUser(response.data));
     } catch {
-      return null;
+      this.store.clear();
     }
   }
 
-  private buildName(email: string): string {
-    const localPart = email.split('@')[0] ?? '';
-    const words = localPart
-      .split(/[._-]+/)
-      .map((part) => part.trim())
-      .filter(Boolean)
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase());
+  async login(
+    identifier: string,
+    password: string,
+    remember: boolean,
+  ): Promise<SessionUser> {
+    const response = await firstValueFrom(
+      this.http.post<LoginResponse>(`${environment.apiUrl}/auth/login`, {
+        identificador: identifier.trim(),
+        password,
+        recordar: remember,
+      }),
+    );
 
-    return words.join(' ') || 'Recepción';
+    const user = this.mapUser(response.data.user);
+    this.store.setSession(response.data.token, user);
+    this.store.rememberIdentifier(remember ? identifier : '');
+
+    return user;
+  }
+
+  async logout(): Promise<void> {
+    try {
+      await firstValueFrom(
+        this.http.post<void>(`${environment.apiUrl}/auth/logout`, {}),
+      );
+    } catch {
+      // El cierre local debe funcionar aunque el token ya no sea válido.
+    }
+
+    this.store.clear();
+  }
+
+  async changePassword(
+    currentPassword: string,
+    newPassword: string,
+    confirmation: string,
+  ): Promise<void> {
+    await firstValueFrom(
+      this.http.post<{ message: string }>(
+        `${environment.apiUrl}/auth/cambiar-password`,
+        {
+          current_password: currentPassword,
+          password: newPassword,
+          password_confirmation: confirmation,
+        },
+      ),
+    );
+
+    const user = this.store.user();
+
+    if (user !== null) {
+      this.store.setUser({ ...user, mustChangePassword: false });
+    }
+  }
+
+  hasPermission(permission: string): boolean {
+    return this.permissions().includes(permission);
+  }
+
+  rememberedIdentifier(): string {
+    return this.store.rememberedIdentifier();
+  }
+
+  private mapUser(data: ApiUser): SessionUser {
+    return {
+      id: data.id,
+      name: data.nombre_completo,
+      email: data.email,
+      username: data.username,
+      documento: data.documento,
+      role: data.rol,
+      permissions: data.permisos,
+      branches: data.sucursales,
+      globalScope: data.alcance_global,
+      requiresBranchAssignment: data.requires_branch_assignment,
+      mustChangePassword: data.debe_cambiar_password,
+      lastAccess: data.ultimo_acceso,
+      passwordPolicy: data.password_policy,
+    };
   }
 }

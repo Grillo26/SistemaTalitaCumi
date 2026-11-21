@@ -74,16 +74,33 @@ final class ListBranchesTest extends OrganizacionTestCase
             ->assertJsonPath('can.change_status', false);
     }
 
-    public function test_reception_without_contract_receives_pending_module_error(): void
+    public function test_reception_with_real_contract_sees_only_assigned_branches(): void
+    {
+        $assigned = Branch::factory()->create(['codigo' => 'SUC-100', 'nombre' => 'Asignada']);
+        Branch::factory()->create(['codigo' => 'SUC-200', 'nombre' => 'No asignada']);
+
+        $user = $this->actingAsRole('recepcion');
+        $user->branches()->attach($assigned->id);
+
+        $this->getJson('/api/organizacion/sucursales')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.codigo', 'SUC-100')
+            ->assertJsonPath('meta.total', 1);
+    }
+
+    public function test_reception_without_assigned_branches_sees_empty_list(): void
     {
         Branch::factory()->create();
 
         $this->actingAsRole('recepcion');
 
         $this->getJson('/api/organizacion/sucursales')
-            ->assertStatus(503)
-            ->assertJsonPath('code', 'MODULE_02_PENDING')
-            ->assertJsonPath('message', 'Módulo 02 Usuarios y roles pendiente');
+            ->assertOk()
+            ->assertJsonCount(0, 'data')
+            ->assertJsonPath('meta.total', 0)
+            ->assertJsonPath('can.create', false)
+            ->assertJsonPath('can.update', false);
     }
 
     public function test_administracion_can_list_with_contract_but_cannot_edit_structure(): void

@@ -3,6 +3,7 @@ export type ParameterType = 'entero' | 'decimal' | 'hora' | 'texto' | 'booleano'
 export type ParameterCategory =
   | 'identidad'
   | 'operacion'
+  | 'seguridad'
   | 'agenda'
   | 'pagos'
   | 'formato_documentos'
@@ -133,6 +134,7 @@ export const CATEGORY_OPTIONS: { value: ParameterCategory | ''; label: string }[
   { value: '', label: 'Todas las categorías' },
   { value: 'identidad', label: 'Identidad del centro' },
   { value: 'operacion', label: 'Operación' },
+  { value: 'seguridad', label: 'Seguridad' },
   { value: 'agenda', label: 'Agenda' },
   { value: 'pagos', label: 'Pagos' },
   { value: 'formato_documentos', label: 'Formato de documentos' },

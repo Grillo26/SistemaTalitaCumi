@@ -229,13 +229,14 @@ final class SalaTest extends SalasAmbientesTestCase
             ->assertJsonPath('code', 'BRANCH_ACCESS_DENIED');
     }
 
-    public function test_non_global_user_without_contract_gets_pending_module_error(): void
+    public function test_non_global_user_without_assigned_branches_sees_empty_list(): void
     {
         $this->actingAsRole('recepcion');
 
         $this->getJson('/api/organizacion/salas-ambientes/salas')
-            ->assertStatus(503)
-            ->assertJsonPath('code', 'MODULE_02_PENDING');
+            ->assertOk()
+            ->assertJsonCount(0, 'data')
+            ->assertJsonPath('meta.total', 0);
     }
 
     public function test_stale_version_returns_conflict(): void

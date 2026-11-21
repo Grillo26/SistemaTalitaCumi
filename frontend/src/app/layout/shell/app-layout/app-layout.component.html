@@ -14,6 +14,11 @@
     <!-- app header start -->
     <app-header/>
     <!-- app header end -->
+    @if (requiresBranchAssignment()) {
+      <div class="mx-4 mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300 md:mx-6">
+        Tu usuario no tiene sucursales asignadas. Contactá al Superadmin para que te asigne al menos una sucursal activa.
+      </div>
+    }
     <div class="p-4 mx-auto w-full max-w-(--breakpoint-2xl) md:p-6">
       <router-outlet></router-outlet>
     </div>

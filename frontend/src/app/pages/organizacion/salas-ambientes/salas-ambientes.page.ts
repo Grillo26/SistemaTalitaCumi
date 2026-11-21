@@ -1,7 +1,6 @@
 import {
   Component,
   DestroyRef,
-  HostListener,
   OnInit,
   computed,
   inject,
@@ -17,6 +16,7 @@ import { AlertComponent } from '../../../shared/components/ui/alert/alert.compon
 import { BadgeComponent } from '../../../shared/components/ui/badge/badge.component';
 import { ButtonComponent } from '../../../shared/components/ui/button/button.component';
 import { InputDirective } from '../../../shared/components/ui/input/input.directive';
+import { ModalComponent } from '../../../shared/components/ui/modal/modal.component';
 import { PaginationComponent } from '../../../shared/components/ui/pagination/pagination.component';
 import { SelectFieldComponent } from '../../../shared/components/ui/select/select-field.component';
 import { SwitchComponent } from '../../../shared/components/ui/switch/switch.component';
@@ -71,6 +71,7 @@ type StatusTarget =
     AlertComponent,
     PaginationComponent,
     InputDirective,
+    ModalComponent,
     SelectFieldComponent,
     TextareaDirective,
     SwitchComponent,
@@ -295,33 +296,6 @@ export class SalasAmbientesPageComponent implements OnInit {
     });
     this.subscribeSearch(this.tipoSearchControl, () => this.loadTiposSala());
     this.subscribeSearch(this.turnoSearchControl, () => this.loadTurnosCatalogo());
-  }
-
-  @HostListener('document:keydown.escape')
-  onEscape(): void {
-    if (this.statusOpen()) {
-      this.closeStatus();
-      return;
-    }
-    if (this.salaFormOpen()) {
-      this.closeSalaForm();
-      return;
-    }
-    if (this.ambienteFormOpen()) {
-      this.closeAmbienteForm();
-      return;
-    }
-    if (this.tipoFormOpen()) {
-      this.closeTipoForm();
-      return;
-    }
-    if (this.turnoFormOpen()) {
-      this.closeTurnoForm();
-      return;
-    }
-    if (this.detailOpen()) {
-      this.closeDetail();
-    }
   }
 
   setSection(section: SalasAmbientesSection): void {
@@ -724,6 +698,7 @@ export class SalasAmbientesPageComponent implements OnInit {
 
           this.salaForm.controls.activo.disable();
           this.clearSalaFormErrors();
+          this.detailOpen.set(false);
           this.salaFormOpen.set(true);
         },
         error: (error: SalasAmbientesApiError) => this.error.set(error),
@@ -861,6 +836,7 @@ export class SalasAmbientesPageComponent implements OnInit {
 
           this.ambienteForm.controls.activo.disable();
           this.clearAmbienteFormErrors();
+          this.detailOpen.set(false);
           this.ambienteFormOpen.set(true);
         },
         error: (error: SalasAmbientesApiError) => this.error.set(error),
@@ -1273,6 +1249,7 @@ export class SalasAmbientesPageComponent implements OnInit {
       return;
     }
 
+    this.detailOpen.set(false);
     this.statusTarget.set({ type, entity } as StatusTarget);
     this.statusMode.set(mode);
     this.statusForm.reset({ motivo: '' });

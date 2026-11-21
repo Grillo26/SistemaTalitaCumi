@@ -127,6 +127,8 @@ erDiagram
     usuario ||--o{ acceso_clinico_temporal : "otorga o recibe"
 ```
 
+> **Implementación real del módulo 02 (Fase 1):** la base viva usa `users` de Laravel + Spatie (`roles`, `permissions`, `role_has_permissions`, `model_has_roles`) + `personal_access_tokens` de Sanctum. Las entidades `usuario`, `rol`, `permiso`, `rol_permiso` y `sesion` del diagrama son **referencia lógica/aspiracional** y no existen como tablas físicas. La pivote real es `usuario_sucursal`.
+
 ### Profesionales
 
 ```mermaid
@@ -606,7 +608,9 @@ erDiagram
 
 Timestamps: `created_at`, `updated_at`.
 
-#### `rol` — Roles
+#### `rol` — Roles (referencia lógica)
+
+> **Implementación real:** la tabla física es `roles` de Spatie (`id`, `name`, `guard_name`, `timestamps`, `version`, `es_superadmin`). `guard_name = 'web'`; `version` habilita concurrencia optimista y `es_superadmin` identifica el rol protegido sin depender del nombre. No hay `activo`.
 
 *Configuración.* Roles base: Superadmin, Administración, Recepción. Los permisos son fijos (definidos por el sistema), pero el rol es editable en su descripción.
 
@@ -619,7 +623,9 @@ Timestamps: `created_at`, `updated_at`.
 
 Timestamps: `created_at`, `updated_at`.
 
-#### `permiso` — Permisos
+#### `permiso` — Permisos (referencia lógica)
+
+> **Implementación real:** la tabla física es `permissions` de Spatie (`id`, `name`, `guard_name`, `timestamps`). El módulo (`usuario`, `rol`, `bitacora`, etc.) se deriva del prefijo `entidad.accion`.
 
 *Configuración.* Permisos granulares por módulo y acción, definidos por el sistema. `codigo` es único (`paciente.ver`, `pago.anular`, `clinico.exportar`…).
 
@@ -632,7 +638,9 @@ Timestamps: `created_at`, `updated_at`.
 
 Timestamps: solo `created_at`.
 
-#### `rol_permiso` — Permisos por rol
+#### `rol_permiso` — Permisos por rol (referencia lógica)
+
+> **Implementación real:** la tabla física es `role_has_permissions` de Spatie (`permission_id`, `role_id`).
 
 *Pivot.*
 
@@ -643,37 +651,71 @@ Timestamps: solo `created_at`.
 
 `PRIMARY KEY (rol_id, permiso_id)`. Sin timestamps.
 
-#### `usuario` — Usuarios
+#### `users` — Usuarios (implementación real)
 
-*Maestro.* Solo Superadmin, Administración y Recepción usan el sistema. Los profesionales y los padres no.
+*Maestro.* Solo Superadmin, Administración y Recepción usan el sistema. Los profesionales y los padres no. El nombre lógico `usuario` se mantiene en la documentación funcional; la tabla física es `users`.
 
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `nombre_completo` | `varchar(200)` |  |  |  |
-| `email` | `varchar(150)` |  | `UK` |  |
-| `username` | `varchar(100)` |  | `UK` |  |
-| `password_hash` | `varchar(255)` |  |  | bcrypt o Argon2 |
-| `rol_id` | `bigint` |  | `FK → rol` |  |
-| `activo` | `boolean` |  | `DEFAULT true` |  |
-| `ultimo_acceso` | `timestamptz` | sí |  |  |
-| `intentos_fallidos` | `int` |  | `DEFAULT 0` |  |
-| `bloqueado_hasta` | `timestamptz` | sí |  |  |
+| `name` | `varchar(255)` |  |  | Nombre completo |
+| `username` | `varchar(100)` | sí | `UNIQUE` | Login principal; obligatorio en la aplicación |
+| `documento` | `varchar(20)` | sí | `UNIQUE` | CI; obligatorio en la aplicación |
+| `email` | `varchar(255)` | sí | `UNIQUE` | Opcional. Login alternativo si está presente; no se usa para envíos |
+| `email_verified_at` | `timestamp` | sí |  | No se usa en Etapa 1 |
+| `password` | `varchar(255)` |  |  | Hash bcrypt |
+| `activo` | `boolean` |  | `DEFAULT true` | RN-05/RN-06 |
+| `motivo_estado` | `text` | sí |  | Motivo de la última desactivación |
+| `estado_cambiado_en` | `timestamptz` | sí |  |  |
+| `ultimo_acceso` | `timestamptz` | sí |  | RF-A16 |
+| `intentos_fallidos` | `smallint` |  | `DEFAULT 0` |  |
+| `bloqueado_hasta` | `timestamptz` | sí |  | Bloqueo temporal |
+| `debe_cambiar_password` | `boolean` |  | `DEFAULT false` | RF-A13 |
+| `password_actualizada_en` | `timestamptz` | sí |  | Caducidad opcional |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
+| `remember_token` | `varchar(100)` | sí |  | Laravel |
+| `created_at` / `updated_at` | `timestamptz` | sí |  |  |
 
-Índices: `UNIQUE (email)`, `UNIQUE (username)`, `INDEX (rol_id)`. Timestamps: `created_at`, `updated_at`.
+Índices: `UNIQUE (username)`, `UNIQUE (documento)`, `UNIQUE (email)` (permite múltiples `NULL`), `INDEX (activo)`. El rol vive en `model_has_roles` (Spatie) y no en una columna `rol_id`. No hay `deleted_at`. Login: `username` o `email` si existe.
 
 #### `usuario_sucursal` — Usuario en sucursal
 
-*Pivot.* En qué sucursales puede trabajar cada usuario. La sucursal activa se guarda en sesión y se revalida en cada petición.
+*Pivot.* En qué sucursales puede trabajar cada usuario. **No hay concepto de “sucursal activa en sesión”**: el alcance se evalúa contra todas las sucursales asignadas. La implementación real (`EloquentUserBranchAccess`) está activa desde la Fase 2. El Superadmin con `sucursal.alcance_global` puede operar sin pivotes; el bootstrap lo crea sin sucursales si aún no hay ninguna.
 
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
-| `usuario_id` | `bigint` |  | `FK → usuario` |  |
-| `sucursal_id` | `bigint` |  | `FK → sucursal` |  |
+| `usuario_id` | `bigint` |  | `FK → users`, `ON DELETE CASCADE` |  |
+| `sucursal_id` | `bigint` |  | `FK → sucursal`, `ON DELETE CASCADE` |  |
 
 `PRIMARY KEY (usuario_id, sucursal_id)`, `INDEX (sucursal_id)`. Sin timestamps.
 
-#### `sesion` — Sesiones
+#### `usuario_password_historial` — Historial de contraseñas
+
+*Historial.* Solo hashes de contraseñas anteriores. No guarda contraseñas en claro.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `usuario_id` | `bigint` |  | `FK → users`, `ON DELETE CASCADE` |  |
+| `password_hash` | `varchar(255)` |  |  | Hash bcrypt |
+| `created_at` | `timestamptz` |  | `DEFAULT now()` |  |
+
+Índice: `(usuario_id, created_at)`. Sin `updated_at`. Se podan los hashes más antiguos según `password_historial_cantidad`.
+
+#### `modulo_permisos_inicializado` — Matriz inicial por módulo
+
+*Configuración interna.* Marca qué módulos ya aplicaron su matriz inicial para que `db:seed` no vuelva a conceder permisos revocados por UI (RF-R04).
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `modulo` | `varchar(100)` |  | `PK` | Ej. `seguridad`, `organizacion.sucursales`, `seguridad.matriz_baseline` |
+| `inicializado_en` | `timestamptz` |  | `DEFAULT now()` |  |
+
+La clave `seguridad.matriz_baseline` marca la línea base histórica de la matriz (Fase 3); evita duplicar el evento inicial en cada `db:seed`.
+
+#### `sesion` — Sesiones (referencia lógica, no implementada)
+
+> **No implementada:** el módulo 02 usa `personal_access_tokens` de Sanctum. No se crea la tabla `sesion`. La expiración absoluta se guarda en `personal_access_tokens.expires_at`; la inactividad se mide con `last_used_at` y `sesion_inactividad_minutos`.
 
 *Documento.* Sesiones activas. Token con hash. Cierre por inactividad en contenido clínico.
 
@@ -690,6 +732,23 @@ Timestamps: solo `created_at`.
 
 Índices: `INDEX (usuario_id)`, `INDEX (expira_en)`.
 
+#### `personal_access_tokens` — Tokens de sesión (Sanctum)
+
+*Documento.* Tabla real de sesiones de API. Cada fila es un token bearer; el valor en claro nunca se guarda, solo su hash.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `tokenable_type` / `tokenable_id` | `varchar` / `bigint` |  | índice | Apunta a `App\Models\User` |
+| `name` | `text` |  |  | `sesion` |
+| `token` | `varchar(64)` |  | `UNIQUE` | Hash del token |
+| `abilities` | `text` | sí |  |  |
+| `last_used_at` | `timestamp` | sí |  | Actualizado por `EnsureSessionIsValid` |
+| `expires_at` | `timestamp` | sí | índice | Expiración absoluta |
+| `created_at` / `updated_at` | `timestamp` | sí |  |  |
+
+No se crea la tabla `sesion`. El límite de sesiones y la revocación se implementan sobre esta tabla.
+
 #### `bitacora` — Bitácora
 
 *Historial.* Solo inserción. Registra quién hizo qué, cuándo y en qué sucursal. Inmutable.
@@ -697,20 +756,23 @@ Timestamps: solo `created_at`.
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `usuario_id` | `bigint` | sí | `FK → usuario` | NULL en intentos fallidos |
-| `sucursal_id` | `bigint` | sí | `FK → sucursal` |  |
-| `accion` | `varchar(100)` |  |  | `INSERT`, `UPDATE`, `DELETE`, `LOGIN`, `ANULAR`, etc. |
-| `entidad` | `varchar(100)` | sí |  | Nombre de la tabla |
+| `usuario_id` | `bigint` | sí | `FK → users` | NULL en intentos fallidos con usuario desconocido |
+| `sucursal_id` | `bigint` | sí | `FK → sucursal` | En eventos de usuario se replica una fila por sucursal activa del usuario afectado; los usuarios con alcance global y los eventos globales quedan NULL |
+| `accion` | `varchar(100)` |  |  | `CREAR`, `EDITAR`, `ACTIVAR`, `DESACTIVAR`, `LOGIN`, `LOGIN_FALLIDO`, `CERRAR_SESION`, `BLOQUEAR`, etc. |
+| `entidad` | `varchar(100)` | sí |  | `usuario`, `sesion`, `sucursal`, `parametro`, etc. |
 | `entidad_id` | `bigint` | sí |  |  |
 | `datos_anteriores` | `jsonb` | sí |  |  |
 | `datos_nuevos` | `jsonb` | sí |  |  |
-| `motivo` | `text` | sí |  | Para anulaciones |
-| `ip` | `varchar(45)` | sí |  |  |
+| `motivo` | `text` | sí |  | Para anulaciones, bloqueos y desactivaciones |
+| `ip` | `varchar(45)` | sí |  | Se completa en el módulo 02; filas de 01/02/03 lo dejan NULL |
+| `modulo` | `varchar(50)` | sí |  | `autenticacion`, `usuarios`, `roles`, `auditoria`; NULL en filas históricas |
+| `resultado` | `varchar(20)` | sí |  | `exito`, `fallo`, `denegado`; NULL en filas históricas |
+| `critico` | `boolean` |  | `DEFAULT false` | Eventos críticos (bloqueo, matriz, exportación) |
 | `created_at` | `timestamptz` |  | `DEFAULT now()` |  |
 
-Índices: `(usuario_id)`, `(created_at)`, `(entidad, entidad_id)`, `(accion)`. Trigger `BEFORE UPDATE OR DELETE` que lanza error. Sin `updated_at`.
+Índices: `(usuario_id)`, `(created_at)`, `(entidad, entidad_id)`, `(accion)`, `(modulo)`, `(resultado)`, `(critico)`, `(sucursal_id, created_at)`. Trigger `BEFORE UPDATE OR DELETE` que lanza error. Sin `updated_at`.
 
-> **Implementación actual (módulo 01):** mientras el módulo 02 no cree la tabla `usuario`, la migración de `bitacora` referencia `users.id` (tabla real de autenticación de Laravel). Al implementar el módulo 02 se migrará la FK a `usuario`.
+> **Implementación real:** la tabla física de usuarios es `users`; `bitacora.usuario_id` sigue apuntando a `users.id` y no se migra a una tabla `usuario` inexistente. Las columnas `modulo`, `resultado` y `critico` son nullable/default para tolerar filas históricas, porque el trigger impide rellenarlas con UPDATE. Los listeners de 01/03 no se modificaron en la Fase 1. En la Fase 3, la matriz usa `entidad = 'matriz_permisos'`, `accion = 'EDITAR_PERMISOS'`, con antes/después y `linea_base = true` en el evento inicial. En la Fase 4, las consultas a la bitácora usan `entidad = 'bitacora'`, `accion = 'CONSULTAR'`, y las exportaciones `entidad = 'exportacion'`, `accion = 'EXPORTAR'`, `critico = true`. Los eventos de seguridad de usuario se escriben con `sucursal_id` de cada sucursal activa del usuario afectado (una fila por sucursal); los usuarios con alcance global se registran una sola vez con `sucursal_id NULL`. La matriz, las consultas a la bitácora y las exportaciones siguen siendo globales (`sucursal_id NULL`) y solo las ve el Superadmin.
 
 #### `acceso_clinico_temporal` — Acceso especial a contenido clínico
 
@@ -753,6 +815,37 @@ Timestamps: solo `created_at`.
 Timestamps: solo `updated_at`. Las altas y cambios se reconstruyen desde `bitacora` (`entidad = 'parametro'`). No hay `sucursal_id`: los parámetros son globales (RN-009).
 
 Índices: `clave` único, `categoria`, `visible_recepcion`. El catálogo inicial tiene 23 claves y se carga con `OrganizacionConfiguracionCatalogSeeder`; cada alta deja un registro `CREAR` en bitácora.
+
+> **Módulo 02 (Fases 1–4):** se agregaron 12 claves de seguridad (categoría `seguridad`), por lo que el catálogo pasa a 35 claves. `sesion_inactividad_minutos` se reutiliza en `operacion`. Las fases 2 y 3 no agregan tablas; la Fase 4 agrega `accion_auditada` y reutiliza `bitacora`.
+
+#### `accion_auditada` — Catálogo de acciones auditadas
+
+*Configuración.* Catálogo mínimo de acciones auditables por módulo, entidad y acción (02/RF-B03). No es la bitácora: solo describe qué acciones existen y si son críticas.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `modulo` | `varchar(50)` |  |  | `organizacion`, `usuarios`, `autenticacion`, `roles`, `auditoria` |
+| `entidad` | `varchar(100)` |  |  | `usuario`, `sesion`, `matriz_permisos`, `bitacora`, `exportacion`, etc. |
+| `accion` | `varchar(100)` |  |  | `CREAR`, `EDITAR`, `DESACTIVAR`, `CONSULTAR`, `EXPORTAR`, etc. |
+| `critico` | `boolean` |  | `DEFAULT false` | Marca para filtro rápido (RF-B13) |
+| `activo` | `boolean` |  | `DEFAULT true` |  |
+| `descripcion` | `text` | sí |  | Etiqueta legible para la UI |
+
+`UNIQUE (modulo, entidad, accion)`, `INDEX (modulo, activo)`. Timestamps. Seeder idempotente `AccionAuditadaSeeder` (40 acciones, 7 críticas al cierre de la Fase 4).
+
+#### Migraciones del módulo 02 — Fases 1–4
+
+- `2026_11_21_000000_add_security_fields_to_users_table.php`
+- `2026_11_21_000100_create_usuario_sucursal_table.php`
+- `2026_11_21_000200_create_usuario_password_historial_table.php`
+- `2026_11_21_000300_add_audit_fields_to_bitacora_table.php`
+- `2026_11_21_000400_add_matrix_fields_to_roles_table.php`
+- `2026_11_21_000500_create_modulo_permisos_inicializado_table.php`
+- `2026_11_21_000600_create_accion_auditada_table.php`
+- `2026_11_21_000700_make_users_email_nullable.php`
+
+La Fase 2 no requirió migraciones nuevas. La Fase 3 tampoco: usa `roles.version`, `roles.es_superadmin` y `bitacora`. La Fase 4 agrega `accion_auditada`; la bitácora sigue en `bitacora`. La migración `000700` hace opcional `users.email`; el login por usuario ya existía y el correo deja de ser obligatorio en el alta.
 
 ---
 

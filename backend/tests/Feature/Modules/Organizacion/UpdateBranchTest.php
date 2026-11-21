@@ -179,7 +179,7 @@ final class UpdateBranchTest extends OrganizacionTestCase
             ->assertJsonPath('code', 'BRANCH_ACCESS_DENIED');
     }
 
-    public function test_administracion_without_contract_receives_pending_module_error(): void
+    public function test_administracion_without_assigned_branches_cannot_update_branch(): void
     {
         $branch = Branch::factory()->create(['version' => 1]);
 
@@ -189,8 +189,8 @@ final class UpdateBranchTest extends OrganizacionTestCase
             'telefono' => '71111111',
             'version' => 1,
         ])
-            ->assertStatus(503)
-            ->assertJsonPath('code', 'MODULE_02_PENDING');
+            ->assertForbidden()
+            ->assertJsonPath('code', 'BRANCH_ACCESS_DENIED');
     }
 
     public function test_no_op_update_does_not_increment_version_or_audit(): void

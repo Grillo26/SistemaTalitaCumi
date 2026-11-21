@@ -1,4 +1,4 @@
-import { Component, DestroyRef, HostListener, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { debounceTime, distinctUntilChanged } from 'rxjs';
@@ -7,6 +7,7 @@ import { AlertComponent } from '../../../shared/components/ui/alert/alert.compon
 import { BadgeComponent } from '../../../shared/components/ui/badge/badge.component';
 import { ButtonComponent } from '../../../shared/components/ui/button/button.component';
 import { InputDirective } from '../../../shared/components/ui/input/input.directive';
+import { ModalComponent } from '../../../shared/components/ui/modal/modal.component';
 import { PaginationComponent } from '../../../shared/components/ui/pagination/pagination.component';
 import { SelectFieldComponent } from '../../../shared/components/ui/select/select-field.component';
 import { SwitchComponent } from '../../../shared/components/ui/switch/switch.component';
@@ -42,6 +43,7 @@ type StatusMode = 'activate' | 'deactivate';
     AlertComponent,
     PaginationComponent,
     InputDirective,
+    ModalComponent,
     SelectFieldComponent,
     TextareaDirective,
     SwitchComponent,
@@ -130,23 +132,6 @@ export class SucursalesPageComponent implements OnInit {
       });
 
     this.loadBranches();
-  }
-
-  @HostListener('document:keydown.escape')
-  onEscape(): void {
-    if (this.statusOpen()) {
-      this.closeStatus();
-      return;
-    }
-
-    if (this.formOpen()) {
-      this.closeForm();
-      return;
-    }
-
-    if (this.detailOpen()) {
-      this.closeDetail();
-    }
   }
 
   loadBranches(): void {
@@ -303,6 +288,7 @@ export class SucursalesPageComponent implements OnInit {
 
           this.branchForm.controls.activo.disable();
           this.clearFormErrors();
+          this.detailOpen.set(false);
           this.formOpen.set(true);
         },
         error: (error: ApiError) => this.error.set(error),
@@ -404,6 +390,7 @@ export class SucursalesPageComponent implements OnInit {
           this.statusFieldErrors.set({});
           this.statusErrorMessage.set(null);
           this.statusConflict.set(false);
+          this.detailOpen.set(false);
           this.statusOpen.set(true);
         },
         error: (error: ApiError) => this.error.set(error),

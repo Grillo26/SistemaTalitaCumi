@@ -178,35 +178,37 @@
 <!-- Ficha del parámetro -->
 @if (detailOpen()) {
   @if (selected(); as parameter) {
-    <div class="fixed inset-0 z-40 flex justify-end bg-gray-900/50 p-0 sm:p-4" (click)="closeDetail()">
-      <aside
-        class="flex h-full w-full max-w-2xl flex-col overflow-y-auto border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-800 dark:bg-gray-900 sm:rounded-2xl"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="parametro-detail-title"
-        (click)="$event.stopPropagation()"
+    <app-modal
+      [customHeader]="true"
+      [showClose]="false"
+      [ariaLabel]="'Ficha de ' + parameter.clave"
+      size="lg"
+      (closed)="closeDetail()"
+    >
+      <div
+        modal-header
+        class="flex items-start justify-between gap-4 border-b border-gray-100 p-6 pb-4 dark:border-gray-800"
       >
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <p class="text-xs font-medium uppercase tracking-wide text-gray-400">{{ parameter.categoria_label }}</p>
-            <h3 id="parametro-detail-title" class="mt-1 break-all text-xl font-semibold text-gray-900 dark:text-white">
-              {{ parameter.clave }}
-            </h3>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ parameter.descripcion || 'Sin descripción' }}</p>
-            <div class="mt-3 flex flex-wrap gap-1">
-              @if (parameter.sensible) {
-                <app-badge color="warning" variant="light" size="sm">Sensible</app-badge>
-              }
-              @if (!parameter.editable) {
-                <app-badge color="gray" variant="light" size="sm">Solo lectura</app-badge>
-              }
-              @if (parameter.visible_recepcion) {
-                <app-badge color="info" variant="light" size="sm">Visible para Recepción</app-badge>
-              }
-            </div>
+        <div>
+          <p class="text-xs font-medium uppercase tracking-wide text-gray-400">{{ parameter.categoria_label }}</p>
+          <h3 id="parametro-detail-title" class="mt-1 break-all text-xl font-semibold text-gray-900 dark:text-white">
+            {{ parameter.clave }}
+          </h3>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ parameter.descripcion || 'Sin descripción' }}</p>
+          <div class="mt-3 flex flex-wrap gap-1">
+            @if (parameter.sensible) {
+              <app-badge color="warning" variant="light" size="sm">Sensible</app-badge>
+            }
+            @if (!parameter.editable) {
+              <app-badge color="gray" variant="light" size="sm">Solo lectura</app-badge>
+            }
+            @if (parameter.visible_recepcion) {
+              <app-badge color="info" variant="light" size="sm">Visible para Recepción</app-badge>
+            }
           </div>
-          <button app-button variant="ghost" size="icon-sm" type="button" ariaLabel="Cerrar ficha" (click)="closeDetail()">✕</button>
         </div>
+        <button app-button variant="ghost" size="icon-sm" type="button" ariaLabel="Cerrar ficha" (click)="closeDetail()">✕</button>
+      </div>
 
         @if (detailLoading()) {
           <p class="mt-6 text-sm text-gray-500 dark:text-gray-400">Cargando ficha...</p>
@@ -311,31 +313,20 @@
             <button app-button variant="outline" type="button" (click)="closeDetail()">Cerrar</button>
           </div>
         }
-      </aside>
-    </div>
+    </app-modal>
   }
 }
 
 <!-- Edición -->
 @if (editOpen()) {
   @if (editing(); as parameter) {
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 p-4" (click)="closeEdit()">
-      <div
-        class="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-800 dark:bg-gray-900"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="parametro-edit-title"
-        (click)="$event.stopPropagation()"
-      >
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <h3 id="parametro-edit-title" class="text-xl font-semibold text-gray-900 dark:text-white">Editar parámetro</h3>
-            <p class="mt-1 break-all text-sm text-gray-500 dark:text-gray-400">{{ parameter.clave }}</p>
-          </div>
-          <button app-button variant="ghost" size="icon-sm" type="button" ariaLabel="Cerrar edición" (click)="closeEdit()">✕</button>
-        </div>
-
-        <form class="mt-5 space-y-4" [formGroup]="editForm" (ngSubmit)="saveEdit()">
+    <app-modal
+      title="Editar parámetro"
+      [subtitle]="parameter.clave"
+      size="md"
+      (closed)="closeEdit()"
+    >
+        <form class="space-y-4" [formGroup]="editForm" (ngSubmit)="saveEdit()">
           @if (editError(); as message) {
             <app-alert variant="error" [message]="message" />
           }
@@ -457,31 +448,20 @@
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </app-modal>
   }
 }
 
 <!-- Restauración -->
 @if (restoreOpen()) {
   @if (restoreTarget(); as parameter) {
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 p-4" (click)="closeRestore()">
-      <div
-        class="w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-800 dark:bg-gray-900"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="parametro-restore-title"
-        (click)="$event.stopPropagation()"
-      >
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <h3 id="parametro-restore-title" class="text-xl font-semibold text-gray-900 dark:text-white">Restaurar valor por defecto</h3>
-            <p class="mt-1 break-all text-sm text-gray-500 dark:text-gray-400">{{ parameter.clave }}</p>
-          </div>
-          <button app-button variant="ghost" size="icon-sm" type="button" ariaLabel="Cerrar restauración" (click)="closeRestore()">✕</button>
-        </div>
-
-        <div class="mt-5 space-y-3">
+    <app-modal
+      title="Restaurar valor por defecto"
+      [subtitle]="parameter.clave"
+      size="md"
+      (closed)="closeRestore()"
+    >
+        <div class="space-y-3">
           <p class="text-sm text-gray-600 dark:text-gray-300">
             El valor vigente es <strong>{{ valueWithUnit(parameter) }}</strong> y volverá a
             <strong>{{ formatDefaultValue(parameter) }}</strong>.
@@ -543,32 +523,18 @@
             {{ restoring() ? 'Restaurando...' : 'Restaurar' }}
           </button>
         </div>
-      </div>
-    </div>
+    </app-modal>
   }
 }
 
 <!-- Historial -->
 @if (historyOpen()) {
-  <div class="fixed inset-0 z-50 flex justify-end bg-gray-900/50 p-0 sm:p-4" (click)="closeHistory()">
-    <aside
-      class="flex h-full w-full max-w-2xl flex-col overflow-y-auto border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-800 dark:bg-gray-900 sm:rounded-2xl"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="parametro-history-title"
-      (click)="$event.stopPropagation()"
-    >
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <p class="text-xs font-medium uppercase tracking-wide text-gray-400">Historial de cambios</p>
-          <h3 id="parametro-history-title" class="mt-1 break-all text-xl font-semibold text-gray-900 dark:text-white">
-            {{ historyTarget()?.clave }}
-          </h3>
-          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ historyTotal() }} registros en la bitácora.</p>
-        </div>
-        <button app-button variant="ghost" size="icon-sm" type="button" ariaLabel="Cerrar historial" (click)="closeHistory()">✕</button>
-      </div>
-
+  <app-modal
+    [title]="'Historial de ' + (historyTarget()?.clave ?? '')"
+    [subtitle]="historyTotal() + ' registros en la bitácora.'"
+    size="xl"
+    (closed)="closeHistory()"
+  >
       @if (historyError(); as message) {
         <app-alert variant="error" [message]="message" class="mt-4" />
       }
@@ -621,6 +587,5 @@
           />
         }
       </div>
-    </aside>
-  </div>
+  </app-modal>
 }

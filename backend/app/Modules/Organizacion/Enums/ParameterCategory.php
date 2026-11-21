@@ -9,6 +9,7 @@ enum ParameterCategory: string
 {
     case IDENTIDAD = 'identidad';
     case OPERACION = 'operacion';
+    case SEGURIDAD = 'seguridad';
     case AGENDA = 'agenda';
     case PAGOS = 'pagos';
     case FORMATO_DOCUMENTOS = 'formato_documentos';
@@ -20,6 +21,7 @@ enum ParameterCategory: string
         return match ($this) {
             self::IDENTIDAD => 'Identidad del centro',
             self::OPERACION => 'Operación',
+            self::SEGURIDAD => 'Seguridad',
             self::AGENDA => 'Agenda',
             self::PAGOS => 'Pagos',
             self::FORMATO_DOCUMENTOS => 'Formato de documentos',
@@ -33,6 +35,7 @@ enum ParameterCategory: string
         return match ($this) {
             self::IDENTIDAD => 10,
             self::OPERACION => 20,
+            self::SEGURIDAD => 25,
             self::AGENDA => 30,
             self::PAGOS => 40,
             self::FORMATO_DOCUMENTOS => 50,

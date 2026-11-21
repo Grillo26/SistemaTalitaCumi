@@ -10,8 +10,6 @@ use App\Modules\Organizacion\Contracts\EloquentParameterReader;
 use App\Modules\Organizacion\Contracts\EloquentSalaDirectory;
 use App\Modules\Organizacion\Contracts\ParameterReaderContract;
 use App\Modules\Organizacion\Contracts\SalaDirectoryContract;
-use App\Modules\Organizacion\Contracts\StubUserBranchAccessContract;
-use App\Modules\Organizacion\Contracts\UserBranchAccessContract;
 use App\Modules\Organizacion\Events\AmbienteCreated;
 use App\Modules\Organizacion\Events\AmbienteStatusChanged;
 use App\Modules\Organizacion\Events\AmbienteUpdated;
@@ -46,7 +44,6 @@ final class OrganizacionServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->app->bind(UserBranchAccessContract::class, StubUserBranchAccessContract::class);
         $this->app->bind(BranchDirectoryContract::class, EloquentBranchDirectory::class);
         $this->app->bind(SalaDirectoryContract::class, EloquentSalaDirectory::class);
         $this->app->bind(AmbienteDirectoryContract::class, EloquentAmbienteDirectory::class);

@@ -107,11 +107,15 @@ Comandos manuales:
 ```bash
 make migrate
 make seed
+make seed-demo
 
 # Equivalente:
 docker compose exec backend php artisan migrate --force
 docker compose exec backend php artisan db:seed --force
+docker compose exec backend php artisan db:seed --class=SeguridadDemoUsersSeeder --force
 ```
+
+`make seed-demo` crea los tres usuarios demo con contraseña `Password12` (solo desarrollo; el seeder se bloquea en producción).
 
 Ver el estado de las migraciones:
 
@@ -130,6 +134,7 @@ make build           # reconstruye imágenes
 make logs            # logs en vivo
 make migrate         # migraciones
 make seed            # crea los roles base (superadmin, administracion, recepcion)
+make seed-demo       # crea los usuarios demo de los tres roles (solo desarrollo)
 make shell-backend   # shell del backend
 make shell-frontend  # shell del frontend
 make ps              # estado de contenedores
@@ -217,6 +222,11 @@ TalitaCumi/
 - Los traits `HasApiTokens` y `HasRoles` ya están aplicados al modelo `User`.
 - Las migraciones de Sanctum y de permisos ya están publicadas.
 - `make seed` crea los roles base: `superadmin`, `administracion` y `recepcion`.
+- `make seed-demo` crea usuarios demo para iniciar sesión (solo desarrollo):
+  - Superadmin: `superadmin.demo` / `Password12`
+  - Administración: `admin.demo` / `Password12`
+  - Recepción: `recepcion.demo` / `Password12`
+- La contraseña demo se puede cambiar con `DEMO_PASSWORD` en `backend/.env`. El seeder no resetea usuarios existentes y se bloquea si `APP_ENV=production`.
 
 ---
 

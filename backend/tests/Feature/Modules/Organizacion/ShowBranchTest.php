@@ -55,15 +55,15 @@ final class ShowBranchTest extends OrganizacionTestCase
             ->assertJsonPath('code', 'BRANCH_ACCESS_DENIED');
     }
 
-    public function test_reception_without_contract_receives_pending_module_error(): void
+    public function test_reception_without_assigned_branches_cannot_view_branch(): void
     {
         $branch = Branch::factory()->create();
 
         $this->actingAsRole('recepcion');
 
         $this->getJson("/api/organizacion/sucursales/{$branch->id}")
-            ->assertStatus(503)
-            ->assertJsonPath('code', 'MODULE_02_PENDING');
+            ->assertForbidden()
+            ->assertJsonPath('code', 'BRANCH_ACCESS_DENIED');
     }
 
     public function test_administracion_sees_contact_permission_in_detail(): void

@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 COMPOSE := docker compose
 
-.PHONY: up down build logs migrate seed shell-backend shell-frontend reset ps
+.PHONY: up down build logs migrate seed seed-demo shell-backend shell-frontend reset ps
 
 ## Levanta el stack completo (construye si hace falta)
 up:
@@ -26,6 +26,10 @@ migrate:
 ## Ejecuta los seeders (crea los roles base)
 seed:
 	$(COMPOSE) exec backend php artisan db:seed --force
+
+## Crea los usuarios demo de los tres roles (solo desarrollo)
+seed-demo:
+	$(COMPOSE) exec backend php artisan db:seed --class=SeguridadDemoUsersSeeder --force
 
 ## Shell dentro del backend (como el UID/GID del host)
 shell-backend:

@@ -3,11 +3,11 @@
 namespace App\Modules\Organizacion\Contracts;
 
 /**
- * Acceso del usuario autenticado a las sucursales (RF-010 / RN-006).
+ * Acceso del usuario autenticado a las sucursales (02/RF-U16 / 02/RN-03).
  *
- * Implementación real: módulo 02 — Usuarios, roles y seguridad.
- * Mientras no exista, se usa StubUserBranchAccessContract, que falla de
- * forma explícita y nunca devuelve datos falsos.
+ * Implementación real: App\Modules\Seguridad\Contracts\EloquentUserBranchAccess,
+ * bindeada en SeguridadServiceProvider. Fail-closed: sin sucursales
+ * asignadas devuelve una lista vacía; nunca “todas” como atajo.
  */
 interface UserBranchAccessContract
 {

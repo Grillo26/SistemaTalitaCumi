@@ -10,8 +10,8 @@ final class ParameterSeederTest extends ConfiguracionTestCase
 {
     public function test_catalog_is_seeded_with_initial_audit_entries(): void
     {
-        $this->assertSame(23, Parametro::query()->count());
-        $this->assertSame(23, BitacoraEntry::query()
+        $this->assertSame(35, Parametro::query()->count());
+        $this->assertSame(35, BitacoraEntry::query()
             ->where('entidad', 'parametro')
             ->where('accion', 'CREAR')
             ->count());
@@ -48,6 +48,12 @@ final class ParameterSeederTest extends ConfiguracionTestCase
         $this->assertSame('12:00', $this->parametro('agenda.turno_manana.fin')->valor);
         $this->assertSame('14:00', $this->parametro('agenda.turno_tarde.inicio')->valor);
         $this->assertSame('18:00', $this->parametro('agenda.turno_tarde.fin')->valor);
+
+        $this->assertSame('10', $this->parametro('password_longitud_minima')->valor);
+        $this->assertSame('5', $this->parametro('login_intentos_maximos')->valor);
+        $this->assertSame('15', $this->parametro('sesion_inactividad_minutos')->valor);
+        $this->assertSame('1', $this->parametro('sesion_maximas_por_usuario')->valor);
+        $this->assertSame('5', $this->parametro('bitacora_retencion_anios')->valor);
     }
 
     public function test_seeder_is_idempotent_and_does_not_overwrite_current_values(): void
@@ -57,8 +63,8 @@ final class ParameterSeederTest extends ConfiguracionTestCase
 
         $this->seed(OrganizacionConfiguracionCatalogSeeder::class);
 
-        $this->assertSame(23, Parametro::query()->count());
-        $this->assertSame(23, BitacoraEntry::query()
+        $this->assertSame(35, Parametro::query()->count());
+        $this->assertSame(35, BitacoraEntry::query()
             ->where('entidad', 'parametro')
             ->where('accion', 'CREAR')
             ->count());

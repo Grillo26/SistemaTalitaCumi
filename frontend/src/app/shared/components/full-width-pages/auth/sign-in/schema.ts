@@ -1,15 +1,15 @@
 export interface SignInFormData {
-  email: string;
+  identificador: string;
   password: string;
   keepLoggedIn?: boolean;
 }
 
 export const signInValidationRules = {
-  email: {
-    required: 'Email is required',
-    pattern: 'Please enter a valid email address',
+  identificador: {
+    required: 'Ingresá tu correo o nombre de usuario.',
+    maxlength: 'El identificador no puede superar los 150 caracteres.',
   },
   password: {
-    required: 'Password is required',
+    required: 'Ingresá tu contraseña.',
   },
 };

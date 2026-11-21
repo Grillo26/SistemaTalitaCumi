@@ -54,6 +54,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Last Used At
+    |--------------------------------------------------------------------------
+    |
+    | El módulo 02 desactiva la actualización automática de `last_used_at`
+    | para poder comparar la inactividad contra el valor anterior y luego
+    | actualizarlo desde EnsureSessionIsValid. No cambiar sin revisar
+    | RF-A07.
+    |
+    */
+
+    'last_used_at' => false,
+
+    /*
+    |--------------------------------------------------------------------------
     | Token Prefix
     |--------------------------------------------------------------------------
     |

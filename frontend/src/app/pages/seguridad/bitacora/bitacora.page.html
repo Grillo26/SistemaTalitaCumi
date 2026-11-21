@@ -1,0 +1,355 @@
+<div>
+  <app-page-breadcrumb pageTitle="Bitácora" />
+
+  <div class="space-y-5 sm:space-y-6">
+    @if (error(); as apiError) {
+      <app-alert
+        variant="error"
+        title="No se pudo cargar la bitácora"
+        [message]="apiError.message"
+      />
+    }
+
+    @if (optionsError(); as apiError) {
+      <app-alert
+        variant="error"
+        title="No se pudieron cargar los filtros"
+        [message]="apiError.message"
+      />
+    }
+
+    <app-component-card
+      title="Consulta de bitácora"
+      desc="Eventos de auditoría con usuario, fecha, IP, módulo, entidad, acción, resultado y valores anteriores/nuevos."
+    >
+      @if (retentionYears(); as years) {
+        <p class="mb-4 text-xs text-gray-500 dark:text-gray-400">
+          Retención configurada: {{ years }} años. {{ texts.retention }} No hay purga manual.
+        </p>
+      }
+
+      <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Desde</label>
+          <app-bitacora-date-input [formControl]="fechaDesde" ariaLabel="Fecha desde" />
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Hasta</label>
+          <app-bitacora-date-input [formControl]="fechaHasta" ariaLabel="Fecha hasta" />
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Usuario</label>
+          <app-select-field
+            [options]="userOptions()"
+            [value]="usuarioFilter()?.toString() ?? ''"
+            placeholder="Todos los usuarios"
+            ariaLabel="Filtrar por usuario"
+            (valueChange)="onUserChange($event)"
+          />
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Módulo</label>
+          <app-select-field
+            [options]="moduleOptions()"
+            [value]="moduloFilter()"
+            placeholder="Todos los módulos"
+            ariaLabel="Filtrar por módulo"
+            (valueChange)="onModuleChange($event)"
+          />
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Entidad</label>
+          <app-select-field
+            [options]="entityOptions()"
+            [value]="entidadFilter()"
+            placeholder="Todas las entidades"
+            ariaLabel="Filtrar por entidad"
+            (valueChange)="onEntityChange($event)"
+          />
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Acción</label>
+          <app-select-field
+            [options]="actionOptions()"
+            [value]="accionFilter()"
+            placeholder="Todas las acciones"
+            ariaLabel="Filtrar por acción"
+            (valueChange)="onActionChange($event)"
+          />
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Resultado</label>
+          <app-select-field
+            [options]="resultOptions()"
+            [value]="resultadoFilter()"
+            placeholder="Todos los resultados"
+            ariaLabel="Filtrar por resultado"
+            (valueChange)="onResultChange($event)"
+          />
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Criticidad</label>
+          <app-select-field
+            [options]="criticalOptions"
+            [value]="criticoFilter()"
+            placeholder="Todos"
+            ariaLabel="Filtrar por criticidad"
+            (valueChange)="onCriticalChange($event)"
+          />
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Sucursal</label>
+          <app-select-field
+            [options]="branchOptions()"
+            [value]="sucursalFilter()?.toString() ?? ''"
+            placeholder="Todas las sucursales"
+            ariaLabel="Filtrar por sucursal"
+            (valueChange)="onBranchChange($event)"
+          />
+        </div>
+      </div>
+
+      <div class="mt-4 flex flex-wrap items-center justify-end gap-2">
+        <button app-button variant="outline" type="button" (click)="clearFilters()">Limpiar</button>
+        <button app-button type="button" (click)="applyFilters()">Filtrar</button>
+      </div>
+
+      <div class="mt-5 overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+        <table app-table class="min-w-full">
+          <thead app-table-header class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
+            <tr app-table-row>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Fecha</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Usuario</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Módulo</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Entidad</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Acción</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Resultado</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Crítico</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">IP</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Sucursal</th>
+              <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
+            </tr>
+          </thead>
+
+          <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+            @if (loading()) {
+              <tr app-table-row>
+                <td app-table-cell colspan="10" class="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                  Cargando eventos...
+                </td>
+              </tr>
+            } @else if (entries().length === 0) {
+              <tr app-table-row>
+                <td app-table-cell colspan="10" class="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                  No hay eventos que coincidan con los filtros.
+                </td>
+              </tr>
+            } @else {
+              @for (entry of entries(); track entry.id) {
+                <tr app-table-row>
+                  <td app-table-cell class="whitespace-nowrap px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+                    {{ formatDate(entry.created_at) }}
+                  </td>
+                  <td app-table-cell class="px-4 py-3">
+                    <p class="text-sm text-gray-800 dark:text-white/90">{{ entry.usuario || 'Sistema' }}</p>
+                    @if (entry.usuario_email) {
+                      <p class="text-xs text-gray-500 dark:text-gray-400">{{ entry.usuario_email }}</p>
+                    }
+                  </td>
+                  <td app-table-cell class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">{{ entry.modulo_label }}</td>
+                  <td app-table-cell class="px-4 py-3">
+                    <p class="text-sm text-gray-800 dark:text-white/90">{{ entry.entidad_label }}</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                      {{ entry.entidad }}{{ entry.entidad_id ? ' #' + entry.entidad_id : '' }}
+                    </p>
+                  </td>
+                  <td app-table-cell class="px-4 py-3">
+                    <span class="text-sm text-gray-800 dark:text-white/90">{{ entry.accion_label }}</span>
+                    @if (entry.motivo) {
+                      <p class="max-w-xs truncate text-xs text-gray-500 dark:text-gray-400" [title]="entry.motivo">{{ entry.motivo }}</p>
+                    }
+                  </td>
+                  <td app-table-cell class="px-4 py-3">
+                    <app-badge [color]="resultColor(entry.resultado)" variant="light" size="sm">
+                      {{ entry.resultado_label }}
+                    </app-badge>
+                  </td>
+                  <td app-table-cell class="px-4 py-3">
+                    @if (entry.critico) {
+                      <app-badge color="error" variant="light" size="sm">Crítico</app-badge>
+                    } @else {
+                      <span class="text-sm text-gray-400">—</span>
+                    }
+                  </td>
+                  <td app-table-cell class="whitespace-nowrap px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+                    {{ entry.ip || '—' }}
+                  </td>
+                  <td app-table-cell class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+                    {{ entry.sucursal || '—' }}
+                  </td>
+                  <td app-table-cell class="px-4 py-3 text-end">
+                    <button app-button variant="ghost" size="sm" type="button" (click)="openDetail(entry)">Ver</button>
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+
+      @if (meta(); as pagination) {
+        @if (pagination.last_page > 1) {
+          <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+              Mostrando {{ pagination.from }}–{{ pagination.to }} de {{ pagination.total }} eventos
+            </p>
+            <app-pagination
+              [currentPage]="pagination.current_page"
+              [totalPages]="pagination.last_page"
+              variant="text-icon"
+              (pageChange)="goToPage($event)"
+            />
+          </div>
+        } @else {
+          <p class="mt-4 text-sm text-gray-500 dark:text-gray-400">{{ pagination.total }} evento(s) en total.</p>
+        }
+      }
+
+      <p class="mt-4 text-xs text-gray-400 dark:text-gray-500">{{ texts.exportPending }}</p>
+    </app-component-card>
+
+    <app-component-card
+      title="Reconstruir estado por entidad y fecha"
+      desc="Consultá el último snapshot registrado para una entidad antes del fin del día indicado."
+    >
+      <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Entidad</label>
+          <app-select-field
+            [options]="reconstructEntityOptions()"
+            [value]="reconstructEntidad.value"
+            placeholder="Seleccioná una entidad"
+            ariaLabel="Entidad a reconstruir"
+            (valueChange)="reconstructEntidad.setValue($event)"
+          />
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">ID de entidad</label>
+          <input app-input type="number" min="1" [formControl]="reconstructId" class="h-11 w-full rounded-[10px] border border-gray-300 bg-white px-4 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white/90" />
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Fecha</label>
+          <app-bitacora-date-input [formControl]="reconstructFecha" ariaLabel="Fecha de reconstrucción" />
+        </div>
+        <div class="flex items-end">
+          <button app-button variant="outline" type="button" [disabled]="reconstructLoading()" (click)="reconstruct()">
+            {{ reconstructLoading() ? 'Reconstruyendo...' : 'Reconstruir' }}
+          </button>
+        </div>
+      </div>
+
+      @if (reconstructError()) {
+        <div class="mt-4">
+          <app-alert variant="error" title="No se pudo reconstruir" [message]="reconstructError()!" />
+        </div>
+      }
+
+      @if (reconstructResult(); as result) {
+        <div class="mt-4 rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+          @if (result.encontrado) {
+            <div class="mb-3 flex flex-wrap items-center gap-2">
+              <app-badge color="primary" variant="light" size="sm">{{ result.accion || 'Evento' }}</app-badge>
+              <span class="text-xs text-gray-500 dark:text-gray-400">
+                {{ result.entidad }} #{{ result.entidad_id }} · {{ formatDate(result.registrado_en) }}
+              </span>
+              @if (result.usuario) {
+                <span class="text-xs text-gray-500 dark:text-gray-400">· {{ result.usuario }}</span>
+              }
+              @if (result.sucursal) {
+                <span class="text-xs text-gray-500 dark:text-gray-400">· {{ result.sucursal }}</span>
+              }
+            </div>
+            <div class="grid gap-3 sm:grid-cols-2">
+              <div>
+                <p class="mb-1 text-xs font-medium uppercase text-gray-400">Estado reconstruido</p>
+                <pre class="max-h-60 overflow-auto rounded-lg bg-gray-50 p-3 text-xs text-gray-700 dark:bg-white/5 dark:text-gray-300">{{ result.estado | json }}</pre>
+              </div>
+              <div>
+                <p class="mb-1 text-xs font-medium uppercase text-gray-400">Snapshot anterior</p>
+                <pre class="max-h-60 overflow-auto rounded-lg bg-gray-50 p-3 text-xs text-gray-700 dark:bg-white/5 dark:text-gray-300">{{ result.anterior | json }}</pre>
+              </div>
+            </div>
+          } @else {
+            <app-alert variant="info" title="Sin eventos" [message]="texts.reconstructNotFound" />
+          }
+        </div>
+      }
+    </app-component-card>
+  </div>
+
+  @if (detailOpen()) {
+    @if (selected(); as entry) {
+      <app-modal
+        [title]="entry.accion_label"
+        [subtitle]="entry.entidad_label + (entry.entidad_id ? ' #' + entry.entidad_id : '') + ' · ' + formatDate(entry.created_at)"
+        [padded]="false"
+        size="lg"
+        (closed)="closeDetail()"
+      >
+          <div class="space-y-4 p-5">
+            @if (detailLoading()) {
+              <p class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">Cargando detalle...</p>
+            }
+            @if (detailError(); as apiError) {
+              <app-alert variant="error" title="No se pudo cargar el detalle" [message]="apiError.message" />
+            }
+
+            <div class="flex flex-wrap items-center gap-2">
+              <app-badge [color]="resultColor(entry.resultado)" variant="light">{{ entry.resultado_label }}</app-badge>
+              @if (entry.critico) {
+                <app-badge color="error" variant="light">Evento crítico</app-badge>
+              }
+              <app-badge color="gray" variant="light">{{ entry.modulo_label }}</app-badge>
+            </div>
+
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div>
+                <p class="text-xs font-medium uppercase text-gray-400">Usuario</p>
+                <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ entry.usuario || 'Sistema' }}</p>
+                @if (entry.usuario_email) {
+                  <p class="text-xs text-gray-500 dark:text-gray-400">{{ entry.usuario_email }}</p>
+                }
+              </div>
+              <div>
+                <p class="text-xs font-medium uppercase text-gray-400">IP</p>
+                <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ entry.ip || '—' }}</p>
+              </div>
+              <div>
+                <p class="text-xs font-medium uppercase text-gray-400">Sucursal</p>
+                <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ entry.sucursal ? entry.sucursal + ' · ' + entry.sucursal_nombre : 'Global' }}</p>
+              </div>
+              <div>
+                <p class="text-xs font-medium uppercase text-gray-400">Entidad</p>
+                <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ entry.entidad_label }} ({{ entry.entidad }}{{ entry.entidad_id ? ' #' + entry.entidad_id : '' }})</p>
+              </div>
+              <div class="sm:col-span-2">
+                <p class="text-xs font-medium uppercase text-gray-400">Motivo</p>
+                <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ entry.motivo || '—' }}</p>
+              </div>
+            </div>
+
+            <div class="grid gap-3 sm:grid-cols-2">
+              <div>
+                <p class="mb-1 text-xs font-medium uppercase text-gray-400">Antes</p>
+                <pre class="max-h-60 overflow-auto rounded-lg bg-gray-50 p-3 text-xs text-gray-700 dark:bg-white/5 dark:text-gray-300">{{ entry.datos_anteriores | json }}</pre>
+              </div>
+              <div>
+                <p class="mb-1 text-xs font-medium uppercase text-gray-400">Después</p>
+                <pre class="max-h-60 overflow-auto rounded-lg bg-gray-50 p-3 text-xs text-gray-700 dark:bg-white/5 dark:text-gray-300">{{ entry.datos_nuevos | json }}</pre>
+              </div>
+            </div>
+          </div>
+      </app-modal>
+    }
+  }
+</div>

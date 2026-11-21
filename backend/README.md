@@ -93,10 +93,11 @@ Transacciones: `DB::transaction()` dentro de la Action, incluyendo la mutación 
 ## Autenticación y permisos
 
 - **Sanctum** está instalado y los endpoints usan `auth:sanctum`.
-- **Todavía no existe login real** (módulo 02). La UI Angular no puede obtener token; los tests usan `Sanctum::actingAs`.
-- **Spatie Permission** es el mecanismo de permisos. Los roles base (`superadmin`, `administracion`, `recepcion`) se crean en `DatabaseSeeder`; cada submódulo crea sus permisos en su propio seeder (`OrganizacionSucursalesPermissionSeeder`, `OrganizacionSalasAmbientesPermissionSeeder`, `OrganizacionConfiguracionPermissionSeeder`).
-- El código de aplicación **nunca decide por nombre de rol**: decide por permisos.
+- **Login real implementado en la Fase 1 del módulo 02**: `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me` y `POST /api/auth/cambiar-password`. Ver la sección “Módulo 02”.
+- **Spatie Permission** es el mecanismo de permisos. Los roles base (`superadmin`, `administracion`, `recepcion`) se crean en `DatabaseSeeder`; cada submódulo crea sus permisos en su propio seeder (`OrganizacionSucursalesPermissionSeeder`, `OrganizacionSalasAmbientesPermissionSeeder`, `OrganizacionConfiguracionPermissionSeeder`, `SeguridadPermissionSeeder`).
+- El código de aplicación **nunca decide por nombre de rol**: decide por permisos. El único dato que identifica al rol protegido es `roles.es_superadmin`, usado por la regla del último Superadmin.
 - Las aliases de middleware de Spatie no están registradas en `bootstrap/app.php`; se usa directamente `Spatie\Permission\Middleware\PermissionMiddleware::using(..., 'sanctum')`.
+- `EnsureSessionIsValid` se ejecuta después de `auth:sanctum` en todo el grupo `api`: valida usuario activo, inactividad, expiración y cambio forzado de contraseña, y actualiza `last_used_at`.
 
 ### Permisos del módulo de sucursales
 
@@ -109,7 +110,7 @@ Transacciones: `DB::transaction()` dentro de la Action, incluyendo la mutación 
 | `sucursal.cambiar_estado` (activar/desactivar) | sí | no | no |
 | `sucursal.alcance_global` (ver todas) | sí | no | no |
 
-> La asignación usuario–sucursal (`usuario_sucursal`) pertenece al módulo 02. Mientras no exista, `UserBranchAccessContract` se bindea a `StubUserBranchAccessContract`, que lanza `ModulePendingException` y responde `503 MODULE_02_PENDING`. No se devuelven datos falsos ni “todas las sucursales” como atajo.
+> La asignación usuario–sucursal vive en `usuario_sucursal` y su implementación real es `EloquentUserBranchAccess`, activa desde la Fase 2. El contrato es fail-closed: un usuario sin sucursales asignadas y sin `sucursal.alcance_global` no opera; nunca se devuelven “todas las sucursales” como atajo.
 
 ---
 
@@ -148,7 +149,7 @@ La respuesta incluye `data`, `links`, `meta` y `can` (`create`, `update`, `updat
 
 `RecordBranchAudit` escribe en `bitacora` (`usuario_id`, `sucursal_id`, `entidad`, `entidad_id`, `datos_anteriores`, `datos_nuevos`, `motivo`). La tabla es solo inserción y en PostgreSQL tiene un trigger `BEFORE UPDATE OR DELETE` que la hace inmutable.
 
-> Mientras el módulo 02 no formalice `usuario`, la migración de `bitacora.usuario_id` referencia `users.id`. Está documentado como deuda temporal en `database/database.md`.
+> El módulo 02 mantiene **`users` como tabla física** de autenticación y agrega los campos de negocio. La FK `bitacora.usuario_id` sigue apuntando a `users.id`; no se migra a una tabla `usuario` inexistente.
 
 ### Contratos expuestos
 
@@ -162,23 +163,23 @@ public function asegurarActiva(int $sucursalId): void; // InactiveBranchExceptio
 
 Los módulos de inscripciones, turnos, pagos y caja deben llamar a `asegurarActiva()` antes de operar (RN-003).
 
-**`UserBranchAccessContract`** — stub:
+**`UserBranchAccessContract`** — implementación real desde Fase 2:
 
 ```php
 public function accesibles(int $usuarioId): array;      // list<int>
 public function puedeAcceder(int $usuarioId, int $sucursalId): bool;
 ```
 
-`StubUserBranchAccessContract` lanza `ModulePendingException` (`LogicException`) con el mensaje `Módulo 02 Usuarios y roles pendiente`. **TODO módulo 02:** reemplazar el binding por una implementación real basada en `usuario_sucursal`.
+`EloquentUserBranchAccess` consulta `usuario_sucursal` y `sucursal.activo`; con `sucursal.alcance_global` devuelve todas las sucursales activas. Usuario inexistente, inactivo o error de lectura → lista vacía (fail-closed). Ya no existe `StubUserBranchAccessContract` ni `ModulePendingException`.
 
 ### Estado del módulo
 
 | Cobertura | Estado |
 |---|---|
 | RF-001, RF-002, RF-003, RF-007, RF-011, RF-013 | Implementados |
-| RF-004, RF-005, RF-006, RF-014 | Implementados con alcance global; alcance por usuario bloqueado por módulo 02 |
+| RF-004, RF-005, RF-006, RF-014 | Implementados; alcance real por sucursal desde Fase 2 |
 | RF-008 | Rechazo explícito de eliminación; chequeo real de asociaciones pendiente |
-| RF-009, RF-010 | Stub/contrato; dependen del módulo 02 |
+| RF-009, RF-010 | Implementados: contrato real de alcance + directorio de usuarios (Fase 2) |
 | RF-012 (PDF/Excel) | Pendiente; no hay librerías instaladas y el botón no se muestra |
 | RN-001, RN-002, RN-003, RN-005, RN-009 | Implementadas |
 | RN-004 | Parcial: no hay borrado físico; falta contrato de uso |
@@ -238,7 +239,7 @@ Filtros de ambientes: `search`, `sucursal_id`, `uso`, `estado`, `page`, `per_pag
 
 Seeder: `OrganizacionSalasAmbientesPermissionSeeder`. Los catálogos iniciales de áreas, tipos y turnos se cargan con `OrganizacionSalasAmbientesCatalogSeeder`; ambos se invocan desde `DatabaseSeeder`.
 
-El alcance por sucursal reutiliza `UserBranchAccessContract` y `sucursal.alcance_global`. Sin alcance global se responde `503 MODULE_02_PENDING`; nunca se devuelven todas las sucursales como atajo.
+El alcance por sucursal reutiliza `UserBranchAccessContract` y `sucursal.alcance_global`. Sin alcance global, las listas se filtran por las sucursales asignadas y las operaciones sobre otra sucursal responden `403`; nunca se devuelven todas las sucursales como atajo.
 
 ### Eventos y bitácora
 
@@ -278,7 +279,7 @@ Los módulos 06 (Inscripciones a salas grupales) y 07 (Agenda y turnos) deben ll
 | Cobertura | Estado |
 |---|---|
 | RF-001, RF-002, RF-003, RF-004, RF-005, RF-006, RF-007, RF-011, RF-015 | Implementados |
-| RF-008, RF-009, RF-010, RF-017 | Implementados con alcance global; alcance por usuario bloqueado por módulo 02 |
+| RF-008, RF-009, RF-010, RF-017 | Implementados; alcance real por sucursal desde Fase 2 |
 | RF-012 | Rechazo explícito de eliminación; chequeo real de asociaciones pendiente |
 | RF-013, RF-014 | Contratos implementados; consumidores 06/07 pendientes |
 | RF-016 (PDF/Excel) | Pendiente; sin librerías y sin botón |
@@ -286,7 +287,7 @@ Los módulos 06 (Inscripciones a salas grupales) y 07 (Agenda y turnos) deben ll
 | RN-005, RN-006 | Contratos implementados; consumidores pendientes |
 | RN-007 | Parcial: no hay borrado físico; falta chequeo de asociaciones |
 | RN-009 | No se implementa aquí; solo se referencia `area` sin administrar colores |
-| RN-011 | Parcial: permisos + 503 módulo 02 |
+| RN-011 | Implementada: permiso + alcance real por sucursal (Fase 2) |
 
 ### Migraciones
 
@@ -448,8 +449,539 @@ El esquema de referencia se mantiene sincronizado en `database/database.md` y `d
 
 ---
 
+## Módulo 02 — Usuarios, roles y seguridad (Fase 1)
+
+Esta fase implementa identidad, autenticación real, política de contraseñas, bloqueo, sesiones y bitácora de accesos. El CRUD de usuarios, el alcance real por sucursal, la matriz editable y la consulta de bitácora llegan en las fases 2–4.
+
+### Estructura
+
+```text
+app/Modules/Seguridad/
+├── Actions/Autenticacion/        LoginAction, LogoutAction, ChangePasswordAction
+├── Console/Commands/             CreateSuperadminCommand
+├── Enums/                        AuditAction, AuditModule, AuditResult
+├── Events/                       UserLoggedIn, UserLoginFailed, UserLoggedOut, UserPasswordChanged, UserLocked
+├── Exceptions/                   Errores de dominio con render HTTP
+├── Http/Controllers/             AuthController
+├── Http/Middleware/              EnsureSessionIsValid
+├── Http/Requests/                LoginRequest, ChangePasswordRequest
+├── Http/Resources/               SessionResource, AuthenticatedUserResource
+├── Listeners/                    RecordSecurityAudit
+├── Models/                       BitacoraEntry, UsuarioPasswordHistorial
+├── Providers/                    SeguridadServiceProvider
+├── Queries/Autenticacion/        GetAuthenticatedUserQuery
+├── Rules/                        PasswordPolicy (pura)
+├── Support/                      SecurityParameters, PasswordHistory, TemporaryPasswordGenerator, UserSnapshot
+└── routes-auth.php
+```
+
+`SeguridadServiceProvider` se registra después de `OrganizacionServiceProvider` en `bootstrap/providers.php`.
+
+### Endpoints
+
+| Método | Ruta | Acción / Query | Acceso |
+|---|---|---|---|
+| POST | `/api/auth/login` | `LoginAction` | público, throttle 20/min por IP |
+| POST | `/api/auth/logout` | `LogoutAction` | `auth:sanctum` |
+| GET | `/api/auth/me` | `GetAuthenticatedUserQuery` | `auth:sanctum` |
+| POST | `/api/auth/cambiar-password` | `ChangePasswordAction` | `auth:sanctum` |
+
+`me` devuelve usuario, rol, permisos efectivos, sucursales, `alcance_global`, `requires_branch_assignment`, `debe_cambiar_password`, `ultimo_acceso`, `password_expires_at` y `password_policy`.
+
+### Tokens y sesiones
+
+- Store: `personal_access_tokens` de Sanctum. **No se crea la tabla `sesion`.**
+- Token bearer con `expires_at` desde `sesion_duracion_absoluta_minutos`.
+- `sanctum.last_used_at = false`: la inactividad se mide contra el valor anterior y luego `EnsureSessionIsValid` actualiza `last_used_at`.
+- `sesion_inactividad_minutos` (existente, default 15) expira la sesión.
+- `sesion_maximas_por_usuario` (default 1): un login nuevo revoca la sesión más antigua y lo deja en la bitácora.
+- Invalidación: desactivación, cambio de rol y reseteo (Fase 2); cambio propio de contraseña revoca las demás sesiones.
+- Logout elimina el token actual y audita.
+- `EnsureSessionIsValid` bloquea todo salvo `/auth/me`, `/auth/logout` y `/auth/cambiar-password` cuando `debe_cambiar_password = true`.
+
+### Contraseñas y bloqueo
+
+- Hash nativo bcrypt (`BCRYPT_ROUNDS=12` en desarrollo, 4 en tests). Sin `config/hashing.php`.
+- `usuario_password_historial` guarda solo hashes previos; nunca contraseñas en claro.
+- Política leída de `configuracion` (categoría `seguridad`). Clave faltante → `503 SECURITY_CONFIGURATION_MISSING`, sin valores inventados.
+- `login_intentos_maximos` (5) y `login_bloqueo_minutos` (15): bloqueo temporal con `bloqueado_hasta`; al expirar, el contador se reinicia. El desbloqueo manual anticipado llega en Fase 2.
+- Mensajes de login siempre genéricos (`INVALID_CREDENTIALS`), incluso para usuario desconocido, inactivo o bloqueado. Se ejecuta un `Hash::check` dummy para no filtrar por tiempo.
+
+### Catálogo de parámetros de seguridad
+
+Se agregaron 12 claves a `OrganizacionConfiguracionCatalogSeeder`, categoría `seguridad`, con marca **PROPUESTO - VALIDAR** en la descripción:
+
+| Clave | Defecto | Rango |
+|---|---:|---|
+| `password_longitud_minima` | 10 | 8–72 |
+| `password_requiere_mayuscula` | true | — |
+| `password_requiere_minuscula` | true | — |
+| `password_requiere_numero` | true | — |
+| `password_requiere_simbolo` | false | — |
+| `password_historial_cantidad` | 5 | 0–24 |
+| `password_caducidad_dias` | 0 | 0–365 |
+| `login_intentos_maximos` | 5 | 3–10 |
+| `login_bloqueo_minutos` | 15 | 5–1440 |
+| `sesion_duracion_absoluta_minutos` | 480 | 30–1440 |
+| `sesion_maximas_por_usuario` | 1 | 1–10 |
+| `bitacora_retencion_anios` | 5 | 1–10 |
+
+`sesion_inactividad_minutos` (categoría `operacion`, default 15) se reutiliza sin cambios.
+
+### Bootstrap del primer Superadmin
+
+```bash
+docker compose exec backend php artisan seguridad:crear-superadmin
+```
+
+- Sin contraseña por defecto en el repositorio.
+- Acepta opciones (`--name`, `--email` (opcional), `--username`, `--documento`, `--password`, `--branch=*`), variables de entorno `SUPERADMIN_*` o prompt interactivo.
+- Si no hay sucursales activas, el comando crea el Superadmin sin sucursales y muestra una advertencia. El Superadmin tiene alcance global y puede crear la primera sucursal desde Organización → Sucursales.
+- Crea el usuario con `debe_cambiar_password = true` y todos los permisos del rol Superadmin.
+- `--promote=ID` promueve un usuario existente sin cambiarle la contraseña (útil para instalaciones previas).
+- La instalación existente con usuarios en `users` queda intacta: las columnas nuevas son nullable/default; esos usuarios deben ser promovidos o completados antes de operar.
+
+### Usuarios demo para iniciar sesión
+
+Solo para desarrollo. No se ejecuta desde `DatabaseSeeder` y el seeder se bloquea en producción.
+
+```bash
+make seed
+make seed-demo
+```
+
+o:
+
+```bash
+docker compose exec backend php artisan db:seed --class=SeguridadDemoUsersSeeder
+```
+
+| Rol | Identificador | Email | Contraseña |
+|---|---|---|---|
+| Superadmin | `superadmin.demo` | `superadmin.demo@talitacumi.test` | `Password12` |
+| Administración | `admin.demo` | `admin.demo@talitacumi.test` | `Password12` |
+| Recepción | `recepcion.demo` | `recepcion.demo@talitacumi.test` | `Password12` |
+
+- La contraseña se configura con `DEMO_PASSWORD` en `backend/.env` y por defecto es `Password12`, que cumple la política inicial (10 caracteres, mayúscula, minúscula y número).
+- `DEMO_FORCE_PASSWORD_CHANGE=false` por defecto para que el login demo sea estable. Si se activa, el primer acceso obliga a cambiarla.
+- Si no hay sucursales activas, se crea `DEMO-CENTRAL` / `Sucursal Demo`. Administración y Recepción se asignan a esa sucursal; el Superadmin, a todas las activas.
+- Es idempotente: si el correo ya existe, no se resetea la contraseña ni se modifica el usuario. Para rotarla, usá el reseteo desde la UI o recreá el entorno demo.
+- No audita las altas: es bootstrap, igual que `seguridad:crear-superadmin`.
+
+### Bitácora de accesos
+
+Eventos nuevos: `INICIAR_SESION`, `LOGIN_FALLIDO`, `CERRAR_SESION`, `BLOQUEAR`, `CAMBIAR_PASSWORD`.
+
+Columnas nuevas: `modulo`, `resultado` (`exito|fallo|denegado`), `critico`. `ip` ya existía y ahora se completa.
+
+- Login fallido desconocido: `usuario_id = NULL`, `datos_nuevos = { identificador }`, sin revelar existencia.
+- Los eventos de usuario se registran con `sucursal_id` de cada sucursal activa del usuario afectado. Si pertenece a varias, se escribe una fila por sucursal para que Administración los vea con su alcance. Los usuarios con `sucursal.alcance_global` se registran una sola vez como globales. La matriz de permisos sigue siendo global y solo la ve el Superadmin.
+- Nunca se escriben contraseñas, hashes ni tokens. Los snapshots usan whitelist (`UserSnapshot`).
+- El listener es síncrono y fail-closed: si falla la bitácora, la operación se revierte o responde `503 AUDIT_UNAVAILABLE`.
+- No se modificaron los listeners de los módulos 01 y 03. Sus filas siguen con `ip`, `modulo` y `resultado` null; la consulta de Fase 4 derivará el módulo desde `entidad`.
+
+### Permisos de Fase 1
+
+Seeder: `SeguridadPermissionSeeder`, con asignación inicial única por módulo.
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `usuario.ver` | sí | sí | no |
+| `usuario.crear` | sí | no | no |
+| `usuario.editar` | sí | no | no |
+| `usuario.cambiar_estado` | sí | no | no |
+| `usuario.resetear_password` | sí | no | no |
+| `usuario.desbloquear` | sí | no | no |
+| `usuario.cerrar_sesiones` | sí | no | no |
+| `usuario.exportar` (reservado RF-U15) | sí | sí | no |
+| `rol.ver` | sí | sí | no |
+| `rol.editar_permisos` | sí | no | no |
+| `matriz.exportar` (reservado RF-R03) | sí | sí | no |
+| `bitacora.ver` | sí | sí | no |
+| `bitacora.exportar` (reservado RF-B09) | sí | sí | no |
+
+Los endpoints de auth no requieren permiso de módulo, solo autenticación.
+
+### Re-seed seguro (RF-R04)
+
+`modulo_permisos_inicializado` + `Database\Seeders\Support\InitialPermissionMatrix` evitan que `db:seed` vuelva a conceder permisos revocados desde la UI.
+
+- Instalación nueva: asigna la matriz inicial y marca el módulo.
+- Instalación existente: detecta asignaciones previas, marca y no reasigna.
+- Re-ejecución: no toca la matriz.
+- Los seeders de 01/02/03 ya usan este helper.
+
+### Estado de la Fase 1
+
+| Cobertura | Estado |
+|---|---|
+| RF-A01, A02, A03, A05, A07, A08, A11, A12, A13, A14, A15, A16 | Implementados |
+| RF-A04, A06, A09, A10 | Completados en Fase 2 |
+| RF-B01 (auth), RF-B02 | Implementados |
+| RF-B03–B15 | Fase 4, salvo B14 (permisos base ya definidos) |
+| RN-06 (login), RN-11, RN-12, RN-13 (bloqueo), RN-18 | Implementadas |
+| RN-14 | Implementada en Fase 2 |
+| RN-16 | Implementada en Fase 2 (último Superadmin) |
+| RN-17, RN-19–RN-22 | Fases 3–4 |
+| CU-07, CU-08, CU-10 (auth) | Implementados |
+| CU-09 | Implementado en Fase 2 |
+| CU-06, CU-11, CU-12 | Fases 3–4 / pendiente infraestructura |
+
+#### Checklist RF/RN de la Fase 1 (numeración consolidada)
+
+| Requisito | Estado | Evidencia |
+|---|---|---|
+| RF-A01 login con token | Completo | `LoginAction`, `LoginTest` |
+| RF-A02 política de contraseñas | Completo | `PasswordPolicy`, `PasswordPolicyTest`, `ChangePasswordTest` |
+| RF-A03 cambio propio | Completo | `ChangePasswordAction`, `ChangePasswordTest` |
+| RF-A04 reseteo con temporal | Completo (Fase 2) | `ResetUserPasswordAction`, `UserPasswordResetTest` |
+| RF-A05 bloqueo por intentos | Completo | `LoginAction`, `LoginLockoutTest` |
+| RF-A06 desbloqueo manual | Completo (Fase 2) | `UnlockUserAction`, `UserUnlockTest` |
+| RF-A07 expiración por inactividad | Completo | `EnsureSessionIsValid`, `SessionInactivityTest` |
+| RF-A08 logout local | Completo | `LogoutAction`, `LogoutTest` |
+| RF-A09 cierre remoto | Completo (Fase 2) | `CloseUserSessionsAction`, `UserSessionsTest` |
+| RF-A10 invalidación por desactivación/rol | Completo (Fase 2) | `UpdateUserAction`, `ChangesUserStatus`, tests |
+| RF-A11 mensajes genéricos | Completo | `InvalidCredentialsException`, `LoginTest` |
+| RF-A12 bitácora de accesos | Completo (auth) | `RecordSecurityAudit`, `AuthAuditTest` |
+| RF-A13 cambio forzado | Completo (Fase 1 + reset Fase 2) | `EnsureSessionIsValid`, `ForcedPasswordChangeTest` |
+| RF-A14 tokens protegidos | Completo (sessionStorage + `EnsureHttps`); riesgo XSS residual | `HttpsTest`, README |
+| RF-A15 límite de sesiones | Completo | `LoginAction`, `SessionLimitTest` |
+| RF-A16 último acceso | Completo | `GetAuthenticatedUserQuery`, `LoginTest` |
+| RF-B01 campos mínimos | Completo para auth/usuarios; resto Fase 4 | `RecordSecurityAudit` |
+| RF-B02 inmutabilidad | Completo | Trigger existente + `BitacoraImmutabilityTest` |
+| RF-R05/R06 validación backend + UI | Parcial: auth + usuarios; matriz Fase 3 | `EnsureSessionIsValid`, `permissionGuard`, `me` |
+| RN-06 login | Completo (login + asignabilidad) | `LoginAction`, `UserDirectoryContractTest` |
+| RN-11 autenticación obligatoria | Completo | `auth:sanctum` + guards |
+| RN-12 política vigente | Completo | `SecurityParameters` |
+| RN-13 bloqueo | Completo (bloqueo + desbloqueo) | `LoginLockoutTest`, `UserUnlockTest` |
+| RN-18 bitácora inmutable | Completo | `BitacoraImmutabilityTest` |
+| CU-07 iniciar sesión | Completo | `LoginTest` |
+| CU-08 cambiar contraseña | Completo | `ChangePasswordTest` |
+| CU-10 registrar evento auditado | Completo para auth/usuarios; resto Fase 4 | `RecordSecurityAudit` |
+
+### Migraciones
+
+- `2026_11_21_000000_add_security_fields_to_users_table.php`: columnas de negocio nullable/default en `users`.
+- `2026_11_21_000100_create_usuario_sucursal_table.php`.
+- `2026_11_21_000200_create_usuario_password_historial_table.php`.
+- `2026_11_21_000300_add_audit_fields_to_bitacora_table.php`: `modulo`, `resultado`, `critico` e índices.
+- `2026_11_21_000400_add_matrix_fields_to_roles_table.php`: `version`, `es_superadmin` e índice único parcial.
+- `2026_11_21_000500_create_modulo_permisos_inicializado_table.php`.
+
+### Fase 2 — Usuarios y alcance por sucursal
+
+Implementada sobre el mismo módulo `Seguridad`. La migración `2026_11_21_000700` hace opcional `users.email`; el resto usa las tablas de Fase 1.
+
+#### Endpoints
+
+Prefijo real: `/api/seguridad/usuarios`.
+
+| Método | Ruta | Acción / Query | Permiso |
+|---|---|---|---|
+| GET | `/` | `ListUsersQuery` | `usuario.ver` |
+| GET | `/opciones` | `GetUserFormOptionsQuery` (roles + sucursales activas) | `usuario.ver` |
+| GET | `/{id}` | `GetUserQuery` | `usuario.ver` |
+| GET | `/{id}/historial` | `GetUserHistoryQuery` | `usuario.ver` |
+| POST | `/` | `CreateUserAction` | `usuario.crear` |
+| PATCH | `/{id}` | `UpdateUserAction` | `usuario.editar` |
+| POST | `/{id}/activar` | `ActivateUserAction` | `usuario.cambiar_estado` |
+| POST | `/{id}/desactivar` | `DeactivateUserAction` | `usuario.cambiar_estado` |
+| POST | `/{id}/resetear-password` | `ResetUserPasswordAction` | `usuario.resetear_password` |
+| POST | `/{id}/desbloquear` | `UnlockUserAction` | `usuario.desbloquear` |
+| POST | `/{id}/cerrar-sesiones` | `CloseUserSessionsAction` | `usuario.cerrar_sesiones` |
+| DELETE | `/{id}` | `RejectUserDeletionAction` | `usuario.cambiar_estado` → 409 |
+
+La lista devuelve `data`, `links`, `meta`, `can` (`create`, `export=false`) y un `can` por fila (`update`, `change_status`, `reset_password`, `unlock`, `close_sessions`, `delete=false`). El alta y el reseteo devuelven `password_temporal` una sola vez.
+
+#### Contratos
+
+- **`UserBranchAccessContract`** implementado por `EloquentUserBranchAccess`:
+  - usuario inactivo/inexistente → `[]`;
+  - con `sucursal.alcance_global` → todas las sucursales activas;
+  - sin alcance global → solo `usuario_sucursal` activas.
+- **`UserDirectoryContract`** implementado por `EloquentUserDirectory`: `existe`, `estaActivo`, `asegurarActivo` (excepciones `UserNotFoundException` / `InactiveUserException`).
+
+#### Reglas aplicadas
+
+- Un rol por usuario con `syncRoles([$rol])`.
+- Al menos una sucursal activa para crear o activar usuarios sin alcance global. El Superadmin con `sucursal.alcance_global` puede operar sin pivotes; el bootstrap lo crea sin sucursales si aún no hay ninguna y luego puede crear la primera.
+- `username` y `documento` únicos. `email` es opcional; si se informa, es único y debe tener formato válido. El login acepta `username` o `email` cuando existe.
+- `version` optimista en edición, activación/desactivación y desbloqueo; 409 con recarga.
+- Desactivar exige motivo; activar lo permite opcional.
+- Desactivar, cambiar rol y resetear invalidan todas las sesiones.
+- Reset genera temporal, cierra sesiones y fuerza cambio; se muestra una sola vez.
+- Desbloqueo manual con motivo; si la cuenta no está bloqueada → 409.
+- Cierre remoto con motivo; devuelve cuántas sesiones cerró.
+- `DELETE` siempre 409 (`USER_DELETE_NOT_ALLOWED`).
+- El último Superadmin activo no puede desactivarse ni perder su rol (`LAST_SUPERADMIN_PROTECTED`).
+- Alcance por sucursal fail-closed en listado, ficha, historial y acciones.
+
+#### Tests actualizados de 01/02
+
+Los cinco tests que esperaban `503 MODULE_02_PENDING` ahora verifican el comportamiento real:
+
+- listados sin sucursales → `200` con `data` vacía;
+- ficha/edición fuera de alcance → `403 BRANCH_ACCESS_DENIED`.
+
+Se eliminaron `StubUserBranchAccessContract` y `ModulePendingException`.
+
+#### Frontend
+
+- Página `/seguridad/usuarios` con listado paginado, búsqueda y filtros por rol, sucursal y estado.
+- Ficha, alta/edición en modal compartido, activación/desactivación con motivo.
+- El selector de sucursales del formulario se carga desde `/opciones` en cada apertura: solo sucursales activas del alcance del usuario, no la foto del login.
+- El nombre de usuario se genera automáticamente desde el nombre completo al crear; deja de autocompletarse si se edita manualmente. En edición se conserva el usuario existente.
+- El correo es opcional en el alta y edición; si se deja vacío se envía `null`. No se envían correos.
+- Reseteo con contraseña temporal mostrada una vez y botón de copiar.
+- Desbloqueo y cierre remoto con motivo; historial con antes/después.
+- `permissionGuard` con `usuario.ver`; el sidebar muestra “Seguridad → Usuarios” solo con permiso.
+- Sin eliminación física y sin exportación (RF-U15 pendiente de infraestructura).
+
+#### Checklist Fase 2 (numeración consolidada)
+
+| Requisito | Estado | Evidencia |
+|---|---|---|
+| RF-U01 crear usuario | Completo | `CreateUserAction`, `UserCrudTest` |
+| RF-U02 unicidad documento/usuario y correo cuando se informa | Completo | `UserUniquenessGuard`, `UserCrudTest` |
+| RF-U03 campos obligatorios | Completo: nombre, documento, username, rol y sucursales; email opcional | `StoreUserRequest`, `UserCrudTest` |
+| RF-U04 un rol por usuario | Completo | `syncRoles`, `UserCrudTest` |
+| RF-U05 ≥1 sucursal activa | Completo | `UserAccessScope`, `UserStatusTest` |
+| RF-U06 listado/filtros | Completo | `ListUsersQuery`, `UserListTest` |
+| RF-U07 ficha | Completo | `GetUserQuery`, `UserListTest` |
+| RF-U08 edición + bitácora | Completo | `UpdateUserAction`, `UserCrudTest` |
+| RF-U09 activar/desactivar con motivo | Completo | `ChangesUserStatus`, `UserStatusTest` |
+| RF-U10 reset + cambio forzado | Completo | `ResetUserPasswordAction`, `UserPasswordResetTest` |
+| RF-U11 bloquear eliminación | Completo | `RejectUserDeletionAction`, `UserCrudTest` |
+| RF-U12 auditar altas/ediciones/roles/estado/reseteos | Completo | `RecordSecurityAudit` |
+| RF-U13 Administración/Recepción no crean ni editan | Completo | permisos + `UserCrudTest` |
+| RF-U14 impedir inactivos + historial | Completo | `UserDirectoryContract`, `UserHistoryTest` |
+| RF-U15 exportar | Pendiente de infraestructura | sin endpoint ni botón |
+| RF-U16 scoping backend | Completo | `EloquentUserBranchAccess`, `UserBranchAccessContractTest` |
+| RF-A04 reset con temporal | Completo | `ResetUserPasswordAction` |
+| RF-A06 desbloqueo manual | Completo | `UnlockUserAction` |
+| RF-A09 cierre remoto | Completo | `CloseUserSessionsAction` |
+| RF-A10 invalidación por estado/rol/reseteo | Completo | `UpdateUserAction`, `ChangesUserStatus`, `ResetUserPasswordAction` |
+| RN-01 unicidad | Completo | `UserUniquenessGuard` |
+| RN-02 un rol | Completo | `syncRoles` |
+| RN-03 sucursal obligatoria | Completo | `UserAccessScope` |
+| RN-05 no eliminación | Completo | `RejectUserDeletionAction` |
+| RN-06 inactivo no opera | Completo | `EnsureSessionIsValid`, `InactiveUserException` |
+| RN-07 reset fuerza cambio | Completo | `ResetUserPasswordAction` |
+| RN-08 cambio de rol aplica desde el cambio | Completo | `UpdateUserAction` |
+| RN-10 motivo al desactivar/cerrar sesiones | Completo | `UserStatusChangeRule`, requests |
+| RN-14 invalidación de sesiones | Completo | Acciones + tests |
+| RN-16 último Superadmin activo | Completo | `LastSuperadminRule`, `SuperadminGuard`, `UserStatusTest` |
+| RF-R08 protección del último Superadmin | Completo (adelantado de Fase 3) | `LastSuperadminRule`, `UserStatusTest` |
+| CU-01 registrar usuario | Completo | `UserCrudTest` |
+| CU-02 editar rol/sucursales | Completo | `UserCrudTest` |
+| CU-03 desactivar usuario | Completo | `UserStatusTest` |
+| CU-09 resetear contraseña | Completo | `UserPasswordResetTest` |
+| FP-01 a FP-04 y FP-08 | Completos | Acciones y tests |
+
+### Fase 3 — Roles y matriz de permisos
+
+Implementada sobre las tablas de Fase 1 (`roles.version`, `roles.es_superadmin`, `bitacora`). No agrega migraciones.
+
+#### Endpoints
+
+Prefijo real: `/api/seguridad/roles`.
+
+| Método | Ruta | Acción / Query | Permiso |
+|---|---|---|---|
+| GET | `/` | `ListRolesMatrixQuery` | `rol.ver` |
+| GET | `/{id}` | `GetRoleMatrixQuery` | `rol.ver` |
+| GET | `/{id}/historial?fecha=YYYY-MM-DD` | `GetRoleMatrixAtDateQuery` | `rol.ver` |
+| PUT | `/{id}/permisos` | `UpdateRolePermissionsAction` | `rol.editar_permisos` |
+| DELETE | `/{id}` | `RejectRoleDeletionAction` | `rol.editar_permisos` → 409 |
+
+La respuesta incluye `roles` (con `permisos`, `version`, `es_superadmin` y `can.edit`), `modulos` agrupados por módulo/acción, `total_permisos` y `can` (`edit`, `export=false`).
+
+#### Matriz y concurrencia
+
+- Módulo derivado del prefijo `entidad.accion`; etiquetas en `PermissionCatalog`.
+- Edición con `version` optimista por rol: 409 `MATRIX_VERSION_CONFLICT` con recarga.
+- Sin cambios: 409 `MATRIX_UNCHANGED` (no genera auditoría falsa).
+- Permiso inválido: 422.
+- Tras guardar: `syncPermissions`, `roles.version++` y `PermissionRegistrar::forgetCachedPermissions()`. El cambio aplica en la siguiente operación (RN-22).
+- Cada edición deja `entidad='matriz_permisos'`, `accion='EDITAR_PERMISOS'`, antes/después y `critico=true`.
+- Los roles no se crean ni se eliminan (RN-17). `DELETE` siempre 409.
+
+#### Permisos críticos del Superadmin
+
+`UpdateRolePermissionsAction` impide quitar del rol marcado `es_superadmin` el subconjunto crítico: `rol.ver`, `rol.editar_permisos`, `usuario.ver`, `usuario.crear`, `usuario.editar`, `usuario.cambiar_estado`, `usuario.resetear_password`, `usuario.desbloquear`, `usuario.cerrar_sesiones`, `bitacora.ver` y `sucursal.alcance_global`. Si falta alguno → `409 CRITICAL_PERMISSION_PROTECTED`. No se decide por nombre de rol.
+
+#### Contrato evaluador
+
+**`PermissionEvaluatorContract`** implementado por `EloquentPermissionEvaluator`:
+
+```php
+public function puede(int $usuarioId, string $permiso, ?int $sucursalId = null): bool;
+public function permisos(int $usuarioId): array; // list<string>
+```
+
+- Usuario inexistente o inactivo → `false` / `[]`.
+- Permiso ausente → `false`.
+- Con `sucursalId`, además exige alcance por sucursal.
+- Cualquier error → log y `false` (fail-closed).
+
+#### Línea base e histórico
+
+`SeguridadMatrixBaselineSeeder` registra una vez por instalación un evento `EDITAR_PERMISOS` por rol, con `motivo='Línea base de instalación'`, `critico=false` y `linea_base=true`. Se marca en `modulo_permisos_inicializado` (`seguridad.matriz_baseline`) y no se duplica al re-ejecutar.
+
+`GetRoleMatrixAtDateQuery` toma el último evento `matriz_permisos` del rol anterior al fin del día consultado (convertido desde `America/La_Paz` a UTC) y devuelve `permisos`, `version`, `version_actual` y `registrado_en`. Sin eventos → `encontrado=false`. No hay tabla de versiones paralela.
+
+#### Frontend
+
+- Página `/seguridad/roles-permisos` (sidebar: Seguridad → Roles y permisos, con `rol.ver`).
+- Selector de rol, grilla por módulo/acción, contador de permisos y versión.
+- Superadmin edita; Administración solo consulta; Recepción no accede.
+- Permisos críticos del Superadmin bloqueados con candado.
+- Guardado con `version`; 409 con recarga; `MATRIX_UNCHANGED` y `CRITICAL_PERMISSION_PROTECTED` con mensajes claros.
+- Vigencia histórica con selector de fecha Flatpickr y consulta a la bitácora.
+- Sin botón de exportación (RF-R03 pendiente de infraestructura).
+
+#### Checklist Fase 3 (numeración consolidada)
+
+| Requisito | Estado | Evidencia |
+|---|---|---|
+| RF-R01 catálogo de roles | Completo (roles fijos; sin crear/eliminar) | `RoleMatrixBuilder`, `RoleMatrixListTest` |
+| RF-R02 matriz rol × módulo × acción | Completo | `ListRolesMatrixQuery`, `RoleMatrixBuilder` |
+| RF-R03 consultar/exportar matriz | Consulta completa; export pendiente de infraestructura | API + página, sin botón |
+| RF-R04 editar permisos con bitácora | Completo | `UpdateRolePermissionsAction`, `RoleMatrixUpdateTest` |
+| RF-R05 validar permisos en backend | Completo | Middleware Spatie + `PermissionEvaluatorContract` |
+| RF-R06 ocultar acciones en UI | Completo | `permissionGuard`, `can.edit` |
+| RF-R08 último Superadmin / críticos | Completo | `CriticalPermissionProtectedException`, `LastSuperadminRule` |
+| RF-R10 registrar cambios de matriz | Completo | `RolePermissionsUpdated`, `RecordSecurityAudit` |
+| RF-R11 exponer matriz a módulos | Completo | `PermissionEvaluatorContract` |
+| RF-R12 recalcular al cambiar rol/sucursales | Completo | Spatie + invalidación de sesiones (Fase 2) |
+| RF-R13 concurrencia de matriz | Completo | `version` + 409 |
+| RF-R14 versionado histórico | Completo | `GetRoleMatrixAtDateQuery` + baseline |
+| RF-R15 solo Superadmin edita | Completo | permisos + tests |
+| RN-16 último Superadmin | Completo | Regla + críticos |
+| RN-17 roles no eliminables | Completo | `RejectRoleDeletionAction`, DELETE 409 |
+| RN-22 aplicación inmediata | Completo | `forgetCachedPermissions` + test |
+| CU-04 editar permisos | Completo | `RoleMatrixUpdateTest` |
+| CU-05 consultar/exportar matriz | Consulta completa; export pendiente | API + página |
+| CU-06 evaluar permiso | Completo | `PermissionEvaluatorContractTest` |
+| FP-05 gestionar matriz | Completo | Acciones + página |
+
+### Fase 4 — Auditoría y bitácora
+
+Implementada sobre `bitacora` y la nueva tabla de catálogo `accion_auditada`. No se creó una tabla `auditoria` paralela.
+
+#### Endpoints
+
+Prefijo real: `/api/seguridad/bitacora`.
+
+| Método | Ruta | Acción / Query | Permiso |
+|---|---|---|---|
+| GET | `/` | `ListAuditEntriesQuery` | `bitacora.ver` |
+| GET | `/opciones` | `GetAuditFilterOptionsQuery` | `bitacora.ver` |
+| GET | `/reconstruir?entidad=&entidad_id=&fecha=` | `GetEntitySnapshotAtDateQuery` | `bitacora.ver` |
+| GET | `/{id}` | `GetAuditEntryQuery` | `bitacora.ver` |
+
+No hay endpoint de exportación: RF-B09 queda pendiente de infraestructura y no se muestra botón.
+
+#### Filtros y scoping
+
+- Fechas desde/hasta (convertidas de `America/La_Paz` a UTC), usuario, módulo, entidad, `entidad_id`, acción, resultado (`exito`, `fallo`, `denegado`), crítico y sucursal.
+- Paginación con `per_page` máximo 50, orden descendente por fecha.
+- Superadmin ve todo. Administración ve eventos con `sucursal_id` en sus sucursales asignadas, incluidos los eventos de seguridad de usuarios de esas sucursales. Los eventos globales (`sucursal_id NULL`, por ejemplo la matriz de permisos o las consultas a la bitácora) solo los ve el alcance global. Recepción no accede.
+- El detalle aplica el mismo scoping (`403 AUDIT_ACCESS_DENIED`). La reconstrucción filtra antes de buscar: fuera de alcance responde `encontrado=false`, sin revelar la existencia del evento.
+
+#### Catálogo de acciones auditadas
+
+Tabla `accion_auditada` (`modulo`, `entidad`, `accion`, `critico`, `activo`, `descripcion`, unique por módulo/entidad/acción). Seeder idempotente `AccionAuditadaSeeder` con 40 acciones y 7 críticas al momento de esta fase.
+
+Es un catálogo, no la bitácora. Los módulos consumidores agregan sus acciones cuando implementen sus eventos.
+
+#### Registro para consumidores
+
+**`AuditRecorderContract`** implementado por `EloquentAuditRecorder`:
+
+```php
+registrarConsultaSensible(entidad, entidadId, ?sucursalId, contexto, ?usuarioId, ?ip);
+registrarExportacion(recurso, filtros, cantidad, ?sucursalId, ?usuarioId, ?ip);
+registrarConsultaBitacora(filtros, cantidad, ?usuarioId, ?ip);
+```
+
+- Consulta sensible: `accion=CONSULTAR`, módulo derivado de la entidad; el contexto se sanitiza y solo conserva referencias (`entidad`, `entidad_id`, `recurso`, `campo`, `filtros`, `cantidad`). Nunca contenido clínico, contraseñas, hashes ni tokens.
+- Exportación: `entidad='exportacion'`, `accion=EXPORTAR`, `critico=true`, filtros y cantidad (sin datos exportados).
+- Consulta de bitácora: `entidad='bitacora'`, `accion=CONSULTAR`, filtros y cantidad.
+- Todas son síncronas y fail-closed: si la escritura falla, se responde `503 AUDIT_UNAVAILABLE`.
+
+#### Consulta auditada y reconstrucción
+
+- Cada listado, detalle, opciones y reconstrucción registra un `CONSULTAR` sobre `bitacora` (RF-B15). Esas filas son globales y solo las ve el alcance global.
+- `GetEntitySnapshotAtDateQuery` toma el último evento **exitoso con snapshot completo** de la entidad antes del fin del día y devuelve `datos_nuevos` como estado, `datos_anteriores` como snapshot previo, acción, fecha, usuario y sucursal. Ignora eventos fallidos, consultas y acciones sin snapshot completo, como `CAMBIAR_PASSWORD` o `CERRAR_SESIONES`.
+- Los eventos históricos de 01/02/03 conservan `modulo`, `resultado` e `ip` null; la consulta deriva el módulo desde `entidad` y muestra “—”. Para reconstrucción se aceptan resultados `exito` y `resultado NULL` histórico.
+
+#### Retención y eventos críticos
+
+- `bitacora_retencion_anios` (default 5) se expone en las opciones. **No hay purga ni borrado manual**; particionado/archivado queda como TODO de infraestructura.
+- El filtro `critico` y el badge visual permiten ubicar desactivaciones de usuario, reseteos, cierres de sesiones, ediciones de matriz, bloqueos y exportaciones.
+- La anulación de pago como evento crítico (RF-B13) queda para el módulo 08; debe llamar al recorder y marcar `critico=true` en su evento.
+
+#### Frontend
+
+- Página `/seguridad/bitacora` (sidebar: Seguridad → Bitácora, con `bitacora.ver`).
+- Filtros múltiples, fechas Flatpickr, paginación y detalle con antes/después.
+- Marca visual de críticos y resultado.
+- Panel de reconstrucción por entidad/ID/fecha.
+- Nota de retención configurada y ausencia de exportación.
+- Sin botón de exportar.
+
+#### TODOs de módulos consumidores
+
+- **RF-B07 — datos sensibles:**
+  - `docs/04_PACIENTES_TUTORES/03_ficha_ingreso_entrevista.md`
+  - `docs/04_PACIENTES_TUTORES/04_busqueda_ficha_resumen.md`
+  - `docs/11_EVALUACIONES_RESULTADOS/04_acceso_informacion_clinica.md`
+  - Deben inyectar `AuditRecorderContract::registrarConsultaSensible` con referencias/ids, nunca contenido clínico.
+- **RF-B13 — anulación de pago crítica:**
+  - `docs/08_PAGOS_CAJA/04_anulacion_pagos.md`
+  - Debe registrar el evento con `critico=true` (o mediante el recorder).
+- **RF-B08/RN-19 — exportaciones auditadas:** los exportadores de 09/08 deben llamar `registrarExportacion` con filtros y cantidad.
+- **RF-B09 — exportar bitácora:** pendiente de infraestructura; sin endpoint ni botón.
+
+#### Checklist Fase 4 (numeración consolidada)
+
+| Requisito | Estado | Evidencia |
+|---|---|---|
+| RF-B01 registrar evento con campos mínimos | Completo para eventos nuevos; históricos conservan null | `AuditEntryResource`, consultas |
+| RF-B02 inmutabilidad | Completo | Trigger existente + `BitacoraImmutabilityTest` |
+| RF-B03 catálogo de acciones | Completo | `accion_auditada`, `AccionAuditadaSeeder` |
+| RF-B04 consulta paginada con filtros | Completo | `ListAuditEntriesQuery`, `AuditQueryTest` |
+| RF-B05 detalle con antes/después | Completo | `GetAuditEntryQuery`, detalle UI |
+| RF-B06 scoping por sucursal | Completo | `AuditScope`, tests |
+| RF-B07 accesos a datos sensibles | Mecanismo completo; consumidores 04/08/11 pendientes | `AuditRecorderContract` |
+| RF-B08 exportaciones auditadas | Mecanismo completo; exportadores pendientes | `registrarExportacion` |
+| RF-B09 exportar bitácora | Pendiente de infraestructura | sin endpoint ni botón |
+| RF-B10 snapshot de datos clave | Completo | Snapshots existentes + reconstrucción |
+| RF-B11 reconstruir estado por entidad/fecha | Completo | `GetEntitySnapshotAtDateQuery` |
+| RF-B12 retención configurable | Parcial: parámetro y aviso; sin purga/particionado | `bitacora_retencion_anios` |
+| RF-B13 eventos críticos | Mecanismo completo; anulación de pago pendiente en 08 | `critico`, filtro |
+| RF-B14 Recepción bloqueada | Completo | permiso + tests |
+| RF-B15 consultas a bitácora auditadas | Completo | `RecordAuditQueryAction` |
+| RN-18 bitácora inmutable | Completo | Trigger |
+| RN-19 exportaciones auditadas | Mecanismo completo; consumidores pendientes | recorder |
+| RN-20 críticos filtrables | Completo | filtro/badge |
+| RN-21 sin contenido clínico completo | Completo en el mecanismo | sanitización de contexto |
+| CU-10 registrar evento auditado | Completo | recorder + listener |
+| CU-11 consultar bitácora por filtros | Completo | página + API |
+| CU-12 exportar bitácora | Pendiente de infraestructura | sin botón |
+| FP-09 registrar/consultar/exportar bitácora | Consulta completa; export pendiente | API + página |
+
+### Pendientes de fases siguientes
+
+- Solo infraestructura: PDF/Excel (RF-U15, RF-R03, RF-B09), envío automático de contraseña temporal y plantilla de importación RT-08.
+- Consumidores de auditoría de datos sensibles y exportaciones en los módulos 04, 08, 09 y 11.
+
+---
+
 ## Notas
 
 - No se agregaron librerías de PDF/Excel ni se modificó ningún otro módulo de negocio.
-- El login y la autenticación real pertenecen al módulo 02; hasta entonces la UI de sucursales mostrará `401` si intenta consumir la API sin token.
+- El login real está implementado en la Fase 1 del módulo 02 y el alcance real por sucursal está activo desde la Fase 2. La UI obtiene token mediante el interceptor y las páginas de 01/02/03 ya respetan las sucursales asignadas.
+- `database/database.md` y `database/talitacumi_schema.sql` se actualizaron con la implementación real: `users` es la tabla física, Spatie administra roles/permisos y Sanctum usa `personal_access_tokens`. Las definiciones `usuario`/`rol`/`permiso`/`sesion` del SQL quedan como referencia aspiracional.
 - Si se reconstruye la imagen con `--no-dev`, volver a ejecutar `composer install` dentro del contenedor para correr tests.
