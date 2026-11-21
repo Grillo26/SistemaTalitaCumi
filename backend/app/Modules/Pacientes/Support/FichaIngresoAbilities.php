@@ -12,7 +12,7 @@ use App\Modules\Pacientes\Models\FichaIngreso;
 final class FichaIngresoAbilities
 {
     /**
-     * @return array{view: bool, create: bool, edit: bool, complete: bool, archive: bool, reactivate: bool, view_sensibles: bool, export: bool}
+     * @return array{view: bool, create: bool, edit: bool, complete: bool, archive: bool, reactivate: bool, view_sensibles: bool, export: bool, consent_view: bool, consent_register: bool, consent_revoke: bool, consent_catalog: bool}
      */
     public static function collection(User $user): array
     {
@@ -25,11 +25,15 @@ final class FichaIngresoAbilities
             'reactivate' => $user->can(FichaIngresoPermission::REACTIVATE),
             'view_sensibles' => $user->can(FichaIngresoPermission::VIEW_SENSITIVE),
             'export' => false,
+            'consent_view' => $user->can(ConsentimientoPermission::VIEW),
+            'consent_register' => $user->can(ConsentimientoPermission::REGISTER),
+            'consent_revoke' => $user->can(ConsentimientoPermission::REVOKE),
+            'consent_catalog' => $user->can(ConsentimientoPermission::CATALOG),
         ];
     }
 
     /**
-     * @return array{view: bool, create: bool, edit: bool, complete: bool, archive: bool, reactivate: bool, view_sensibles: bool, export: bool}
+     * @return array{view: bool, create: bool, edit: bool, complete: bool, archive: bool, reactivate: bool, view_sensibles: bool, export: bool, consent_view: bool, consent_register: bool, consent_revoke: bool, consent_catalog: bool}
      */
     public static function for(User $user, FichaIngreso $ficha): array
     {
@@ -45,6 +49,10 @@ final class FichaIngresoAbilities
             'reactivate' => $archived && $user->can(FichaIngresoPermission::REACTIVATE),
             'view_sensibles' => $user->can(FichaIngresoPermission::VIEW_SENSITIVE),
             'export' => false,
+            'consent_view' => $user->can(ConsentimientoPermission::VIEW),
+            'consent_register' => ! $archived && $user->can(ConsentimientoPermission::REGISTER),
+            'consent_revoke' => ! $archived && $user->can(ConsentimientoPermission::REVOKE),
+            'consent_catalog' => $user->can(ConsentimientoPermission::CATALOG),
         ];
     }
 }

@@ -4,12 +4,14 @@ namespace App\Modules\Pacientes\Providers;
 
 use App\Modules\Pacientes\Contracts\DiagnosticTypeDirectoryContract;
 use App\Modules\Pacientes\Contracts\EloquentFichaIngresoDirectory;
+use App\Modules\Pacientes\Contracts\EloquentPatientConsent;
 use App\Modules\Pacientes\Contracts\EloquentPatientDirectory;
 use App\Modules\Pacientes\Contracts\EloquentTutorDirectory;
 use App\Modules\Pacientes\Contracts\EntrevistaDirectoryContract;
 use App\Modules\Pacientes\Contracts\FichaIngresoDirectoryContract;
 use App\Modules\Pacientes\Contracts\FichaIngresoExporterContract;
 use App\Modules\Pacientes\Contracts\PacienteExporterContract;
+use App\Modules\Pacientes\Contracts\PatientConsentContract;
 use App\Modules\Pacientes\Contracts\PatientDirectoryContract;
 use App\Modules\Pacientes\Contracts\PatientEnrollmentDirectoryContract;
 use App\Modules\Pacientes\Contracts\StubDiagnosticTypeDirectoryContract;
@@ -18,6 +20,10 @@ use App\Modules\Pacientes\Contracts\StubPatientEnrollmentDirectoryContract;
 use App\Modules\Pacientes\Contracts\TutorDirectoryContract;
 use App\Modules\Pacientes\Contracts\UnavailableFichaIngresoExporter;
 use App\Modules\Pacientes\Contracts\UnavailablePacienteExporter;
+use App\Modules\Pacientes\Events\Consentimiento\ConsentimientoRegistered;
+use App\Modules\Pacientes\Events\Consentimiento\ConsentimientoRevoked;
+use App\Modules\Pacientes\Events\Consentimiento\ConsentimientoTipoCreated;
+use App\Modules\Pacientes\Events\Consentimiento\ConsentimientoTipoUpdated;
 use App\Modules\Pacientes\Events\Contactos\ContactoEmergenciaCreated;
 use App\Modules\Pacientes\Events\Contactos\ContactoEmergenciaDeleted;
 use App\Modules\Pacientes\Events\Contactos\ContactoEmergenciaUpdated;
@@ -54,6 +60,7 @@ final class PacientesServiceProvider extends ServiceProvider
         $this->app->bind(PatientDirectoryContract::class, EloquentPatientDirectory::class);
         $this->app->bind(TutorDirectoryContract::class, EloquentTutorDirectory::class);
         $this->app->bind(FichaIngresoDirectoryContract::class, EloquentFichaIngresoDirectory::class);
+        $this->app->bind(PatientConsentContract::class, EloquentPatientConsent::class);
         $this->app->bind(EntrevistaDirectoryContract::class, StubEntrevistaDirectoryContract::class);
         $this->app->bind(FichaIngresoExporterContract::class, UnavailableFichaIngresoExporter::class);
         $this->app->bind(DiagnosticTypeDirectoryContract::class, StubDiagnosticTypeDirectoryContract::class);
@@ -80,6 +87,10 @@ final class PacientesServiceProvider extends ServiceProvider
             FichaIngresoCreated::class,
             FichaIngresoUpdated::class,
             FichaIngresoStatusChanged::class,
+            ConsentimientoRegistered::class,
+            ConsentimientoRevoked::class,
+            ConsentimientoTipoCreated::class,
+            ConsentimientoTipoUpdated::class,
         ] as $event) {
             Event::listen($event, RecordPacientesAudit::class);
         }
@@ -98,5 +109,10 @@ final class PacientesServiceProvider extends ServiceProvider
             ->prefix('api'.PacientesModule::MODULE_URL)
             ->name('api.pacientes.ficha-ingreso.')
             ->group(__DIR__.'/../routes-ficha-ingreso.php');
+
+        Route::middleware('api')
+            ->prefix('api'.PacientesModule::MODULE_URL)
+            ->name('api.pacientes.consentimiento.')
+            ->group(__DIR__.'/../routes-consentimiento.php');
     }
 }

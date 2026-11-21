@@ -3,6 +3,13 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, catchError, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
+  ConsentimientoIndexResponse,
+  ConsentimientoPayload,
+  ConsentimientoResponse,
+  ConsentimientoTipo,
+  ConsentimientoTipoListResponse,
+  ConsentimientoTipoPayload,
+  ConsentimientoTipoUpdatePayload,
   FichaIngresoCreatePayload,
   FichaIngresoPermissionResponse,
   FichaIngresoResponse,
@@ -15,6 +22,7 @@ import {
 export class FichaIngresoService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = `${environment.apiUrl}/pacientes/pacientes`;
+  private readonly catalogUrl = `${environment.apiUrl}/pacientes/ficha-ingreso/consentimientos/tipos`;
 
   get(pacienteId: number): Observable<FichaIngresoResponse> {
     return this.http
@@ -101,6 +109,67 @@ export class FichaIngresoService {
       .get<FichaIngresoRevisionResponse>(
         `${this.baseUrl}/${pacienteId}/ficha-ingreso/${fichaId}/revisiones`,
       )
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  consentimientos(
+    pacienteId: number,
+    fichaId: number,
+  ): Observable<ConsentimientoIndexResponse> {
+    return this.http
+      .get<ConsentimientoIndexResponse>(
+        `${this.baseUrl}/${pacienteId}/ficha-ingreso/${fichaId}/consentimientos`,
+      )
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  registerConsentimiento(
+    pacienteId: number,
+    fichaId: number,
+    payload: ConsentimientoPayload,
+  ): Observable<ConsentimientoResponse> {
+    return this.http
+      .post<ConsentimientoResponse>(
+        `${this.baseUrl}/${pacienteId}/ficha-ingreso/${fichaId}/consentimientos`,
+        payload,
+      )
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  revokeConsentimiento(
+    pacienteId: number,
+    fichaId: number,
+    consentimientoId: number,
+    motivo: string,
+  ): Observable<ConsentimientoResponse> {
+    return this.http
+      .post<ConsentimientoResponse>(
+        `${this.baseUrl}/${pacienteId}/ficha-ingreso/${fichaId}/consentimientos/${consentimientoId}/revocar`,
+        { motivo },
+      )
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  tipos(incluirInactivos = false): Observable<ConsentimientoTipoListResponse> {
+    const url = incluirInactivos ? `${this.catalogUrl}?incluir_inactivos=1` : this.catalogUrl;
+
+    return this.http
+      .get<ConsentimientoTipoListResponse>(url)
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  createTipo(payload: ConsentimientoTipoPayload): Observable<{ data: ConsentimientoTipo }> {
+    return this.http
+      .post<{ data: ConsentimientoTipo }>(this.catalogUrl, payload)
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  updateTipo(
+    tipoId: number,
+    payload: ConsentimientoTipoUpdatePayload,
+  ): Observable<{ data: ConsentimientoTipo }> {
+    return this.http
+      .patch<{ data: ConsentimientoTipo }>(`${this.catalogUrl}/${tipoId}`, payload)
       .pipe(catchError((error: unknown) => this.fail(error)));
   }
 

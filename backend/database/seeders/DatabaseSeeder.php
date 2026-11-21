@@ -51,5 +51,8 @@ class DatabaseSeeder extends Seeder
         $this->call(ContactosEmergenciaAccionAuditadaSeeder::class);
         $this->call(FichaIngresoPermissionSeeder::class);
         $this->call(FichaIngresoAccionAuditadaSeeder::class);
+        $this->call(ConsentimientoPermissionSeeder::class);
+        $this->call(ConsentimientoTipoSeeder::class);
+        $this->call(ConsentimientoAccionAuditadaSeeder::class);
     }
 }

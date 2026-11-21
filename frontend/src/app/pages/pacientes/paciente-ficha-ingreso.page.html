@@ -277,6 +277,124 @@
             <p class="text-xs text-gray-400">{{ texts.auditNotice }}</p>
           </div>
         </div>
+
+        @if (f.can.consent_view) {
+          <app-component-card [title]="texts.consents">
+            <div class="space-y-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <p class="max-w-2xl text-sm text-gray-500 dark:text-gray-400">
+                {{ texts.consentsHelp }}
+              </p>
+              <div class="flex flex-wrap gap-2">
+                @if (canManageConsentCatalog()) {
+                  <button app-button variant="outline" type="button" (click)="openConsentTipos()">
+                    {{ texts.consentCatalog }}
+                  </button>
+                }
+                @if (canRegisterConsent()) {
+                  <button app-button variant="default" type="button" (click)="openConsentForm()">
+                    {{ texts.consentRegister }}
+                  </button>
+                }
+              </div>
+            </div>
+
+            @if (isArchived()) {
+              <app-alert variant="warning" [message]="texts.consentsArchived" />
+            } @else if (!hasActiveConsentTutors()) {
+              <app-alert variant="warning" [message]="texts.consentsNoTutors" />
+            }
+
+            @if (consentimientosLoading()) {
+              <p class="py-6 text-center text-sm text-gray-500">{{ texts.loading }}</p>
+            } @else {
+              <div>
+                <h3 class="mb-2 text-sm font-semibold text-gray-800 dark:text-white/90">
+                  {{ texts.consentCurrent }}
+                </h3>
+                <div class="space-y-2">
+                  @for (consentimiento of consentimientosVigentes(); track consentimiento.id) {
+                    <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+                      <div class="min-w-0">
+                        <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+                          {{ consentimiento.tipo?.nombre || 'Consentimiento' }}
+                        </p>
+                        <p class="text-xs text-gray-500">
+                          {{ consentimiento.tutor.nombre_completo || 'Tutor' }}
+                          @if (consentimiento.tutor.parentesco) {
+                            · {{ consentimiento.tutor.parentesco }}
+                          }
+                          · {{ formatDate(consentimiento.fecha) }}
+                        </p>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <app-badge
+                          [color]="consentResultColor(consentimiento.resultado)"
+                          variant="light"
+                          size="sm"
+                        >
+                          {{ consentimiento.resultado_label }}
+                        </app-badge>
+                        @if (canRevokeConsent()) {
+                          <button
+                            app-button
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            (click)="openConsentRevoke(consentimiento)"
+                          >
+                            {{ texts.consentRevoke }}
+                          </button>
+                        }
+                      </div>
+                    </div>
+                  } @empty {
+                    <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.consentsNoCurrent }}</p>
+                  }
+                </div>
+              </div>
+
+              <div class="border-t border-gray-100 pt-4 dark:border-gray-800">
+                <h3 class="mb-2 text-sm font-semibold text-gray-800 dark:text-white/90">
+                  {{ texts.consentHistory }}
+                </h3>
+                <div class="space-y-2">
+                  @for (consentimiento of consentimientosHistorial(); track consentimiento.id) {
+                    <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 p-2.5 dark:border-gray-800">
+                      <div class="min-w-0">
+                        <p class="text-sm text-gray-700 dark:text-gray-300">
+                          {{ consentimiento.tipo?.nombre || 'Consentimiento' }} ·
+                          {{ consentimiento.tutor.nombre_completo || 'Tutor' }}
+                        </p>
+                        <p class="text-xs text-gray-500">
+                          {{ formatDate(consentimiento.fecha) }}
+                          @if (consentimiento.revoca_a_id) {
+                            · revoca #{{ consentimiento.revoca_a_id }}
+                          }
+                          @if (consentimiento.motivo_protegido) {
+                            · {{ texts.consentMotivoProtected }}
+                          } @else if (consentimiento.motivo) {
+                            · {{ consentimiento.motivo }}
+                          }
+                        </p>
+                      </div>
+                      <app-badge
+                        [color]="consentResultColor(consentimiento.resultado)"
+                        variant="light"
+                        size="sm"
+                      >
+                        {{ consentimiento.resultado_label }}
+                      </app-badge>
+                    </div>
+                  } @empty {
+                    <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.consentsEmpty }}</p>
+                  }
+                </div>
+              </div>
+            }
+            </div>
+          </app-component-card>
+        }
       } @else {
         <app-component-card [title]="texts.title">
           @if (canCreate()) {
@@ -372,6 +490,31 @@
       [revisions]="revisiones()"
       [loading]="revisionesLoading()"
       (closed)="closeRevisions()"
+    />
+
+    <app-consentimiento-form-modal
+      [open]="consentimientoFormOpen()"
+      [pacienteId]="paciente()?.id || 0"
+      [fichaId]="f.id"
+      [tipos]="consentimientoTipos()"
+      [tutores]="consentimientoTutores()"
+      (closed)="closeConsentForm()"
+      (saved)="onConsentSaved($event)"
+    />
+
+    <app-consentimiento-revoke-modal
+      [open]="consentimientoRevokeOpen()"
+      [pacienteId]="paciente()?.id || 0"
+      [fichaId]="f.id"
+      [consentimiento]="consentimientoSelected()"
+      (closed)="closeConsentRevoke()"
+      (revoked)="onConsentRevoked($event)"
+    />
+
+    <app-consentimiento-tipos-modal
+      [open]="consentimientoTiposOpen()"
+      (closed)="closeConsentTipos()"
+      (changed)="onConsentTiposChanged()"
     />
   }
 </div>

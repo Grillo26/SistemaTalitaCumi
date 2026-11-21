@@ -17,6 +17,10 @@ export interface FichaIngresoAbilities {
   reactivate: boolean;
   view_sensibles: boolean;
   export: boolean;
+  consent_view: boolean;
+  consent_register: boolean;
+  consent_revoke: boolean;
+  consent_catalog: boolean;
 }
 
 export interface FichaIngreso {
@@ -74,6 +78,90 @@ export interface FichaIngresoRevision {
   snapshot: Record<string, unknown> | null;
   contenido_protegido: boolean;
   created_at: string | null;
+}
+
+export type ResultadoConsentimiento = 'otorgado' | 'negado' | 'revocado';
+
+export interface ConsentimientoTipo {
+  id: number;
+  codigo: string;
+  nombre: string;
+  descripcion: string | null;
+  orden: number;
+  activo: boolean;
+  version: number;
+}
+
+export interface ConsentimientoTutorResumen {
+  id: number;
+  nombre_completo: string;
+  parentesco_id: number | null;
+  parentesco: string | null;
+  es_principal: boolean;
+}
+
+export interface Consentimiento {
+  id: number;
+  ficha_ingreso_id: number;
+  tipo: ConsentimientoTipo | null;
+  tutor: {
+    id: number;
+    nombre_completo: string | null;
+    parentesco: string | null;
+  };
+  resultado: ResultadoConsentimiento;
+  resultado_label: string;
+  fecha: string;
+  vigente: boolean;
+  revoca_a_id: number | null;
+  usuario_id: number;
+  usuario_nombre: string | null;
+  motivo: string | null;
+  motivo_protegido: boolean;
+  created_at: string | null;
+}
+
+export interface ConsentimientoIndexResponse {
+  data: {
+    vigentes: Consentimiento[];
+    historial: Consentimiento[];
+  };
+  tipos: ConsentimientoTipo[];
+  tutores: ConsentimientoTutorResumen[];
+  can: FichaIngresoAbilities;
+}
+
+export interface ConsentimientoResponse {
+  data: Consentimiento;
+  can: FichaIngresoAbilities;
+}
+
+export interface ConsentimientoPayload {
+  consentimiento_tipo_id: number;
+  tutor_id: number;
+  resultado: 'otorgado' | 'negado';
+  fecha: string;
+  motivo: string | null;
+}
+
+export interface ConsentimientoTipoPayload {
+  codigo: string;
+  nombre: string;
+  descripcion: string | null;
+  orden: number;
+  activo: boolean;
+}
+
+export interface ConsentimientoTipoUpdatePayload {
+  nombre: string;
+  descripcion: string | null;
+  orden: number;
+  activo: boolean;
+  version: number;
+}
+
+export interface ConsentimientoTipoListResponse {
+  data: ConsentimientoTipo[];
 }
 
 export interface FichaIngresoCreatePayload {
@@ -182,6 +270,57 @@ export const FICHA_INGRESO_TEXTS = {
   revisionProtected:
     'El contenido está protegido. Necesitás ficha_ingreso.ver_sensibles para ver el snapshot completo.',
   requiredFields: 'Completá el motivo y la fecha de ingreso.',
+  consents: 'Consentimientos y autorizaciones',
+  consentsHelp:
+    'Registrá la autorización o negativa de cada tutor. La revocación conserva el historial.',
+  consentsEmpty: 'No hay consentimientos registrados.',
+  consentsNoCurrent: 'No hay consentimientos vigentes.',
+  consentsNoTutors:
+    'El paciente no tiene tutores activos asociados. Agregá un tutor desde la ficha del paciente para registrar consentimientos.',
+  consentsArchived:
+    'La ficha está archivada: no se pueden registrar ni revocar consentimientos.',
+  consentRegister: 'Registrar consentimiento',
+  consentRevoke: 'Revocar',
+  consentType: 'Tipo de consentimiento *',
+  consentTutor: 'Tutor que autoriza *',
+  consentDate: 'Fecha *',
+  consentResult: 'Resultado *',
+  consentGranted: 'Otorgado',
+  consentDenied: 'Negado',
+  consentRevoked: 'Revocado',
+  consentReason: 'Observación',
+  consentRevokeReason: 'Motivo de revocación *',
+  consentRevokeTitle: 'Revocar consentimiento',
+  consentRevokeHelp:
+    'La revocación se registra como un evento nuevo y no elimina el consentimiento original.',
+  consentCurrent: 'Vigentes',
+  consentHistory: 'Historial',
+  consentRegisterTitle: 'Registrar consentimiento',
+  consentTypeRequired: 'Seleccioná un tipo de consentimiento.',
+  consentTutorRequired: 'Seleccioná el tutor que autoriza.',
+  consentDateRequired: 'Indicá la fecha.',
+  consentSaved: 'Consentimiento registrado',
+  consentRevokedToast: 'Consentimiento revocado',
+  consentCatalog: 'Administrar tipos',
+  consentCatalogTitle: 'Tipos de consentimiento',
+  consentCatalogHelp:
+    'El catálogo lo administra Superadmin. Los tipos inactivos no se ofrecen para nuevos registros.',
+  consentCatalogNew: 'Nuevo tipo',
+  consentCatalogCode: 'Código *',
+  consentCatalogName: 'Nombre *',
+  consentCatalogDescription: 'Descripción',
+  consentCatalogOrder: 'Orden',
+  consentCatalogActive: 'Activo',
+  consentCatalogSave: 'Guardar tipo',
+  consentCatalogCreated: 'Tipo creado',
+  consentCatalogUpdated: 'Tipo actualizado',
+  consentCatalogVersionConflict: 'Otro usuario modificó el tipo. Recargá los datos.',
+  consentCatalogCodeHelp:
+    'Solo minúsculas, números y guiones bajos. No se puede cambiar después de crear.',
+  consentDuplicate: 'Ya existe un consentimiento vigente de este tipo para este tutor.',
+  consentNotRevocable: 'Solo se puede revocar un consentimiento otorgado y vigente.',
+  consentTypeInactive: 'El tipo de consentimiento está inactivo.',
+  consentMotivoProtected: 'Motivo protegido',
 } as const;
 
 export const EMPTY_FICHA_INGRESO_ABILITIES: FichaIngresoAbilities = {
@@ -193,6 +332,10 @@ export const EMPTY_FICHA_INGRESO_ABILITIES: FichaIngresoAbilities = {
   reactivate: false,
   view_sensibles: false,
   export: false,
+  consent_view: false,
+  consent_register: false,
+  consent_revoke: false,
+  consent_catalog: false,
 };
 
 export type FichaIngresoApiError = PacientesApiError;

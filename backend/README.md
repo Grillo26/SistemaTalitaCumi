@@ -1640,7 +1640,7 @@ Prefijo real: `/api/pacientes`.
 - Borrador exige motivo y fecha; los demás campos son opcionales.
 - Archivada bloquea edición, completar y nuevas observaciones/consentimientos. Reactivar solo Superadmin y vuelve al estado anterior con motivo.
 - DELETE siempre `409 FICHA_DELETE_NOT_ALLOWED`. El chequeo real de inscripciones/turnos/pagos queda pendiente de 06/07/08.
-- `tutor_principal_id` es un snapshot nullable; la ficha se permite sin tutor, pero los consentimientos de Fase B quedarán bloqueados.
+- `tutor_principal_id` es un snapshot nullable; la ficha se permite sin tutor, pero los consentimientos quedan bloqueados hasta asociar un tutor activo.
 - `sucursal_ingreso_id` obligatoria; por defecto la sucursal de registro del paciente. El alcance exige paciente accesible y sucursal de la ficha accesible; si no, `404 FICHA_NOT_FOUND`.
 - `version` optimista: `409 FICHA_VERSION_CONFLICT`. Crear una segunda ficha abierta: `409 FICHA_ALREADY_EXISTS`.
 - Prefijo documental: todo usa `04.03/`.
@@ -1702,7 +1702,7 @@ public function fichaVigenteId(int $pacienteId): ?int;
 
 `FichaIngresoResumen` no expone contenido sensible. Consumidores previstos: `docs/04_PACIENTES_TUTORES/04_busqueda_ficha_resumen.md`.
 
-**`PatientConsentContract`**: Fase B, no implementado en esta entrega. Consumidores previstos: `docs/06_INSCRIPCIONES_ATENCIONES/03_entrevista_diagnostico_atenciones.md` y `docs/11_EVALUACIONES_RESULTADOS/04_acceso_informacion_clinica.md`.
+**`PatientConsentContract`**: implementado en Fase B (`EloquentPatientConsent`). Consumidores previstos: `docs/06_INSCRIPCIONES_ATENCIONES/03_entrevista_diagnostico_atenciones.md` y `docs/11_EVALUACIONES_RESULTADOS/04_acceso_informacion_clinica.md`.
 
 **`EntrevistaDirectoryContract`**: stub con `disponible() === false`; `existe()` lanza `LogicException('Módulo 06 — Entrevista y diagnóstico no implementado todavía.')`. No se agregó `entrevista_id` a la ficha.
 
@@ -1726,15 +1726,15 @@ public function fichaVigenteId(int $pacienteId): ?int;
 |---|---|---|
 | 04.03/RF-001 crear ficha | Completo | `CreateFichaIngresoAction`, `FichaIngresoTest` |
 | 04.03/RF-002 motivo y fecha obligatorios | Completo | `StoreFichaIngresoRequest`, `FichaIngresoTest` |
-| 04.03/RF-003 consentimientos | Fase B | — |
-| 04.03/RF-004 consultar consentimientos | Fase B | — |
+| 04.03/RF-003 consentimientos | Completo (Fase B) | `RegisterConsentimientoAction`, `ConsentimientoTest` |
+| 04.03/RF-004 consultar consentimientos | Completo (Fase B) | GET auditado de consentimientos |
 | 04.03/RF-005 editar con antes/después | Completo | Revisiones + bitácora |
 | 04.03/RF-006 observaciones fechadas | Fase C | — |
 | 04.03/RF-007 contactos de emergencia | Completo por 04.02/RF-012 | Reutilización en lectura |
 | 04.03/RF-008 persona que deriva | Completo | Campos en ficha |
 | 04.03/RF-009 consultar ficha | Completo | GET auditado |
 | 04.03/RF-010 exportar PDF | Fase C / infraestructura | Stub, sin botón |
-| 04.03/RF-011 bitácora | Completo (A) / Fases B-C | `RecordPacientesAudit` |
+| 04.03/RF-011 bitácora | Completo (A y B) / Fase C | `RecordPacientesAudit` |
 | 04.03/RF-012 vincular entrevista 06 | Fase C / stub | `EntrevistaDirectoryContract` |
 | 04.03/RF-013 rol y sucursal | Completo | `FichaIngresoAccessScope` |
 | 04.03/RF-014 bloquear eliminación | Completo (DELETE 409; historial 06/07/08 pendiente) | `RejectFichaIngresoDeletionAction` |
@@ -1744,9 +1744,116 @@ public function fichaVigenteId(int $pacienteId): ?int;
 
 ### Pendiente
 
-- Fase B: catálogo y registro/revocación de consentimientos.
 - Fase C: observaciones fechadas, integración visual completa de contactos y stubs de entrevista/exportación.
 - PDF, cifrado en reposo y chequeo de historial 06/07/08.
+- Validar con el cliente la lista inicial de tipos de consentimiento y la semántica de reingreso (si el consentimiento debe repetirse en cada ficha).
+
+---
+
+## Módulo 04.03 — Ficha de ingreso (Fase B: consentimientos)
+
+Implementa el catálogo configurable y el registro/consulta/revocación de consentimientos. No implementa la entrevista de 06 ni el registro clínico de 11.
+
+### Alcance de la Fase B
+
+- Catálogo `consentimiento_tipo` administrable por Superadmin; sin enum y sin eliminación física.
+- Registro de consentimientos otorgados y negados por tipo y tutor.
+- Consulta de vigentes e historial completo.
+- Revocación como evento nuevo, con motivo obligatorio; el registro original no se modifica ni se borra.
+- Bloqueo si la ficha está archivada, si no hay tutores activos o si el tutor no está asociado.
+- Un solo consentimiento otorgado vigente por ficha + tipo + tutor.
+- Bitácora sin el texto libre del motivo.
+- Contrato `PatientConsentContract` para 06 y 11.
+
+### Endpoints
+
+Prefijo real: `/api/pacientes`.
+
+| Método | Ruta | Acción | Permiso |
+|---|---|---|---|
+| GET | `/pacientes/{id}/ficha-ingreso/{fichaId}/consentimientos` | Vigentes, historial, tipos y tutores | `ficha_ingreso.consentimiento_ver` |
+| POST | `/pacientes/{id}/ficha-ingreso/{fichaId}/consentimientos` | `RegisterConsentimientoAction` | `ficha_ingreso.consentimiento_registrar` |
+| POST | `/pacientes/{id}/ficha-ingreso/{fichaId}/consentimientos/{consentimientoId}/revocar` | `RevokeConsentimientoAction` | `ficha_ingreso.consentimiento_revocar` |
+| DELETE | `/pacientes/{id}/ficha-ingreso/{fichaId}/consentimientos/{consentimientoId}` | `RejectConsentimientoDeletionAction` → 409 | `ficha_ingreso.consentimiento_revocar` |
+| GET | `/ficha-ingreso/consentimientos/tipos` | `ListConsentimientoTiposQuery` | `ficha_ingreso.consentimiento_catalogo` |
+| POST | `/ficha-ingreso/consentimientos/tipos` | `CreateConsentimientoTipoAction` | `ficha_ingreso.consentimiento_catalogo` |
+| PATCH | `/ficha-ingreso/consentimientos/tipos/{tipoId}` | `UpdateConsentimientoTipoAction` | `ficha_ingreso.consentimiento_catalogo` |
+| DELETE | `/ficha-ingreso/consentimientos/tipos/{tipoId}` | `RejectConsentimientoTipoDeletionAction` → 409 | `ficha_ingreso.consentimiento_catalogo` |
+
+### Reglas
+
+- `resultado` inicial: `otorgado` o `negado`. `revocado` solo se crea por la acción de revocación.
+- `fecha` no futura; se usa `zona_horaria` vía `PacienteAgeCalculator`.
+- Un consentimiento otorgado vigente por `ficha + tipo + tutor`; duplicado → `409 CONSENT_ALREADY_ACTIVE`.
+- Ficha archivada → `409 FICHA_ARCHIVED` para registrar o revocar.
+- Paciente sin tutores activos → `409 CONSENT_TUTOR_REQUIRED` (CA-005).
+- Tutor no asociado o inactivo → `422 CONSENT_TUTOR_NOT_ASSOCIATED`.
+- Tipo inactivo → `409 CONSENT_TYPE_INACTIVE`.
+- La negativa se conserva y puede seguirse de un nuevo consentimiento otorgado.
+- La revocación exige motivo; si ya fue revocado o no es un otorgado vigente → `409 CONSENT_NOT_REVOCABLE`.
+- DELETE siempre `409`: consentimientos (`CONSENT_DELETE_NOT_ALLOWED`) y tipos (`CONSENT_TYPE_DELETE_NOT_ALLOWED`).
+- El código del tipo es inmutable después del alta; la edición usa `version` optimista (`409 CONSENT_TYPE_VERSION_CONFLICT`).
+- `PatientConsentContract` consulta la ficha más reciente del paciente. Si hay reingreso con ficha nueva, exige consentimiento de esa ficha; la semántica queda **pendiente de validar**.
+
+### Catálogo inicial (PROPUESTO - VALIDAR)
+
+`ConsentimientoTipoSeeder` crea, sin pisar cambios del cliente:
+
+- `atencion` — Consentimiento para la atención.
+- `uso_datos_contacto` — Uso de datos de contacto.
+- `uso_imagen` — Uso de imágenes.
+
+### Permisos
+
+Seeder: `ConsentimientoPermissionSeeder`, marca `pacientes.ficha_ingreso_consentimiento`.
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `ficha_ingreso.consentimiento_ver` | sí | sí | sí |
+| `ficha_ingreso.consentimiento_registrar` | sí | sí | sí |
+| `ficha_ingreso.consentimiento_revocar` | sí | sí | no |
+| `ficha_ingreso.consentimiento_catalogo` | sí | no | no |
+
+### Bitácora y contrato
+
+- Entidad `consentimiento`: `OTORGAR`, `NEGAR`, `REVOCAR` (crítico), `CONSULTAR`.
+- Entidad `consentimiento_tipo`: `CREAR`, `ACTUALIZAR`.
+- El snapshot guarda ids, tipo, tutor, resultado, fecha y `revoca_a_id`; **no** guarda el motivo libre.
+- La consulta de consentimientos se audita como `ficha_ingreso` con contexto `recurso=ficha_ingreso_consentimientos`.
+- `PatientConsentContract`:
+  ```php
+  public function tieneConsentimientoVigente(int $pacienteId, string $tipoCodigo = 'atencion'): bool;
+  public function consentimientoVigente(int $pacienteId, string $tipoCodigo = 'atencion'): ?ConsentimientoResumen;
+  ```
+  `ConsentimientoResumen` no expone motivos ni contacto del tutor.
+
+### Migraciones y seeders de Fase B
+
+- `2026_11_24_000500_create_consentimiento_tables.php`
+- `ConsentimientoPermissionSeeder`
+- `ConsentimientoTipoSeeder`
+- `ConsentimientoAccionAuditadaSeeder`
+
+### Checklist Fase B
+
+| Requisito | Estado | Evidencia |
+|---|---|---|
+| 04.03/RF-003 registrar consentimientos | Completo | `RegisterConsentimientoAction` |
+| 04.03/RF-004 consultar vigentes | Completo | GET con vigentes e historial |
+| 04.03/RN-004 vigencia y revocación | Completo | `Consentimiento::scopeVigentes`, `RevokeConsentimientoAction` |
+| 04.03/CA-003 tipo, tutor y fecha | Completo | `ConsentimientoTest` |
+| 04.03/CA-005 ficha sin tutores | Completo | `ConsentimientoTutorRequiredException` |
+| 04.03/FA-01 negativa visible | Completo | Resultado `negado` |
+| 04.03/FE-01 tutor no asociado | Completo | `ConsentimientoTutorNotAssociatedException` |
+| 04.03/RN-010 uso de imágenes | Catálogo propuesto | Tipo `uso_imagen`, sin bloqueo de uso |
+| 04.03/RF-011 bitácora | Completo | `RecordPacientesAudit` |
+| 04.03/CU-02 | Completo | `ConsentimientoTest` |
+
+### Pendiente de Fase B
+
+- Confirmar con el cliente los tipos iniciales, la obligatoriedad exacta del motivo de revocación y si el consentimiento se repite en cada reingreso.
+- El uso de imágenes no bloquea todavía ningún flujo del sistema (no hay módulo de imágenes).
+- PDF y entrevista 06 siguen fuera de alcance.
 
 ---
 

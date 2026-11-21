@@ -44,6 +44,11 @@ final class PacientesModule
     public const FICHA_INGRESO_DISPONIBLE = true;
 
     /**
+     * Consentimientos de la ficha de ingreso (04.03 Fase B).
+     */
+    public const CONSENTIMIENTOS_DISPONIBLES = true;
+
+    /**
      * Exportación PDF/Excel pendiente de infraestructura.
      */
     public const EXPORTACION_DISPONIBLE = false;

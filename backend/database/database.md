@@ -248,6 +248,24 @@ erDiagram
         json snapshot
         bigint usuario_id FK
     }
+    consentimiento_tipo {
+        bigint id PK
+        varchar codigo UK
+        varchar nombre
+        integer orden
+        boolean activo
+        integer version
+    }
+    consentimiento {
+        bigint id PK
+        bigint ficha_ingreso_id FK
+        bigint consentimiento_tipo_id FK
+        bigint tutor_id FK
+        varchar resultado
+        date fecha
+        bigint usuario_id FK
+        bigint revoca_a_id FK
+    }
 
     paciente ||--o{ paciente_tutor : "tiene"
     tutor ||--o{ paciente_tutor : "es tutor de"
@@ -259,6 +277,10 @@ erDiagram
     tutor ||--o{ ficha_ingreso : "firma"
     sucursal ||--o{ ficha_ingreso : "ingreso"
     ficha_ingreso ||--o{ ficha_ingreso_revision : "revisiones"
+    ficha_ingreso ||--o{ consentimiento : "consentimientos"
+    consentimiento_tipo ||--o{ consentimiento : "tipo"
+    tutor ||--o{ consentimiento : "autoriza"
+    consentimiento ||--o{ consentimiento : "revocación"
     sucursal ||--o{ paciente : "registra"
     sucursal ||--o{ tutor : "home branch"
 ```
@@ -1006,8 +1028,9 @@ Timestamps: `created_at`, `updated_at`.
 - `2026_11_24_000200_add_parentesco_to_paciente_tutor_table.php`
 - `2026_11_24_000300_create_contacto_emergencia_table.php`
 - `2026_11_24_000400_create_ficha_ingreso_tables.php`
+- `2026_11_24_000500_create_consentimiento_tables.php`
 
-**Seeders:** `PacientesPermissionSeeder` (matriz inicial `pacientes`), `PacientesAccionAuditadaSeeder` (5 acciones de paciente), `ParentescoCatalogoSeeder` (catálogo inicial propuesto), `TutoresPermissionSeeder` (matriz inicial `pacientes.tutores`), `TutoresAccionAuditadaSeeder` (7 acciones de tutor y asociación), `ContactosEmergenciaPermissionSeeder` (matriz inicial `pacientes.contactos_emergencia`), `ContactosEmergenciaAccionAuditadaSeeder` (3 acciones de contacto), `FichaIngresoPermissionSeeder` (matriz inicial `pacientes.ficha_ingreso`) y `FichaIngresoAccionAuditadaSeeder` (7 acciones de ficha).
+**Seeders:** `PacientesPermissionSeeder` (matriz inicial `pacientes`), `PacientesAccionAuditadaSeeder` (5 acciones de paciente), `ParentescoCatalogoSeeder` (catálogo inicial propuesto), `TutoresPermissionSeeder` (matriz inicial `pacientes.tutores`), `TutoresAccionAuditadaSeeder` (7 acciones de tutor y asociación), `ContactosEmergenciaPermissionSeeder` (matriz inicial `pacientes.contactos_emergencia`), `ContactosEmergenciaAccionAuditadaSeeder` (3 acciones de contacto), `FichaIngresoPermissionSeeder` (matriz inicial `pacientes.ficha_ingreso`), `FichaIngresoAccionAuditadaSeeder` (7 acciones de ficha), `ConsentimientoPermissionSeeder` (matriz inicial `pacientes.ficha_ingreso_consentimiento`), `ConsentimientoTipoSeeder` (3 tipos propuestos) y `ConsentimientoAccionAuditadaSeeder` (6 acciones de consentimiento).
 
 **Decisiones de esquema:**
 
@@ -1024,7 +1047,10 @@ Timestamps: `created_at`, `updated_at`.
 - `contacto_emergencia` pertenece al paciente, no al tutor. Se elimina físicamente; la bitácora conserva el snapshot con el teléfono completo. `version` habilita concurrencia optimista.
 - `ficha_ingreso` es administrativa y de contexto; no es la entrevista del módulo 06 ni el registro clínico del módulo 11. Una sola ficha no archivada por paciente mediante índice parcial; las anteriores quedan archivadas y consultables.
 - `ficha_ingreso_revision` guarda el snapshot completo e inmutable. La bitácora solo conserva metadatos, banderas `tiene_*` y campos modificados; nunca contenido sensible.
-- `tutor_principal_id` es nullable para permitir ficha sin tutor. Los consentimientos (Fase B) exigirán tutor asociado.
+- `tutor_principal_id` es nullable para permitir ficha sin tutor. Los consentimientos exigen al menos un tutor activo asociado.
+- `consentimiento_tipo` es un catálogo configurable (no enum) y no se elimina: se activa o desactiva. Los tipos iniciales son una propuesta a validar con el cliente.
+- `consentimiento` es un evento inmutable: no se edita ni se borra. La revocación es una fila nueva con `resultado='revocado'` y `revoca_a_id` apuntando al consentimiento original. El motivo libre no se copia a la bitácora.
+- La vigencia se calcula como un `otorgado` sin una revocación posterior. No hay vencimiento automático; queda pendiente de definición del cliente.
 
 ---
 
@@ -1191,6 +1217,42 @@ CREATE UNIQUE INDEX ficha_ingreso_abierta_uk
 | `created_at` | `timestamptz` |  | `DEFAULT now()` |  |
 
 Sin `updated_at`; se escribe una revisión por mutación y no se actualiza ni borra.
+
+#### `consentimiento_tipo` — Catálogo de consentimientos
+
+*Catálogo.* Tipos configurables por el cliente. No se eliminan: se activan o desactivan. Los valores iniciales son **PROPUESTO - VALIDAR**.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `codigo` | `varchar(60)` |  | `UNIQUE` | Inmutable después del alta |
+| `nombre` | `varchar(150)` |  |  |  |
+| `descripcion` | `text` | sí |  |  |
+| `orden` | `integer` |  | `DEFAULT 0` |  |
+| `activo` | `boolean` |  | `DEFAULT true` | Un tipo inactivo no admite nuevos registros |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
+| `created_at`, `updated_at` | `timestamptz` |  |  |  |
+
+Índices: `(activo)`, `(orden)`, `UNIQUE (codigo)`.
+
+#### `consentimiento` — Eventos de consentimiento
+
+*Historial.* Solo inserción. Cada fila es un evento inmutable.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `ficha_ingreso_id` | `bigint` |  | `FK → ficha_ingreso`, `RESTRICT` |  |
+| `consentimiento_tipo_id` | `bigint` |  | `FK → consentimiento_tipo`, `RESTRICT` |  |
+| `tutor_id` | `bigint` |  | `FK → tutor`, `RESTRICT` | Tutor asociado y activo al registrar |
+| `resultado` | `varchar(20)` |  |  | `otorgado/negado/revocado` |
+| `fecha` | `date` |  |  | No futura |
+| `motivo` | `text` | sí |  | Obligatorio al revocar; no se copia a bitácora |
+| `usuario_id` | `bigint` |  | `FK → users`, `RESTRICT` |  |
+| `revoca_a_id` | `bigint` | sí | `FK → consentimiento`, `RESTRICT` | Apunta al consentimiento otorgado original |
+| `created_at` | `timestamptz` |  | `DEFAULT now()` |  |
+
+Índices: `(ficha_ingreso_id, resultado)`, `(consentimiento_tipo_id, resultado)`, `(tutor_id)`, `(revoca_a_id)`. Sin `updated_at`; la vigencia se calcula con `otorgado` sin revocación posterior.
 
 ---
 

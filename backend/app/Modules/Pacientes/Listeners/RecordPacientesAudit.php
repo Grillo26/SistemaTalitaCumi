@@ -2,6 +2,10 @@
 
 namespace App\Modules\Pacientes\Listeners;
 
+use App\Modules\Pacientes\Events\Consentimiento\ConsentimientoRegistered;
+use App\Modules\Pacientes\Events\Consentimiento\ConsentimientoRevoked;
+use App\Modules\Pacientes\Events\Consentimiento\ConsentimientoTipoCreated;
+use App\Modules\Pacientes\Events\Consentimiento\ConsentimientoTipoUpdated;
 use App\Modules\Pacientes\Events\Contactos\ContactoEmergenciaCreated;
 use App\Modules\Pacientes\Events\Contactos\ContactoEmergenciaDeleted;
 use App\Modules\Pacientes\Events\Contactos\ContactoEmergenciaUpdated;
@@ -20,6 +24,7 @@ use App\Modules\Pacientes\Events\Tutores\TutorStatusChanged;
 use App\Modules\Pacientes\Events\Tutores\TutorUpdated;
 use App\Modules\Pacientes\Exceptions\PacientesAuditUnavailableException;
 use App\Modules\Pacientes\Models\BitacoraEntry;
+use App\Modules\Pacientes\Support\ConsentimientoAuditAction;
 use App\Modules\Pacientes\Support\FichaAuditAction;
 use App\Modules\Pacientes\Support\PacientesAuditAction;
 use App\Modules\Pacientes\Support\PacientesModule;
@@ -39,7 +44,8 @@ final class RecordPacientesAudit
         PacienteCreated|PacienteUpdated|PacienteStatusChanged|PacienteDuplicateConfirmed|
         TutorCreated|TutorUpdated|TutorStatusChanged|PacienteTutorAssociated|PacienteTutorDissociated|PacienteTutorPrincipalChanged|
         ContactoEmergenciaCreated|ContactoEmergenciaUpdated|ContactoEmergenciaDeleted|
-        FichaIngresoCreated|FichaIngresoUpdated|FichaIngresoStatusChanged $event,
+        FichaIngresoCreated|FichaIngresoUpdated|FichaIngresoStatusChanged|
+        ConsentimientoRegistered|ConsentimientoRevoked|ConsentimientoTipoCreated|ConsentimientoTipoUpdated $event,
     ): void {
         $payload = match (true) {
             $event instanceof PacienteCreated => [
@@ -226,6 +232,48 @@ final class RecordPacientesAudit
                 'reason' => $event->motivo,
                 'critical' => $event->critico,
                 'branchIds' => $event->branchIds,
+            ],
+            $event instanceof ConsentimientoRegistered => [
+                'entity' => 'consentimiento',
+                'id' => $event->consentimientoId,
+                'action' => $event->resultado === 'otorgado'
+                    ? ConsentimientoAuditAction::GRANT
+                    : ConsentimientoAuditAction::DENY,
+                'before' => null,
+                'after' => $event->snapshot,
+                'reason' => null,
+                'critical' => false,
+                'branchIds' => $event->branchIds,
+            ],
+            $event instanceof ConsentimientoRevoked => [
+                'entity' => 'consentimiento',
+                'id' => $event->consentimientoId,
+                'action' => ConsentimientoAuditAction::REVOKE,
+                'before' => ['consentimiento_original_id' => $event->originalId],
+                'after' => $event->snapshot,
+                'reason' => null,
+                'critical' => true,
+                'branchIds' => $event->branchIds,
+            ],
+            $event instanceof ConsentimientoTipoCreated => [
+                'entity' => 'consentimiento_tipo',
+                'id' => $event->tipoId,
+                'action' => ConsentimientoAuditAction::CATALOG_CREATE,
+                'before' => null,
+                'after' => $event->snapshot,
+                'reason' => null,
+                'critical' => false,
+                'branchIds' => [],
+            ],
+            $event instanceof ConsentimientoTipoUpdated => [
+                'entity' => 'consentimiento_tipo',
+                'id' => $event->tipoId,
+                'action' => ConsentimientoAuditAction::CATALOG_UPDATE,
+                'before' => $event->before,
+                'after' => $event->after,
+                'reason' => null,
+                'critical' => false,
+                'branchIds' => [],
             ],
         };
 

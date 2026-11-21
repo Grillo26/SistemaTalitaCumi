@@ -82,7 +82,7 @@ Todas las rutas están dentro del layout principal y protegidas por `authGuard`.
 | `/agenda` | Agenda |
 | `/pacientes` | Pacientes: listado, ficha, alta/edición, estados y tutores principales |
 | `/pacientes/:id` | Ficha del paciente |
-| `/pacientes/:id/ficha-ingreso` | Ficha administrativa de ingreso del paciente (04.03 Fase A) |
+| `/pacientes/:id/ficha-ingreso` | Ficha administrativa de ingreso y consentimientos del paciente (04.03 Fases A y B) |
 | `/pacientes/tutores` | Tutores: listado, búsqueda, alta y filtros |
 | `/pacientes/tutores/:id` | Ficha del tutor, contacto, estado y pacientes asociados |
 | `/inscripciones` | Inscripciones |
@@ -1035,6 +1035,9 @@ Inputs: `title`, `description`. Estado vacío de los módulos pendientes.
 - `src/app/pages/pacientes/ficha-ingreso.service.ts`
 - `src/app/pages/pacientes/ficha-ingreso-estado-modal.component.*`
 - `src/app/pages/pacientes/ficha-ingreso-revisiones-modal.component.*`
+- `src/app/pages/pacientes/consentimiento-form-modal.component.*`
+- `src/app/pages/pacientes/consentimiento-revoke-modal.component.*`
+- `src/app/pages/pacientes/consentimiento-tipos-modal.component.*`
 
 **API consumida:**
 
@@ -1045,6 +1048,7 @@ Inputs: `title`, `description`. Estado vacío de los módulos pendientes.
 | Tutores | `GET/POST /api/pacientes/tutores`, `GET /tutores/opciones`, `GET /tutores/exportar`, `GET/PATCH /tutores/{id}`, `POST /tutores/{id}/estado`, `DELETE /tutores/{id}` → 409 |
 | Contactos de emergencia | `GET/POST /pacientes/{id}/contactos-emergencia`, `PATCH/DELETE /contactos-emergencia/{contactoId}` |
 | Ficha de ingreso 04.03 | `GET/POST /pacientes/{id}/ficha-ingreso`, `GET/PATCH /ficha-ingreso/{fichaId}`, `POST /{fichaId}/completar`, `/archivar`, `/reactivar`, `GET /{fichaId}/revisiones` |
+| Consentimientos 04.03 | `GET/POST /pacientes/{id}/ficha-ingreso/{fichaId}/consentimientos`, `POST /{consentimientoId}/revocar`, `GET/POST/PATCH /ficha-ingreso/consentimientos/tipos` |
 
 **Funcionalidad:**
 
@@ -1065,6 +1069,7 @@ Inputs: `title`, `description`. Estado vacío de los módulos pendientes.
 - Asociación de tutor existente con parentesco por relación; el alta de paciente usa el catálogo de parentescos y envía `parentesco_id`.
 - Contactos de emergencia adicionales en la ficha del paciente: listado, alta, edición y eliminación en modal. Solo se muestran con `paciente.ver_contacto_emergencia` y se gestionan con `paciente.editar_contacto_emergencia`; el teléfono usa la misma normalización que los tutores.
 - Ficha de ingreso 04.03 Fase A en ruta hija `/pacientes/:id/ficha-ingreso`, con carga diferida y auditoría explícita: crear borrador, consultar, editar, completar, archivar, reactivar y ver revisiones. Los campos sensibles se muestran con `ficha_ingreso.ver_sensibles`; sin permiso se muestran protegidos. Los contactos de emergencia existentes se muestran en modo lectura y se administran desde la ficha del paciente. No hay botón de exportación; PDF y módulo 06 quedan pendientes.
+- Consentimientos 04.03 Fase B en la misma ficha: vigentes e historial, alta de otorgado/negado con tipo, tutor y fecha, revocación con motivo y catálogo administrable por Superadmin. Sin tutores activos o con la ficha archivada se muestran los bloqueos y se ocultan las acciones. El motivo libre se muestra solo con permiso de revocación o `ficha_ingreso.ver_sensibles`; la bitácora no lo guarda.
 - Errores 422 por campo, 409 de concurrencia con recarga, 409 de duplicado, 403/404/503 con `app-alert`. `503 AUDIT_UNAVAILABLE` no muestra la ficha (fail-closed).
 - Sin prefetch: la ficha solo se carga al navegar a `/pacientes/:id`; cada apertura queda auditada.
 - Sin botón de exportación (pendiente de infraestructura) y sin datos mock.
@@ -1073,7 +1078,7 @@ Inputs: `title`, `description`. Estado vacío de los módulos pendientes.
 
 **Permisos y alcance:** el padre `/pacientes` acepta `paciente.ver` o `tutor.ver`; cada hijo exige el permiso de su pantalla (`paciente.ver` o `tutor.ver`). El sidebar oculta Pacientes y Tutores según permiso. Sin alcance global, el usuario solo ve pacientes/tutores de sus sucursales; la ficha fuera de alcance responde 404. La API devuelve `can` de pantalla y por fila; la UI solo oculta acciones, el backend revalida.
 
-**Estado:** 04.01 Fase 1 y 04.02 Fases A y B implementados en backend y frontend, con exportación CSV de tutores. 04.03 Fase A implementada (ficha administrativa, revisiones, sensibles y auditoría); Fases B/C de 04.03 quedan pendientes. Pendientes: PDF de tutores/ficha de ingreso, consumo del teléfono por la alerta del módulo 09, 04.04, catálogo 05, filtro/visibilidad 06, ejecución 07/08 e importación CSV.
+**Estado:** 04.01 Fase 1 y 04.02 Fases A y B implementados en backend y frontend, con exportación CSV de tutores. 04.03 Fases A y B implementadas (ficha administrativa, revisiones, sensibles, consentimientos y auditoría); la Fase C de 04.03 queda pendiente. Pendientes: PDF de tutores/ficha de ingreso, consumo del teléfono por la alerta del módulo 09, 04.04, catálogo 05, filtro/visibilidad 06, ejecución 07/08 e importación CSV.
 
 ---
 
@@ -1124,7 +1129,7 @@ No se agregaron `swiper` ni `jsvectormap` porque sus componentes no forman parte
 - Persistencia real de asignaciones a turnos/diagnósticos (módulo 07). Los contratos/stubs de Fase 3 ya están implementados en backend.
 - Asignación de profesionales a turnos/diagnósticos (módulo 07): solo se documentan los contratos.
 - 04.02 Fase C: PDF de tutores y enlace de WhatsApp consumido por el módulo 09. El CSV de tutores ya está implementado.
-- 04.03 Fase B (consentimientos) y Fase C (observaciones fechadas, entrevista 06 y PDF); 04.04 búsqueda global/ficha resumen.
+- 04.03 Fase C (observaciones fechadas, entrevista 06 y PDF); 04.04 búsqueda global/ficha resumen.
 - Catálogo de tipos de diagnóstico (05): el campo queda “sin diagnóstico definido” y el filtro deshabilitado.
 - Filtro y visibilidad por sucursal de inscripción vigente (06), y bloqueo real de inscripciones/turnos (06/07).
 - Importación CSV de pacientes: no hay planilla del cliente; técnicamente viable sin librerías.

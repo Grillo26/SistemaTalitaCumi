@@ -3,6 +3,7 @@
 namespace Tests\Feature\Modules\Pacientes;
 
 use App\Modules\Seguridad\Models\AccionAuditada;
+use Database\Seeders\ConsentimientoAccionAuditadaSeeder;
 use Database\Seeders\ContactosEmergenciaAccionAuditadaSeeder;
 use Database\Seeders\FichaIngresoAccionAuditadaSeeder;
 use Database\Seeders\PacientesAccionAuditadaSeeder;
@@ -30,6 +31,12 @@ final class PacienteSeederTest extends PacientesTestCase
         $this->assertTrue($recepcion->hasPermissionTo('paciente.editar_contacto_emergencia'));
         $this->assertTrue($administracion->hasPermissionTo('paciente.ver_contacto_emergencia'));
         $this->assertTrue($administracion->hasPermissionTo('paciente.editar_contacto_emergencia'));
+        $this->assertTrue($recepcion->hasPermissionTo('ficha_ingreso.consentimiento_ver'));
+        $this->assertTrue($recepcion->hasPermissionTo('ficha_ingreso.consentimiento_registrar'));
+        $this->assertFalse($recepcion->hasPermissionTo('ficha_ingreso.consentimiento_revocar'));
+        $this->assertTrue($administracion->hasPermissionTo('ficha_ingreso.consentimiento_revocar'));
+        $this->assertFalse($administracion->hasPermissionTo('ficha_ingreso.consentimiento_catalogo'));
+        $this->assertTrue($superadmin->hasPermissionTo('ficha_ingreso.consentimiento_catalogo'));
     }
 
     public function test_reseeding_does_not_restore_revoked_permissions(): void
@@ -53,9 +60,11 @@ final class PacienteSeederTest extends PacientesTestCase
         $this->seed(ContactosEmergenciaAccionAuditadaSeeder::class);
         $this->seed(FichaIngresoAccionAuditadaSeeder::class);
         $this->seed(FichaIngresoAccionAuditadaSeeder::class);
+        $this->seed(ConsentimientoAccionAuditadaSeeder::class);
+        $this->seed(ConsentimientoAccionAuditadaSeeder::class);
 
         $this->assertSame(
-            22,
+            28,
             AccionAuditada::query()
                 ->where('modulo', 'pacientes')
                 ->count(),

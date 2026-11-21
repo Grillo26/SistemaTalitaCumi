@@ -1,0 +1,138 @@
+<app-modal
+  [open]="open"
+  [title]="texts.consentCatalogTitle"
+  size="xl"
+  [showFooter]="true"
+  (closed)="close()"
+>
+  <div class="space-y-5">
+    <app-alert variant="info" [message]="texts.consentCatalogHelp" />
+
+    @if (error(); as apiError) {
+      <app-alert variant="error" title="No se pudo guardar el tipo" [message]="apiError.message" />
+    }
+
+    <div class="grid gap-6 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
+      <form [formGroup]="form" class="space-y-4" (ngSubmit)="submit()">
+        <h3 class="text-sm font-semibold text-gray-800 dark:text-white/90">
+          {{ isEditing() ? 'Editar tipo' : texts.consentCatalogNew }}
+        </h3>
+
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="consentimiento-tipo-codigo">
+            {{ texts.consentCatalogCode }}
+          </label>
+          <input
+            id="consentimiento-tipo-codigo"
+            app-input
+            type="text"
+            formControlName="codigo"
+            [readonly]="isEditing()"
+            placeholder="atencion"
+          />
+          <p class="mt-1 text-xs text-gray-400">{{ texts.consentCatalogCodeHelp }}</p>
+          @if (fieldError('codigo'); as message) {
+            <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+          }
+        </div>
+
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="consentimiento-tipo-nombre">
+            {{ texts.consentCatalogName }}
+          </label>
+          <input
+            id="consentimiento-tipo-nombre"
+            app-input
+            type="text"
+            formControlName="nombre"
+            placeholder="Consentimiento para la atención"
+          />
+          @if (fieldError('nombre'); as message) {
+            <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+          }
+        </div>
+
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="consentimiento-tipo-descripcion">
+            {{ texts.consentCatalogDescription }}
+          </label>
+          <textarea
+            id="consentimiento-tipo-descripcion"
+            app-textarea
+            rows="3"
+            formControlName="descripcion"
+          ></textarea>
+        </div>
+
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="consentimiento-tipo-orden">
+            {{ texts.consentCatalogOrder }}
+          </label>
+          <input
+            id="consentimiento-tipo-orden"
+            app-input
+            type="number"
+            min="0"
+            max="9999"
+            formControlName="orden"
+          />
+        </div>
+
+        <div class="flex items-center gap-3">
+          <app-switch
+            [checked]="form.controls.activo.value"
+            ariaLabel="Tipo activo"
+            (checkedChange)="form.controls.activo.setValue($event)"
+          />
+          <span class="text-sm text-gray-600 dark:text-gray-400">{{ texts.consentCatalogActive }}</span>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <button app-button variant="default" type="button" (click)="submit()" [disabled]="saving()">
+            {{ saving() ? texts.saving : texts.consentCatalogSave }}
+          </button>
+          @if (isEditing()) {
+            <button app-button variant="outline" type="button" (click)="nuevo()" [disabled]="saving()">
+              {{ texts.consentCatalogNew }}
+            </button>
+          }
+        </div>
+      </form>
+
+      <div class="space-y-3">
+        <h3 class="text-sm font-semibold text-gray-800 dark:text-white/90">Tipos configurados</h3>
+
+        @if (loading()) {
+          <p class="py-6 text-center text-sm text-gray-500">{{ texts.loading }}</p>
+        } @else {
+          @for (tipo of tipos(); track tipo.id) {
+            <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+              <div class="min-w-0">
+                <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ tipo.nombre }}</p>
+                <p class="text-xs text-gray-500">
+                  {{ tipo.codigo }} · orden {{ tipo.orden }} · v{{ tipo.version }}
+                </p>
+              </div>
+              <div class="flex items-center gap-2">
+                <app-badge [color]="tipo.activo ? 'success' : 'gray'" variant="light" size="sm">
+                  {{ tipo.activo ? 'Activo' : 'Inactivo' }}
+                </app-badge>
+                <button app-button variant="outline" size="sm" type="button" (click)="edit(tipo)">
+                  Editar
+                </button>
+              </div>
+            </div>
+          } @empty {
+            <p class="py-6 text-center text-sm text-gray-500">No hay tipos configurados.</p>
+          }
+        }
+      </div>
+    </div>
+  </div>
+
+  <div modal-footer class="flex justify-end">
+    <button app-button variant="outline" type="button" (click)="close()" [disabled]="saving()">
+      {{ texts.close }}
+    </button>
+  </div>
+</app-modal>
