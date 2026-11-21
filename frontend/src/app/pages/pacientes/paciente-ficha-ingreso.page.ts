@@ -30,6 +30,7 @@ import {
   FichaIngresoApiError,
   FichaIngresoCreatePayload,
   FichaIngresoHistorial,
+  FichaIngresoObservacion,
   FichaIngresoRevision,
   FICHA_INGRESO_TEXTS,
 } from './ficha-ingreso.models';
@@ -39,6 +40,7 @@ import { FichaIngresoRevisionesModalComponent } from './ficha-ingreso-revisiones
 import { ConsentimientoFormModalComponent } from './consentimiento-form-modal.component';
 import { ConsentimientoRevokeModalComponent } from './consentimiento-revoke-modal.component';
 import { ConsentimientoTiposModalComponent } from './consentimiento-tipos-modal.component';
+import { ObservacionFormModalComponent } from './observacion-form-modal.component';
 import { PacientesService } from './pacientes.service';
 import { Paciente, PacienteOptions } from './pacientes.models';
 
@@ -61,6 +63,7 @@ import { Paciente, PacienteOptions } from './pacientes.models';
     ConsentimientoFormModalComponent,
     ConsentimientoRevokeModalComponent,
     ConsentimientoTiposModalComponent,
+    ObservacionFormModalComponent,
   ],
   templateUrl: './paciente-ficha-ingreso.page.html',
 })
@@ -110,6 +113,9 @@ export class PacienteFichaIngresoPageComponent implements OnInit {
   readonly consentimientoRevokeOpen = signal(false);
   readonly consentimientoSelected = signal<Consentimiento | null>(null);
   readonly consentimientoTiposOpen = signal(false);
+  readonly observaciones = signal<FichaIngresoObservacion[]>([]);
+  readonly observacionesLoading = signal(false);
+  readonly observacionFormOpen = signal(false);
 
   readonly canEdit = computed(() => this.ficha()?.can.edit ?? this.can().create);
   readonly canCreate = computed(() => this.can().create);
@@ -133,6 +139,14 @@ export class PacienteFichaIngresoPageComponent implements OnInit {
   );
   readonly hasActiveConsentTutors = computed(
     () => this.consentimientoTutores().length > 0,
+  );
+  readonly canViewObservations = computed(
+    () => this.ficha()?.can.observation_view ?? this.can().observation_view,
+  );
+  readonly canAddObservation = computed(
+    () =>
+      (this.ficha()?.can.observation_add ?? this.can().observation_add) &&
+      this.canViewSensitive(),
   );
 
   private pacienteId = 0;
@@ -158,6 +172,10 @@ export class PacienteFichaIngresoPageComponent implements OnInit {
 
           if (response.data !== null && response.data.can.consent_view) {
             this.loadConsentimientos(response.data.id);
+          }
+
+          if (response.data !== null && response.data.can.observation_view) {
+            this.loadObservaciones(response.data.id);
           }
         },
         error: (apiError: FichaIngresoApiError) => {
@@ -246,6 +264,10 @@ export class PacienteFichaIngresoPageComponent implements OnInit {
           this.loadConsentimientos(response.data.id);
         }
 
+        if (creating && response.data !== null && response.data.can.observation_view) {
+          this.loadObservaciones(response.data.id);
+        }
+
         this.toast.success(this.texts.saved, 'Los cambios quedaron registrados.');
       },
       error: (apiError: FichaIngresoApiError) => this.handleError(apiError),
@@ -313,6 +335,10 @@ export class PacienteFichaIngresoPageComponent implements OnInit {
 
     if (ficha.can.consent_view) {
       this.loadConsentimientos(ficha.id);
+    }
+
+    if (ficha.can.observation_view) {
+      this.loadObservaciones(ficha.id);
     }
 
     this.toast.success(this.texts.reactivatedToast, 'La ficha volvió a estar vigente.');
@@ -442,6 +468,51 @@ export class PacienteFichaIngresoPageComponent implements OnInit {
     }
   }
 
+  loadObservaciones(fichaId: number): void {
+    this.observacionesLoading.set(true);
+
+    this.service
+      .observaciones(this.pacienteId, fichaId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.observaciones.set(response.data);
+          this.observacionesLoading.set(false);
+        },
+        error: (apiError: FichaIngresoApiError) => {
+          this.observacionesLoading.set(false);
+
+          if (apiError.status !== 404) {
+            this.error.set(apiError);
+          }
+        },
+      });
+  }
+
+  openObservacionForm(): void {
+    if (this.canAddObservation()) {
+      this.observacionFormOpen.set(true);
+    }
+  }
+
+  closeObservacionForm(): void {
+    this.observacionFormOpen.set(false);
+  }
+
+  onObservacionSaved(observacion: FichaIngresoObservacion): void {
+    this.observacionFormOpen.set(false);
+    const ficha = this.ficha();
+
+    if (ficha !== null) {
+      this.loadObservaciones(ficha.id);
+    }
+
+    this.toast.success(
+      this.texts.observationSaved,
+      `Observación del ${this.formatDate(observacion.fecha)}`,
+    );
+  }
+
   consentResultColor(resultado: Consentimiento['resultado']): 'success' | 'warning' | 'gray' {
     return resultado === 'otorgado' ? 'success' : resultado === 'negado' ? 'warning' : 'gray';
   }
@@ -459,6 +530,12 @@ export class PacienteFichaIngresoPageComponent implements OnInit {
             this.loadConsentimientos(response.data.id);
           } else {
             this.clearConsentimientos();
+          }
+
+          if (response.data.can.observation_view) {
+            this.loadObservaciones(response.data.id);
+          } else {
+            this.clearObservaciones();
           }
 
           if (this.canEdit()) {
@@ -534,6 +611,7 @@ export class PacienteFichaIngresoPageComponent implements OnInit {
 
     if (ficha === null) {
       this.clearConsentimientos();
+      this.clearObservaciones();
     }
 
     this.ensureBranchOption();
@@ -554,6 +632,11 @@ export class PacienteFichaIngresoPageComponent implements OnInit {
     this.consentimientoFormOpen.set(false);
     this.consentimientoRevokeOpen.set(false);
     this.consentimientoSelected.set(null);
+  }
+
+  private clearObservaciones(): void {
+    this.observaciones.set([]);
+    this.observacionFormOpen.set(false);
   }
 
   private fillForm(ficha: FichaIngreso | null): void {

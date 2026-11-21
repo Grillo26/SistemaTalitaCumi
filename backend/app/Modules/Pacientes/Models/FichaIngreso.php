@@ -107,6 +107,11 @@ class FichaIngreso extends Model
         return $this->hasMany(Consentimiento::class);
     }
 
+    public function observacionesFechadas(): HasMany
+    {
+        return $this->hasMany(FichaIngresoObservacion::class, 'ficha_ingreso_id');
+    }
+
     public function scopeVigente(Builder $query): Builder
     {
         return $query->where('estado', '!=', EstadoFichaIngreso::ARCHIVADA->value);

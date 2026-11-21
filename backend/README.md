@@ -1729,12 +1729,12 @@ public function fichaVigenteId(int $pacienteId): ?int;
 | 04.03/RF-003 consentimientos | Completo (Fase B) | `RegisterConsentimientoAction`, `ConsentimientoTest` |
 | 04.03/RF-004 consultar consentimientos | Completo (Fase B) | GET auditado de consentimientos |
 | 04.03/RF-005 editar con antes/después | Completo | Revisiones + bitácora |
-| 04.03/RF-006 observaciones fechadas | Fase C | — |
+| 04.03/RF-006 observaciones fechadas | Completo (Fase C) | `CreateObservacionAction`, `ObservacionTest` |
 | 04.03/RF-007 contactos de emergencia | Completo por 04.02/RF-012 | Reutilización en lectura |
 | 04.03/RF-008 persona que deriva | Completo | Campos en ficha |
 | 04.03/RF-009 consultar ficha | Completo | GET auditado |
 | 04.03/RF-010 exportar PDF | Fase C / infraestructura | Stub, sin botón |
-| 04.03/RF-011 bitácora | Completo (A y B) / Fase C | `RecordPacientesAudit` |
+| 04.03/RF-011 bitácora | Completo (A, B y C) | `RecordPacientesAudit` |
 | 04.03/RF-012 vincular entrevista 06 | Fase C / stub | `EntrevistaDirectoryContract` |
 | 04.03/RF-013 rol y sucursal | Completo | `FichaIngresoAccessScope` |
 | 04.03/RF-014 bloquear eliminación | Completo (DELETE 409; historial 06/07/08 pendiente) | `RejectFichaIngresoDeletionAction` |
@@ -1744,7 +1744,7 @@ public function fichaVigenteId(int $pacienteId): ?int;
 
 ### Pendiente
 
-- Fase C: observaciones fechadas, integración visual completa de contactos y stubs de entrevista/exportación.
+- Fase C: PDF y entrevista 06; las observaciones fechadas ya están implementadas.
 - PDF, cifrado en reposo y chequeo de historial 06/07/08.
 - Validar con el cliente la lista inicial de tipos de consentimiento y la semántica de reingreso (si el consentimiento debe repetirse en cada ficha).
 
@@ -1854,6 +1854,78 @@ Seeder: `ConsentimientoPermissionSeeder`, marca `pacientes.ficha_ingreso_consent
 - Confirmar con el cliente los tipos iniciales, la obligatoriedad exacta del motivo de revocación y si el consentimiento se repite en cada reingreso.
 - El uso de imágenes no bloquea todavía ningún flujo del sistema (no hay módulo de imágenes).
 - PDF y entrevista 06 siguen fuera de alcance.
+
+---
+
+## Módulo 04.03 — Ficha de ingreso (Fase C: observaciones fechadas)
+
+Implementa **RF-006** y **RN-003**: observaciones fechadas, inmutables y corregibles mediante una nueva observación que referencia la anterior. La entrevista de 06 y la exportación PDF siguen bloqueadas.
+
+### Alcance de la Fase C
+
+- Observaciones fechadas con texto, fecha y usuario.
+- Solo inserción: no se editan ni se borran.
+- Corrección mediante `observacion_referencia_id` a una observación de la misma ficha.
+- Ficha archivada bloquea nuevas observaciones.
+- Texto sensible: se oculta sin `ficha_ingreso.ver_sensibles` y el alta exige ese permiso.
+- La bitácora guarda metadatos y `tiene_texto`, nunca el texto.
+
+### Endpoints
+
+Prefijo real: `/api/pacientes`.
+
+| Método | Ruta | Acción | Permiso |
+|---|---|---|---|
+| GET | `/pacientes/{id}/ficha-ingreso/{fichaId}/observaciones` | Listado + auditoría de consulta | `ficha_ingreso.observacion_ver` |
+| POST | `/pacientes/{id}/ficha-ingreso/{fichaId}/observaciones` | `CreateObservacionAction` | `ficha_ingreso.observacion_agregar` + `ver_sensibles` |
+| DELETE | `/pacientes/{id}/ficha-ingreso/{fichaId}/observaciones/{observacionId}` | `RejectObservacionDeletionAction` → 409 | `ficha_ingreso.observacion_agregar` |
+
+### Reglas
+
+- `fecha` no futura; se usa `zona_horaria` vía `PacienteAgeCalculator`.
+- `texto` obligatorio, máximo 4000 caracteres.
+- La referencia debe pertenecer a la misma ficha; si no, `422 OBSERVACION_REFERENCE_INVALID`.
+- Ficha archivada → `409 FICHA_ARCHIVED`.
+- Sin `ver_sensibles`: el GET devuelve `texto=null` y `texto_protegido=true`; el POST responde `403 FICHA_SENSITIVE_FIELDS_FORBIDDEN`.
+- DELETE siempre `409 OBSERVACION_DELETE_NOT_ALLOWED`.
+- El modelo rechaza `update()` y `delete()` con `LogicException`.
+
+### Permisos
+
+Seeder: `ObservacionPermissionSeeder`, marca `pacientes.ficha_ingreso_observacion`.
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `ficha_ingreso.observacion_ver` | sí | sí | sí |
+| `ficha_ingreso.observacion_agregar` | sí | sí | sí |
+
+### Bitácora
+
+- Entidad `ficha_ingreso_observacion`, acción `CREAR`.
+- Snapshot: `id`, `ficha_ingreso_id`, `fecha`, `observacion_referencia_id`, `usuario_id`, `tiene_texto` y `created_at`. **No** incluye `texto`.
+- La consulta del listado se audita como `ficha_ingreso` con contexto `recurso=ficha_ingreso_observaciones`.
+
+### Migraciones y seeders de Fase C
+
+- `2026_11_24_000600_create_ficha_ingreso_observacion_table.php`
+- `ObservacionPermissionSeeder`
+- `ObservacionAccionAuditadaSeeder`
+
+### Checklist Fase C
+
+| Requisito | Estado | Evidencia |
+|---|---|---|
+| 04.03/RF-006 observaciones fechadas | Completo | `CreateObservacionAction`, `ObservacionTest` |
+| 04.03/RN-003 observaciones no destructivas | Completo | `FichaIngresoObservacion`, referencia |
+| 04.03/CA-004 agregar sin borrar anteriores | Completo | `ObservacionTest` |
+| 04.03/RF-010 exportar PDF | Pendiente de infraestructura | `UnavailableFichaIngresoExporter` |
+| 04.03/RF-012 vincular entrevista 06 | Pendiente del módulo 06 | `StubEntrevistaDirectoryContract` |
+
+### Pendiente de Fase C
+
+- PDF: no hay librería instalada; requiere autorización para agregar una dependencia o definir el servicio externo.
+- Entrevista 06: no existe el módulo; la ficha mantiene el mensaje y el contrato stub.
+- Confirmar con el cliente si el texto de las observaciones debe tener un permiso propio distinto de `ver_sensibles`.
 
 ---
 

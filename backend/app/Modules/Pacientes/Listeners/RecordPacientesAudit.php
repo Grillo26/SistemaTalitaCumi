@@ -12,6 +12,7 @@ use App\Modules\Pacientes\Events\Contactos\ContactoEmergenciaUpdated;
 use App\Modules\Pacientes\Events\Ficha\FichaIngresoCreated;
 use App\Modules\Pacientes\Events\Ficha\FichaIngresoStatusChanged;
 use App\Modules\Pacientes\Events\Ficha\FichaIngresoUpdated;
+use App\Modules\Pacientes\Events\Observacion\ObservacionCreada;
 use App\Modules\Pacientes\Events\Registro\PacienteCreated;
 use App\Modules\Pacientes\Events\Registro\PacienteDuplicateConfirmed;
 use App\Modules\Pacientes\Events\Registro\PacienteStatusChanged;
@@ -45,7 +46,8 @@ final class RecordPacientesAudit
         TutorCreated|TutorUpdated|TutorStatusChanged|PacienteTutorAssociated|PacienteTutorDissociated|PacienteTutorPrincipalChanged|
         ContactoEmergenciaCreated|ContactoEmergenciaUpdated|ContactoEmergenciaDeleted|
         FichaIngresoCreated|FichaIngresoUpdated|FichaIngresoStatusChanged|
-        ConsentimientoRegistered|ConsentimientoRevoked|ConsentimientoTipoCreated|ConsentimientoTipoUpdated $event,
+        ConsentimientoRegistered|ConsentimientoRevoked|ConsentimientoTipoCreated|ConsentimientoTipoUpdated|
+        ObservacionCreada $event,
     ): void {
         $payload = match (true) {
             $event instanceof PacienteCreated => [
@@ -274,6 +276,16 @@ final class RecordPacientesAudit
                 'reason' => null,
                 'critical' => false,
                 'branchIds' => [],
+            ],
+            $event instanceof ObservacionCreada => [
+                'entity' => 'ficha_ingreso_observacion',
+                'id' => $event->observacionId,
+                'action' => PacientesAuditAction::CREATE,
+                'before' => null,
+                'after' => $event->snapshot,
+                'reason' => null,
+                'critical' => false,
+                'branchIds' => $event->branchIds,
             ],
         };
 

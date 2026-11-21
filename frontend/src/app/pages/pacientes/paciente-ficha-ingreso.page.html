@@ -395,6 +395,66 @@
             </div>
           </app-component-card>
         }
+
+        @if (f.can.observation_view) {
+          <app-component-card [title]="texts.observationsLog">
+            <div class="space-y-4">
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <p class="max-w-2xl text-sm text-gray-500 dark:text-gray-400">
+                  {{ texts.observationsLogHelp }}
+                </p>
+                @if (canAddObservation()) {
+                  <button app-button variant="default" type="button" (click)="openObservacionForm()">
+                    {{ texts.observationAdd }}
+                  </button>
+                }
+              </div>
+
+              @if (isArchived()) {
+                <app-alert variant="warning" [message]="texts.observationsLogArchived" />
+              }
+
+              @if (observacionesLoading()) {
+                <p class="py-6 text-center text-sm text-gray-500">{{ texts.loading }}</p>
+              } @else {
+                <div class="space-y-2">
+                  @for (observacion of observaciones(); track observacion.id) {
+                    <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+                      <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <span class="text-sm font-medium text-gray-800 dark:text-white/90">
+                            {{ formatDate(observacion.fecha) }}
+                          </span>
+                          <span class="text-xs text-gray-500">
+                            {{ observacion.usuario_nombre || ('Usuario ' + observacion.usuario_id) }}
+                          </span>
+                        </div>
+                        @if (observacion.referencia) {
+                          <span class="text-xs text-gray-500">
+                            {{ texts.observationReferenceLabel }}
+                            {{ formatDate(observacion.referencia.fecha) }}
+                          </span>
+                        }
+                      </div>
+
+                      @if (observacion.texto_protegido) {
+                        <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                          {{ texts.observationProtected }}
+                        </p>
+                      } @else {
+                        <p class="mt-2 whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">
+                          {{ observacion.texto }}
+                        </p>
+                      }
+                    </div>
+                  } @empty {
+                    <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.observationsLogEmpty }}</p>
+                  }
+                </div>
+              }
+            </div>
+          </app-component-card>
+        }
       } @else {
         <app-component-card [title]="texts.title">
           @if (canCreate()) {
@@ -515,6 +575,15 @@
       [open]="consentimientoTiposOpen()"
       (closed)="closeConsentTipos()"
       (changed)="onConsentTiposChanged()"
+    />
+
+    <app-observacion-form-modal
+      [open]="observacionFormOpen()"
+      [pacienteId]="paciente()?.id || 0"
+      [fichaId]="f.id"
+      [observaciones]="observaciones()"
+      (closed)="closeObservacionForm()"
+      (saved)="onObservacionSaved($event)"
     />
   }
 </div>

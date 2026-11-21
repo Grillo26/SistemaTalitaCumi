@@ -12,7 +12,7 @@ use App\Modules\Pacientes\Models\FichaIngreso;
 final class FichaIngresoAbilities
 {
     /**
-     * @return array{view: bool, create: bool, edit: bool, complete: bool, archive: bool, reactivate: bool, view_sensibles: bool, export: bool, consent_view: bool, consent_register: bool, consent_revoke: bool, consent_catalog: bool}
+     * @return array{view: bool, create: bool, edit: bool, complete: bool, archive: bool, reactivate: bool, view_sensibles: bool, export: bool, consent_view: bool, consent_register: bool, consent_revoke: bool, consent_catalog: bool, observation_view: bool, observation_add: bool}
      */
     public static function collection(User $user): array
     {
@@ -29,11 +29,13 @@ final class FichaIngresoAbilities
             'consent_register' => $user->can(ConsentimientoPermission::REGISTER),
             'consent_revoke' => $user->can(ConsentimientoPermission::REVOKE),
             'consent_catalog' => $user->can(ConsentimientoPermission::CATALOG),
+            'observation_view' => $user->can(ObservacionPermission::VIEW),
+            'observation_add' => $user->can(ObservacionPermission::ADD),
         ];
     }
 
     /**
-     * @return array{view: bool, create: bool, edit: bool, complete: bool, archive: bool, reactivate: bool, view_sensibles: bool, export: bool, consent_view: bool, consent_register: bool, consent_revoke: bool, consent_catalog: bool}
+     * @return array{view: bool, create: bool, edit: bool, complete: bool, archive: bool, reactivate: bool, view_sensibles: bool, export: bool, consent_view: bool, consent_register: bool, consent_revoke: bool, consent_catalog: bool, observation_view: bool, observation_add: bool}
      */
     public static function for(User $user, FichaIngreso $ficha): array
     {
@@ -53,6 +55,8 @@ final class FichaIngresoAbilities
             'consent_register' => ! $archived && $user->can(ConsentimientoPermission::REGISTER),
             'consent_revoke' => ! $archived && $user->can(ConsentimientoPermission::REVOKE),
             'consent_catalog' => $user->can(ConsentimientoPermission::CATALOG),
+            'observation_view' => $user->can(ObservacionPermission::VIEW),
+            'observation_add' => ! $archived && $user->can(ObservacionPermission::ADD),
         ];
     }
 }

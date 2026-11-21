@@ -16,6 +16,9 @@ import {
   FichaIngresoRevisionResponse,
   FichaIngresoUpdatePayload,
   FichaIngresoApiError,
+  ObservacionIndexResponse,
+  ObservacionPayload,
+  ObservacionResponse,
 } from './ficha-ingreso.models';
 
 @Injectable({ providedIn: 'root' })
@@ -155,6 +158,30 @@ export class FichaIngresoService {
 
     return this.http
       .get<ConsentimientoTipoListResponse>(url)
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  observaciones(
+    pacienteId: number,
+    fichaId: number,
+  ): Observable<ObservacionIndexResponse> {
+    return this.http
+      .get<ObservacionIndexResponse>(
+        `${this.baseUrl}/${pacienteId}/ficha-ingreso/${fichaId}/observaciones`,
+      )
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  createObservacion(
+    pacienteId: number,
+    fichaId: number,
+    payload: ObservacionPayload,
+  ): Observable<ObservacionResponse> {
+    return this.http
+      .post<ObservacionResponse>(
+        `${this.baseUrl}/${pacienteId}/ficha-ingreso/${fichaId}/observaciones`,
+        payload,
+      )
       .pipe(catchError((error: unknown) => this.fail(error)));
   }
 

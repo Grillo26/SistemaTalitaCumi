@@ -21,6 +21,8 @@ export interface FichaIngresoAbilities {
   consent_register: boolean;
   consent_revoke: boolean;
   consent_catalog: boolean;
+  observation_view: boolean;
+  observation_add: boolean;
 }
 
 export interface FichaIngreso {
@@ -162,6 +164,38 @@ export interface ConsentimientoTipoUpdatePayload {
 
 export interface ConsentimientoTipoListResponse {
   data: ConsentimientoTipo[];
+}
+
+export interface FichaIngresoObservacion {
+  id: number;
+  ficha_ingreso_id: number;
+  fecha: string;
+  texto: string | null;
+  texto_protegido: boolean;
+  observacion_referencia_id: number | null;
+  referencia: {
+    id: number;
+    fecha: string;
+  } | null;
+  usuario_id: number;
+  usuario_nombre: string | null;
+  created_at: string | null;
+}
+
+export interface ObservacionIndexResponse {
+  data: FichaIngresoObservacion[];
+  can: FichaIngresoAbilities;
+}
+
+export interface ObservacionResponse {
+  data: FichaIngresoObservacion;
+  can: FichaIngresoAbilities;
+}
+
+export interface ObservacionPayload {
+  fecha: string;
+  texto: string;
+  observacion_referencia_id: number | null;
 }
 
 export interface FichaIngresoCreatePayload {
@@ -321,6 +355,25 @@ export const FICHA_INGRESO_TEXTS = {
   consentNotRevocable: 'Solo se puede revocar un consentimiento otorgado y vigente.',
   consentTypeInactive: 'El tipo de consentimiento está inactivo.',
   consentMotivoProtected: 'Motivo protegido',
+  observationsLog: 'Observaciones fechadas',
+  observationsLogHelp:
+    'Las observaciones se agregan con fecha y no se borran. Para corregir una anterior, registrá una nueva que la referencie.',
+  observationsLogEmpty: 'No hay observaciones fechadas.',
+  observationsLogArchived:
+    'La ficha está archivada: no se pueden agregar observaciones.',
+  observationAdd: 'Agregar observación',
+  observationTitle: 'Agregar observación fechada',
+  observationDate: 'Fecha *',
+  observationText: 'Observación *',
+  observationReference: 'Corrige a (opcional)',
+  observationReferenceNone: 'Sin referencia',
+  observationReferenceHelp:
+    'Si esta observación corrige una anterior, seleccionala para conservar la trazabilidad.',
+  observationSaved: 'Observación registrada',
+  observationRequired: 'Indicá la fecha y el texto de la observación.',
+  observationProtected:
+    'Texto protegido. Necesitás ficha_ingreso.ver_sensibles para ver el contenido.',
+  observationReferenceLabel: 'Corrige la observación del',
 } as const;
 
 export const EMPTY_FICHA_INGRESO_ABILITIES: FichaIngresoAbilities = {
@@ -336,6 +389,8 @@ export const EMPTY_FICHA_INGRESO_ABILITIES: FichaIngresoAbilities = {
   consent_register: false,
   consent_revoke: false,
   consent_catalog: false,
+  observation_view: false,
+  observation_add: false,
 };
 
 export type FichaIngresoApiError = PacientesApiError;

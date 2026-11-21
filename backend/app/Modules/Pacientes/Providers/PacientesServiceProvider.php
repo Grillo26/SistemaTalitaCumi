@@ -30,6 +30,7 @@ use App\Modules\Pacientes\Events\Contactos\ContactoEmergenciaUpdated;
 use App\Modules\Pacientes\Events\Ficha\FichaIngresoCreated;
 use App\Modules\Pacientes\Events\Ficha\FichaIngresoStatusChanged;
 use App\Modules\Pacientes\Events\Ficha\FichaIngresoUpdated;
+use App\Modules\Pacientes\Events\Observacion\ObservacionCreada;
 use App\Modules\Pacientes\Events\Registro\PacienteCreated;
 use App\Modules\Pacientes\Events\Registro\PacienteDuplicateConfirmed;
 use App\Modules\Pacientes\Events\Registro\PacienteStatusChanged;
@@ -91,6 +92,7 @@ final class PacientesServiceProvider extends ServiceProvider
             ConsentimientoRevoked::class,
             ConsentimientoTipoCreated::class,
             ConsentimientoTipoUpdated::class,
+            ObservacionCreada::class,
         ] as $event) {
             Event::listen($event, RecordPacientesAudit::class);
         }
@@ -114,5 +116,10 @@ final class PacientesServiceProvider extends ServiceProvider
             ->prefix('api'.PacientesModule::MODULE_URL)
             ->name('api.pacientes.consentimiento.')
             ->group(__DIR__.'/../routes-consentimiento.php');
+
+        Route::middleware('api')
+            ->prefix('api'.PacientesModule::MODULE_URL)
+            ->name('api.pacientes.observacion.')
+            ->group(__DIR__.'/../routes-observacion.php');
     }
 }

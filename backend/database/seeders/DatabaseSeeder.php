@@ -54,5 +54,7 @@ class DatabaseSeeder extends Seeder
         $this->call(ConsentimientoPermissionSeeder::class);
         $this->call(ConsentimientoTipoSeeder::class);
         $this->call(ConsentimientoAccionAuditadaSeeder::class);
+        $this->call(ObservacionPermissionSeeder::class);
+        $this->call(ObservacionAccionAuditadaSeeder::class);
     }
 }

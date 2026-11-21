@@ -266,6 +266,14 @@ erDiagram
         bigint usuario_id FK
         bigint revoca_a_id FK
     }
+    ficha_ingreso_observacion {
+        bigint id PK
+        bigint ficha_ingreso_id FK
+        date fecha
+        text texto
+        bigint observacion_referencia_id FK
+        bigint usuario_id FK
+    }
 
     paciente ||--o{ paciente_tutor : "tiene"
     tutor ||--o{ paciente_tutor : "es tutor de"
@@ -281,6 +289,8 @@ erDiagram
     consentimiento_tipo ||--o{ consentimiento : "tipo"
     tutor ||--o{ consentimiento : "autoriza"
     consentimiento ||--o{ consentimiento : "revocación"
+    ficha_ingreso ||--o{ ficha_ingreso_observacion : "observaciones fechadas"
+    ficha_ingreso_observacion ||--o{ ficha_ingreso_observacion : "corrección"
     sucursal ||--o{ paciente : "registra"
     sucursal ||--o{ tutor : "home branch"
 ```
@@ -1029,8 +1039,9 @@ Timestamps: `created_at`, `updated_at`.
 - `2026_11_24_000300_create_contacto_emergencia_table.php`
 - `2026_11_24_000400_create_ficha_ingreso_tables.php`
 - `2026_11_24_000500_create_consentimiento_tables.php`
+- `2026_11_24_000600_create_ficha_ingreso_observacion_table.php`
 
-**Seeders:** `PacientesPermissionSeeder` (matriz inicial `pacientes`), `PacientesAccionAuditadaSeeder` (5 acciones de paciente), `ParentescoCatalogoSeeder` (catálogo inicial propuesto), `TutoresPermissionSeeder` (matriz inicial `pacientes.tutores`), `TutoresAccionAuditadaSeeder` (7 acciones de tutor y asociación), `ContactosEmergenciaPermissionSeeder` (matriz inicial `pacientes.contactos_emergencia`), `ContactosEmergenciaAccionAuditadaSeeder` (3 acciones de contacto), `FichaIngresoPermissionSeeder` (matriz inicial `pacientes.ficha_ingreso`), `FichaIngresoAccionAuditadaSeeder` (7 acciones de ficha), `ConsentimientoPermissionSeeder` (matriz inicial `pacientes.ficha_ingreso_consentimiento`), `ConsentimientoTipoSeeder` (3 tipos propuestos) y `ConsentimientoAccionAuditadaSeeder` (6 acciones de consentimiento).
+**Seeders:** `PacientesPermissionSeeder` (matriz inicial `pacientes`), `PacientesAccionAuditadaSeeder` (5 acciones de paciente), `ParentescoCatalogoSeeder` (catálogo inicial propuesto), `TutoresPermissionSeeder` (matriz inicial `pacientes.tutores`), `TutoresAccionAuditadaSeeder` (7 acciones de tutor y asociación), `ContactosEmergenciaPermissionSeeder` (matriz inicial `pacientes.contactos_emergencia`), `ContactosEmergenciaAccionAuditadaSeeder` (3 acciones de contacto), `FichaIngresoPermissionSeeder` (matriz inicial `pacientes.ficha_ingreso`), `FichaIngresoAccionAuditadaSeeder` (7 acciones de ficha), `ConsentimientoPermissionSeeder` (matriz inicial `pacientes.ficha_ingreso_consentimiento`), `ConsentimientoTipoSeeder` (3 tipos propuestos), `ConsentimientoAccionAuditadaSeeder` (6 acciones de consentimiento), `ObservacionPermissionSeeder` (matriz `pacientes.ficha_ingreso_observacion`) y `ObservacionAccionAuditadaSeeder` (1 acción de observación).
 
 **Decisiones de esquema:**
 
@@ -1051,6 +1062,7 @@ Timestamps: `created_at`, `updated_at`.
 - `consentimiento_tipo` es un catálogo configurable (no enum) y no se elimina: se activa o desactiva. Los tipos iniciales son una propuesta a validar con el cliente.
 - `consentimiento` es un evento inmutable: no se edita ni se borra. La revocación es una fila nueva con `resultado='revocado'` y `revoca_a_id` apuntando al consentimiento original. El motivo libre no se copia a la bitácora.
 - La vigencia se calcula como un `otorgado` sin una revocación posterior. No hay vencimiento automático; queda pendiente de definición del cliente.
+- `ficha_ingreso_observacion` es solo inserción: no se edita ni se borra. Una corrección es una observación nueva con `observacion_referencia_id` apuntando a la anterior (RN-003). El texto es sensible y no se copia a la bitácora.
 
 ---
 
@@ -1253,6 +1265,22 @@ Sin `updated_at`; se escribe una revisión por mutación y no se actualiza ni bo
 | `created_at` | `timestamptz` |  | `DEFAULT now()` |  |
 
 Índices: `(ficha_ingreso_id, resultado)`, `(consentimiento_tipo_id, resultado)`, `(tutor_id)`, `(revoca_a_id)`. Sin `updated_at`; la vigencia se calcula con `otorgado` sin revocación posterior.
+
+#### `ficha_ingreso_observacion` — Observaciones fechadas
+
+*Historial.* Solo inserción. Las correcciones son observaciones nuevas que referencian a la anterior (RF-006, RN-003).
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `ficha_ingreso_id` | `bigint` |  | `FK → ficha_ingreso`, `RESTRICT` |  |
+| `fecha` | `date` |  |  | No futura |
+| `texto` | `text` |  |  | Sensible; no se copia a bitácora |
+| `observacion_referencia_id` | `bigint` | sí | `FK → ficha_ingreso_observacion`, `RESTRICT` | Observación que se corrige |
+| `usuario_id` | `bigint` |  | `FK → users`, `RESTRICT` |  |
+| `created_at` | `timestamptz` |  | `DEFAULT now()` |  |
+
+Índices: `(ficha_ingreso_id, fecha)`, `(observacion_referencia_id)`, `(usuario_id)`. Sin `updated_at`; no se actualiza ni borra.
 
 ---
 
