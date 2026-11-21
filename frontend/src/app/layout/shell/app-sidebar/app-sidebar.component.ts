@@ -62,6 +62,7 @@ export class AppSidebarComponent {
       name: 'Pacientes',
       path: '/pacientes',
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.25"/><path d="M3.25 20.25a5.75 5.75 0 0 1 11.5 0"/><path d="M16.25 5.25a3 3 0 0 1 0 5.75M17.5 14.5a5.25 5.25 0 0 1 3.25 4.85"/></svg>',
+      permission: 'paciente.ver',
     },
     {
       name: 'Inscripciones',

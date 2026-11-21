@@ -42,5 +42,7 @@ class DatabaseSeeder extends Seeder
         $this->call(ProfesionalesPermissionSeeder::class);
         $this->call(EspecialidadCatalogoSeeder::class);
         $this->call(ProfesionalesAccionAuditadaSeeder::class);
+        $this->call(PacientesPermissionSeeder::class);
+        $this->call(PacientesAccionAuditadaSeeder::class);
     }
 }

@@ -1311,6 +1311,227 @@ El esquema de referencia se mantiene sincronizado en `database/database.md` y `d
 
 ---
 
+## Módulo 04 — Pacientes y tutores (04.02 núcleo + 04.01 Fase 1)
+
+Implementa el registro de pacientes (04.01) y el núcleo de tutores necesario para que el alta sea funcional (04.02: crear/buscar/editar tutor, asociar/desasociar y tutor principal). Los pacientes son globales; `sucursal_registro_id` es el ancla de visibilidad, no una duplicación por sucursal. No hay SoftDeletes: el retiro es `estado = retirado`.
+
+### Estructura
+
+```text
+app/Modules/Pacientes/
+├── Actions/Registro/       Alta, edición, estado y rechazo de eliminación
+├── Actions/Tutores/        Alta, edición y asociación de tutores
+├── Contracts/              Directorio de pacientes, tutores, stubs y exportación
+├── Enums/                  EstadoPaciente, Sexo, TipoCoincidencia
+├── Events/                 Eventos de paciente y de tutores
+├── Exceptions/             Errores de dominio con render HTTP
+├── Http/Controllers/       Registro de pacientes y tutores
+├── Http/Requests/          Validación y permisos por campo
+├── Http/Resources/         Paciente y tutor
+├── Listeners/              RecordPacientesAudit
+├── Models/                 Paciente, Tutor, PacienteTutor, historial y bitácora
+├── Providers/              PacientesServiceProvider
+├── Queries/                Listados, ficha y opciones
+├── Rules/                  Reglas puras
+├── Support/                Permisos, alcance, snapshots, normalización, edad y duplicados
+├── routes-registro.php
+└── routes-tutores.php
+```
+
+`PacientesServiceProvider` se registra después de `ProfesionalesServiceProvider`. Prefijo público: `App\Modules\Pacientes\Support\PacientesModule::MODULE_URL = '/pacientes'`. Prefijo real de la API: `/api/pacientes`; los endpoints de la tabla se muestran relativos a ese prefijo (`/pacientes` → `/api/pacientes/pacientes`, `/tutores` → `/api/pacientes/tutores`).
+
+### Endpoints
+
+| Método | Ruta | Acción / Query | Permiso |
+|---|---|---|---|
+| GET | `/pacientes` | `ListPacientesQuery` | `paciente.ver` |
+| GET | `/pacientes/opciones` | `GetPacienteFormOptionsQuery` | `paciente.ver` |
+| GET | `/pacientes/{id}` | `GetPacienteQuery` + `AuditRecorderContract` | `paciente.ver` |
+| POST | `/pacientes` | `CreatePacienteAction` | `paciente.crear` |
+| PATCH | `/pacientes/{id}` | `UpdatePacienteAction` | `paciente.editar` (+ `paciente.ver_sensibles` si envía campos sensibles) |
+| POST | `/pacientes/{id}/estado` | `ChangePacienteStatusAction` | `paciente.cambiar_estado` |
+| DELETE | `/pacientes/{id}` | `RejectPacienteDeletionAction` → 409 | `paciente.cambiar_estado` |
+| GET | `/pacientes/{id}/tutores` | `ListPacienteTutoresQuery` | `paciente.ver` |
+| POST | `/pacientes/{id}/tutores` | `AssociateTutorAction` | `paciente.editar` |
+| POST | `/pacientes/{id}/tutores/{tutorId}/principal` | `SetPrincipalTutorAction` | `paciente.editar` |
+| DELETE | `/pacientes/{id}/tutores/{tutorId}` | `DissociateTutorAction` | `paciente.editar` |
+| GET | `/tutores` | `ListTutoresQuery` | `tutor.ver` |
+| GET | `/tutores/{id}` | `GetTutorQuery` | `tutor.ver` |
+| POST | `/tutores` | `CreateTutorAction` | `tutor.crear` |
+| PATCH | `/tutores/{id}` | `UpdateTutorAction` | `tutor.editar` |
+
+Parámetros de pacientes: `search` (nombre/documento/código), `estado`, `tipo_diagnostico_id`, `sin_diagnostico`, `sucursal_registro_id`, `page`, `per_page` (máx. 50), `sort` (`nombre_completo|codigo|fecha_nacimiento|estado|updated_at`), `direction`. `sucursal_inscripcion_id` está **prohibido** hasta el módulo 06.
+
+La respuesta incluye `data`, `links`, `meta` y `can` de pantalla. Cada fila incluye `can` (`edit`, `change_status`, `view_sensibles`, `delete=false`, `view_tutors`). La ficha incluye `edad`, `sucursal_registro`, `sin_diagnostico_definido`, `observaciones`, `sensibles_protegidos`, `tutores_disponibles`, `tutores` y `can`.
+
+### Permisos
+
+Seeder: `PacientesPermissionSeeder`, con `InitialPermissionMatrix` y marca `pacientes`.
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `paciente.ver` | sí | sí | sí |
+| `paciente.crear` | sí | no | sí |
+| `paciente.editar` | sí | sí | sí |
+| `paciente.cambiar_estado` | sí | no | sí |
+| `paciente.ver_sensibles` | sí | sí | sí |
+| `paciente.exportar` (reservado) | sí | sí | sí |
+| `tutor.ver` | sí | sí | sí |
+| `tutor.crear` | sí | no | sí |
+| `tutor.editar` | sí | sí | sí |
+| `tutor.cambiar_estado` (reservado 04.02) | sí | no | no |
+| `tutor.exportar` (reservado 04.02) | sí | sí | no |
+
+No se creó `paciente.eliminar`. La aplicación decide por permiso, nunca por nombre de rol. Administración no crea pacientes ni cambia estado según 04.01/RF-001 y 04.01/RF-008; 06.05 propone otra cosa y queda pendiente de confirmación.
+
+### Estados y reglas
+
+- Enum `EstadoPaciente`: `activo`, `en_pausa`, `retirado` (04.01/RN-004).
+- Transiciones: activo ↔ en_pausa; activo → retirado; en_pausa → retirado; retirado → activo.
+- Motivo obligatorio al retirar, al volver de retirado y al pasar a pausa (04.01/RN-005 + supuesto 06.05/RF-006). Opcional al reactivar desde pausa.
+- `version` optimista: `409 PATIENT_VERSION_CONFLICT`.
+- `DELETE` siempre responde `409 PATIENT_DELETE_NOT_ALLOWED`; no hay borrado físico ni SoftDeletes. El chequeo real de historial queda pendiente de 06/07/08.
+- Activación exige tutor principal (`TutorDirectoryContract::asegurarTutorPrincipal`); si falta, `409 PATIENT_TUTOR_REQUIRED`.
+- La búsqueda/unicidad usa columnas normalizadas en PHP (sin acentos, minúsculas, espacios colapsados). No se usan `unaccent` ni `pg_trgm`.
+- Documento opcional; único cuando existe (`documento_normalizado`). Sin documento se permiten múltiples NULL.
+- `codigo` se genera como `PAC-` + id de 6 dígitos.
+
+### Duplicados y privacidad
+
+- **Bloqueo duro:** mismo documento normalizado → `409 PATIENT_DOCUMENT_DUPLICATE`, sin override.
+- **Confirmable:** mismo nombre + apellidos + fecha de nacimiento (o identidad parcial con el mismo tutor principal cuando existe) → `409 POTENTIAL_DUPLICATE` con `data.requiere_confirmacion=true`.
+- La confirmación requiere `motivo_confirmacion`; se audita como `CONFIRMAR_DUPLICADO`.
+- Si la coincidencia está fuera del alcance, **no** se devuelven id, nombre, documento ni datos clínicos; solo `data.fuera_de_alcance=true` o `data.coincidencias_fuera_de_alcance=true`.
+- La ficha de un paciente fuera de alcance responde `404 PATIENT_NOT_FOUND` para no revelar su existencia.
+
+### Alcance por sucursal
+
+- Paciente global; visibilidad inicial por `sucursal_registro_id ∈ sucursales accesibles`.
+- Sin `sucursal.alcance_global`, el listado se filtra; sin sucursales asignadas devuelve lista vacía y el alta responde `403 BRANCH_ACCESS_DENIED`.
+- Un filtro por sucursal fuera de alcance devuelve lista vacía; un alta con sucursal ajena responde 403.
+- El filtro por “sucursal de inscripción vigente” (04.01/RF-005, 04.01/CA-010) queda deshabilitado hasta el módulo 06. `PatientEnrollmentDirectoryContract` está stubeado y no se invoca en listado/ficha.
+- Los tutores son globales; el buscador muestra tutores asociados a pacientes de las sucursales accesibles y tutores todavía sin pacientes. `tutor.cambiar_estado` queda reservado.
+
+### Eventos y bitácora
+
+`RecordPacientesAudit` es síncrono y fail-closed (`503 AUDIT_UNAVAILABLE`). Escribe `modulo='pacientes'`, `resultado='exito'`, `usuario_id`, `ip` y una fila por sucursal visible (hoy `sucursal_registro_id`).
+
+| Entidad (`bitacora.entidad`) | Acciones | `critico` |
+|---|---|---|
+| `paciente` | `CREAR`, `ACTUALIZAR`, `CAMBIAR_ESTADO`, `CONSULTAR`, `CONFIRMAR_DUPLICADO` | `true` al retirar y al volver de retirado; `false` en pausa/resto |
+| `tutor` | `CREAR`, `ACTUALIZAR` | `false` |
+| `paciente_tutor` | `ASOCIAR`, `DESASOCIAR`, `CAMBIAR_PRINCIPAL` | `false` |
+
+**Qué NO se guarda en los snapshots:** contenido de `alergias`, `condiciones_medicas` ni `observaciones`. Se guardan booleanos `tiene_alergias`, `tiene_condiciones_medicas`, `tiene_observaciones`, la lista `campos_sensibles_modificados` y valores no clínicos (nombre, apellidos, fecha, sexo, documento, diagnóstico por id, sucursal, estado, versión). Los motivos de estado se guardan en `motivo` porque 04.01/RN-005 lo exige; no se copian a `datos_nuevos`.
+
+`PacientesAccionAuditadaSeeder` agrega las acciones al catálogo `accion_auditada` sin modificar el seeder de Seguridad. `AuditModuleResolver` ya resuelve `paciente` → `pacientes`; no se modificó código de Seguridad.
+
+### Auditoría de consulta
+
+Solo `GET /pacientes/{id}` llama a `AuditRecorderContract::registrarConsultaSensible('paciente', $id, $sucursalRegistroId, ['recurso' => 'ficha_paciente'], $actorId, $ip)`. El listado no audita. Si el recorder falla, la ficha responde `503 AUDIT_UNAVAILABLE` y no se devuelve contenido (fail-closed). Cada apertura de ficha desde el frontend es un GET nuevo; no hay prefetch.
+
+### Contrato expuesto — `PatientDirectoryContract`
+
+```php
+public function existe(int $pacienteId): bool;
+
+public function resumen(int $pacienteId): PacienteResumen;
+// PacienteNotFoundException
+
+public function asegurarPermiteInscripcion(int $pacienteId): void;
+// PacienteNoInscribibleException (409 PATIENT_NOT_INSCRIBIBLE)
+
+public function asegurarPermiteTurno(int $pacienteId): void;
+// PacienteNoAgendableException (409 PATIENT_NOT_SCHEDULABLE)
+```
+
+`PacienteResumen` devuelve `id`, `codigo`, `nombre_completo`, `fecha_nacimiento`, `edad_anios`, `estado`, `sucursal_registro_id`, `tipo_diagnostico_id`, `sin_diagnostico_definido`. No expone datos sensibles.
+
+Ejemplo para 06/07/08/11:
+
+```php
+$directorio = app(PatientDirectoryContract::class);
+
+try {
+    $directorio->asegurarPermiteInscripcion($pacienteId);
+} catch (PacienteNoInscribibleException $e) {
+    // $e->motivoCodigo(): PATIENT_RETIRED | PATIENT_PAUSED
+}
+```
+
+Documentos consumidores exactos:
+
+- 06 — `docs/06_INSCRIPCIONES_ATENCIONES/01_inscripcion_salas_grupales.md`, `02_paquetes_sesiones_individuales.md`, `04_vigencia_vencimiento_renovacion.md`, `05_estados_paciente_inscripcion.md`.
+- 07 — `docs/07_AGENDA_TURNOS/02_programacion_turnos_patrones.md`, `03_reprogramacion_cancelacion_turnos.md`.
+- 08 — `docs/08_PAGOS_CAJA/01_registro_pagos_saldos.md`, `04_anulacion_pagos.md`, `05_plan_cuotas.md`.
+- 11 — `docs/11_EVALUACIONES_RESULTADOS/01_informe_entrevista.md`, `02_resultados_diagnostico.md`, `04_acceso_informacion_clinica.md`.
+- 05 — `docs/05_CATALOGO_SERVICIOS_TARIFAS/03_tipos_diagnostico_evaluacion.md`.
+
+No se tocaron esos módulos.
+
+### Stubs y pendientes
+
+| Contrato | Implementación | Mensaje |
+|---|---|---|
+| `DiagnosticTypeDirectoryContract` | `StubDiagnosticTypeDirectoryContract` | `Módulo 05 — Catálogo de tipos de diagnóstico no implementado todavía.` |
+| `PatientEnrollmentDirectoryContract` | `StubPatientEnrollmentDirectoryContract` | `Módulo 06 — Inscripciones no implementado todavía.` |
+| `PacienteExporterContract` | `UnavailablePacienteExporter` | `Exportación PDF/Excel pendiente de infraestructura.` |
+
+- `TutorDirectoryContract` tiene implementación real (`EloquentTutorDirectory`) para el núcleo 04.02.
+- La Action rechaza `tipo_diagnostico_id` no nulo mientras `DIAGNOSTICOS_DISPONIBLES=false`; el stub no se invoca en flujos normales.
+- El listado y la ficha no invocan los stubs de inscripciones ni de diagnóstico.
+- Exportación: sin endpoint y sin botón; `AuditRecorderContract::registrarExportacion` queda listo para cuando exista exportador.
+- Importación CSV: no implementada; no hay planilla del cliente. Técnicamente viable con `fgetcsv` sin librerías.
+- 04.02 completo (contactos de emergencia, ficha/listado standalone, activar/desactivar tutor y export) queda pendiente.
+- Cifrado de campo (`encrypted`) no implementado por defecto; HTTPS + cifrado de infraestructura/backups. Si el cliente lo exige, se decide en una fase posterior.
+
+### Migraciones y seeders
+
+- `2026_11_23_000000_create_tutor_table.php`
+- `2026_11_23_000100_create_paciente_table.php`
+- `2026_11_23_000200_create_paciente_tutor_table.php`
+- `2026_11_23_000300_create_estado_paciente_historial_table.php`
+- Seeders: `PacientesPermissionSeeder`, `PacientesAccionAuditadaSeeder`.
+- `database/database.md` y `database/talitacumi_schema.sql` quedan sincronizados. El .sql no aplica el trigger genérico sobre `paciente`/`tutor` para no duplicar la bitácora ni copiar contenido clínico.
+
+### Checklist Fase 1 (numeración 04.01)
+
+| Requisito | Estado | Evidencia |
+|---|---|---|
+| 04.01/RF-001 crear paciente | Completo | `CreatePacienteAction`, `PacienteCrudTest` |
+| 04.01/RF-002 calcular edad | Completo | `PacienteAgeCalculator`, unit tests |
+| 04.01/RF-003 unicidad | Completo | documento + nombre/fecha/tutor, tests |
+| 04.01/RF-004 obligatorios + tutor | Completo | `StorePacienteRequest`, `PacienteTutorRequirementRule` |
+| 04.01/RF-005 listar/buscar | Parcial | filtro de inscripción pendiente 06; diagnóstico deshabilitado hasta 05 |
+| 04.01/RF-006 ficha | Completo | `GetPacienteQuery`, `PacienteResource` |
+| 04.01/RF-007 editar | Completo | `UpdatePacienteAction`, auditoría |
+| 04.01/RF-008 cambiar estado | Completo | `ChangePacienteStatusAction`, tests |
+| 04.01/RF-009 bloquear eliminación | Parcial | DELETE 409; historial real 06/07/08 |
+| 04.01/RF-010 asociar tutores | Completo (núcleo) | `AssociateTutorAction`, principal |
+| 04.01/RF-011 observaciones/condiciones | Completo | campos + `ver_sensibles` |
+| 04.01/RF-012 bitácora de cambios | Completo | `RecordPacientesAudit` |
+| 04.01/RF-013 bitácora de consultas | Completo | `PacienteConsultationAuditTest` |
+| 04.01/RF-014 restringir acceso | Completo | `PacienteAccessScope`, tests |
+| 04.01/RF-015 exportar | Pendiente infraestructura | stub, sin botón |
+| 04.01/RF-016 alerta duplicado | Completo | `PacienteDuplicateDetector`, tests |
+| 04.01/RN-001…RN-011 | Completo/Parcial | ver notas de 05/06/07/08 |
+| 04.01/CU-01…CU-03 | Completo | actions, tests |
+| 04.01/CA-001…CA-010 | Completo/Parcial | CA-007 contrato; CA-010 registro; inscripción 06 |
+| 04.01/FP-01…FP-04 | Completo/Parcial | FP-02 parcial por filtros 05/06 |
+
+### Decisiones tomadas
+
+- Tutores: se implementó 04.02 núcleo para que el alta sea funcional. No se inventó un cuarto estado ni se permitió un paciente activo sin tutor.
+- Visibilidad: `sucursal_registro_id` + fail-closed. Ficha fuera de alcance = 404. Inscripción vigente se suma cuando exista 06.
+- Duplicados: documento = bloqueo duro; nombre+fecha (+tutor) = confirmable; fuera de alcance no filtra datos.
+- Auditoría de consulta: fail-closed 503.
+- Edad: se calcula en lectura con `zona_horaria`; formato días/meses/años.
+- Diagnóstico: opcional al alta; FK diferida hasta 05.
+- Sin cifrado de campo por defecto; sin exportación; sin importación CSV.
+- No se modificó código de 01/02/03 ni el catálogo de Seguridad.
+
+---
+
 ## Notas
 
 - No se agregaron librerías de PDF/Excel ni se modificó ningún otro módulo de negocio.

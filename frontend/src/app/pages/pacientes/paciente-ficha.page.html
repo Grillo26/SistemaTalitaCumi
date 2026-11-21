@@ -1,0 +1,218 @@
+<div>
+  <app-page-breadcrumb pageTitle="Ficha de paciente" />
+
+  <div class="space-y-5 sm:space-y-6">
+    @if (error(); as apiError) {
+      <app-alert
+        variant="error"
+        title="No se pudo completar la operación"
+        [message]="apiError.message"
+      />
+    }
+
+    @if (loading()) {
+      <app-component-card title="Ficha de paciente" desc="Cargando datos...">
+        <p class="py-10 text-center text-sm text-gray-500 dark:text-gray-400">Cargando ficha...</p>
+      </app-component-card>
+    } @else if (notFound()) {
+      <app-component-card title="Paciente no encontrado" [desc]="texts.notFound">
+        <button app-button variant="outline" type="button" (click)="back()">Volver al listado</button>
+      </app-component-card>
+    } @else if (paciente(); as p) {
+      <app-component-card>
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <h2 class="text-xl font-semibold text-gray-800 dark:text-white/90">{{ p.nombre_completo }}</h2>
+              <app-badge [color]="estadoColor(p.estado)" variant="light" size="sm">{{ p.estado_label }}</app-badge>
+              @if (p.codigo) {
+                <span class="text-xs font-medium text-gray-500">{{ p.codigo }}</span>
+              }
+            </div>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {{ p.edad.etiqueta }} · Nació el {{ formatDateOnly(p.fecha_nacimiento) }}
+            </p>
+            <p class="mt-1 text-xs text-gray-400">
+              Última modificación: {{ formatDateTime(p.updated_at) }}
+            </p>
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            <button app-button variant="outline" type="button" (click)="back()">{{ texts.back }}</button>
+            @if (p.can.edit) {
+              <button app-button variant="outline" type="button" (click)="openEdit()">{{ texts.edit }}</button>
+            }
+            @if (p.can.change_status) {
+              <button app-button variant="default" type="button" (click)="openStatus()">{{ texts.status }}</button>
+            }
+          </div>
+        </div>
+      </app-component-card>
+
+      <div class="grid gap-5 xl:grid-cols-2">
+        <app-component-card title="Identificación" desc="Datos del paciente y de registro.">
+          <dl class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <dt class="text-xs font-medium uppercase text-gray-400">Nombres</dt>
+              <dd class="mt-1 text-sm text-gray-800 dark:text-white/90">{{ p.nombre }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs font-medium uppercase text-gray-400">Apellidos</dt>
+              <dd class="mt-1 text-sm text-gray-800 dark:text-white/90">
+                {{ p.apellido_paterno }} {{ p.apellido_materno || '' }}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-xs font-medium uppercase text-gray-400">Fecha de nacimiento</dt>
+              <dd class="mt-1 text-sm text-gray-800 dark:text-white/90">{{ formatDateOnly(p.fecha_nacimiento) }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs font-medium uppercase text-gray-400">Edad</dt>
+              <dd class="mt-1 text-sm text-gray-800 dark:text-white/90">{{ p.edad.etiqueta }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs font-medium uppercase text-gray-400">Sexo</dt>
+              <dd class="mt-1 text-sm text-gray-800 dark:text-white/90">{{ p.sexo_label }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs font-medium uppercase text-gray-400">Documento</dt>
+              <dd class="mt-1 text-sm text-gray-800 dark:text-white/90">{{ p.ci || 'Sin documento' }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs font-medium uppercase text-gray-400">Sucursal de registro</dt>
+              <dd class="mt-1 text-sm text-gray-800 dark:text-white/90">
+                {{ p.sucursal_registro.nombre || ('Sucursal ' + p.sucursal_registro.id) }}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-xs font-medium uppercase text-gray-400">Tipo de diagnóstico</dt>
+              <dd class="mt-1 text-sm text-gray-800 dark:text-white/90">
+                @if (p.sin_diagnostico_definido) {
+                  Sin diagnóstico definido
+                } @else {
+                  Diagnóstico #{{ p.tipo_diagnostico_id }}
+                }
+              </dd>
+            </div>
+          </dl>
+
+          <div class="mt-5">
+            <dt class="text-xs font-medium uppercase text-gray-400">Observaciones generales</dt>
+            <dd class="mt-1 whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">
+              {{ p.observaciones || 'Sin observaciones.' }}
+            </dd>
+          </div>
+        </app-component-card>
+
+        <div class="space-y-5">
+          <app-component-card title="Datos sensibles" desc="Alergias y condiciones médicas.">
+            @if (p.sensibles_protegidos) {
+              <div class="rounded-lg bg-gray-50 p-4 text-sm text-gray-600 dark:bg-gray-900 dark:text-gray-400">
+                {{ texts.sensitiveProtected }}
+              </div>
+            } @else {
+              <dl class="grid gap-4">
+                <div>
+                  <dt class="text-xs font-medium uppercase text-gray-400">Alergias</dt>
+                  <dd class="mt-1 whitespace-pre-line text-sm text-gray-800 dark:text-white/90">
+                    {{ p.alergias || 'Sin alergias registradas.' }}
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-xs font-medium uppercase text-gray-400">Condiciones médicas</dt>
+                  <dd class="mt-1 whitespace-pre-line text-sm text-gray-800 dark:text-white/90">
+                    {{ p.condiciones_medicas || 'Sin condiciones registradas.' }}
+                  </dd>
+                </div>
+              </dl>
+            }
+          </app-component-card>
+
+          <app-component-card title="Tutores" desc="Tutor principal y tutores asociados.">
+            @if (!p.tutores_disponibles) {
+              <p class="text-sm text-gray-500 dark:text-gray-400">
+                {{ p.tutores_mensaje || texts.tutorsUnavailable }}
+              </p>
+            } @else {
+              <div class="space-y-3">
+                @for (tutor of p.tutores ?? []; track tutor.tutor_id) {
+                  <div class="flex flex-col gap-2 rounded-lg border border-gray-200 p-3 dark:border-gray-800 sm:flex-row sm:items-center sm:justify-between">
+                    <div class="min-w-0">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-sm font-medium text-gray-800 dark:text-white/90">{{ tutor.nombre_completo }}</span>
+                        @if (tutor.es_principal) {
+                          <app-badge color="success" variant="light" size="sm">{{ texts.principal }}</app-badge>
+                        }
+                        @if (!tutor.activo) {
+                          <app-badge color="gray" variant="light" size="sm">Inactivo</app-badge>
+                        }
+                      </div>
+                      <p class="mt-1 text-xs text-gray-500">
+                        {{ tutor.parentesco || 'Sin parentesco' }} · {{ tutor.telefono }}
+                      </p>
+                    </div>
+
+                    @if (p.can.edit) {
+                      <div class="flex flex-wrap gap-1">
+                        @if (!tutor.es_principal) {
+                          <button app-button variant="ghost" size="sm" type="button" (click)="makePrincipal(tutor)">
+                            {{ texts.makePrincipal }}
+                          </button>
+                        }
+                        @if (!tutor.es_principal || p.estado !== 'activo') {
+                          <button app-button variant="ghost" size="sm" type="button" (click)="removeTutor(tutor)">
+                            {{ texts.removeTutor }}
+                          </button>
+                        }
+                      </div>
+                    }
+                  </div>
+                } @empty {
+                  <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.noTutor }}</p>
+                }
+
+                @if (p.can.edit) {
+                  <button app-button variant="outline" size="sm" type="button" (click)="openTutors()">
+                    {{ texts.addTutor }}
+                  </button>
+                }
+              </div>
+            }
+          </app-component-card>
+
+          <p class="text-xs text-gray-400">{{ texts.auditNotice }}</p>
+        </div>
+      </div>
+
+      @if (editOpen() && options(); as opts) {
+        <app-paciente-form-modal
+          [open]="true"
+          mode="edit"
+          [paciente]="p"
+          [options]="opts"
+          (closed)="closeEdit()"
+          (saved)="onSaved($event)"
+        />
+      }
+
+      @if (statusOpen()) {
+        <app-paciente-status-modal
+          [open]="true"
+          [paciente]="p"
+          (closed)="closeStatus()"
+          (saved)="onSaved($event)"
+        />
+      }
+
+      @if (tutorOpen()) {
+        <app-paciente-tutor-modal
+          [open]="true"
+          [pacienteId]="p.id"
+          [pacienteNombre]="p.nombre_completo"
+          (closed)="closeTutors()"
+          (saved)="onTutorsChanged()"
+        />
+      }
+    }
+  </div>
+</div>

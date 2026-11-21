@@ -1,0 +1,114 @@
+<app-modal
+  [open]="open"
+  [title]="texts.addTutor"
+  [subtitle]="pacienteNombre"
+  size="lg"
+  [showFooter]="true"
+  (closed)="close()"
+>
+  <div class="space-y-5">
+    @if (error(); as apiError) {
+      <app-alert variant="error" title="No se pudo asociar el tutor" [message]="apiError.message" />
+    }
+
+    <div class="flex flex-wrap gap-2">
+      <button
+        app-button
+        type="button"
+        size="sm"
+        [variant]="mode() === 'buscar' ? 'default' : 'outline'"
+        (click)="setMode('buscar')"
+      >
+        {{ texts.existingTutor }}
+      </button>
+      <button
+        app-button
+        type="button"
+        size="sm"
+        [variant]="mode() === 'nuevo' ? 'default' : 'outline'"
+        (click)="setMode('nuevo')"
+      >
+        {{ texts.newTutor }}
+      </button>
+    </div>
+
+    @if (mode() === 'buscar') {
+      <div class="space-y-3">
+        <input
+          app-input
+          type="text"
+          [formControl]="searchControl"
+          [placeholder]="texts.tutorSearch"
+          aria-label="Buscar tutor existente"
+        />
+
+        @for (tutor of results(); track tutor.id) {
+          <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+            <div>
+              <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ tutor.nombre_completo }}</p>
+              <p class="text-xs text-gray-500">{{ tutor.telefono }} · {{ tutor.parentesco || 'Sin parentesco' }}</p>
+            </div>
+            <button app-button variant="outline" size="sm" type="button" (click)="associate(tutor)" [disabled]="saving()">
+              Asociar
+            </button>
+          </div>
+        } @empty {
+          @if (searchControl.value.trim().length >= 2) {
+            <p class="text-sm text-gray-500">{{ texts.noTutorsFound }}</p>
+          }
+        }
+      </div>
+    } @else {
+      <div class="grid gap-4 md:grid-cols-2">
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-modal-nombre">Nombre completo *</label>
+          <input id="tutor-modal-nombre" app-input type="text" [formControl]="form.controls.nombre_completo" />
+          @if (fieldError('nombre_completo'); as message) {
+            <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+          }
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-modal-parentesco">Parentesco *</label>
+          <input id="tutor-modal-parentesco" app-input type="text" [formControl]="form.controls.parentesco" />
+          @if (fieldError('parentesco'); as message) {
+            <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+          }
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-modal-telefono">Teléfono principal *</label>
+          <input id="tutor-modal-telefono" app-input type="text" [formControl]="form.controls.telefono" />
+          @if (fieldError('telefono'); as message) {
+            <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+          }
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-modal-telefono-alt">Teléfono alternativo</label>
+          <input id="tutor-modal-telefono-alt" app-input type="text" [formControl]="form.controls.telefono_alternativo" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-modal-ci">Documento</label>
+          <input id="tutor-modal-ci" app-input type="text" [formControl]="form.controls.ci" placeholder="Opcional" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-modal-email">Correo</label>
+          <input id="tutor-modal-email" app-input type="email" [formControl]="form.controls.email" placeholder="Opcional" />
+        </div>
+        <div class="md:col-span-2">
+          <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-modal-direccion">Dirección</label>
+          <textarea id="tutor-modal-direccion" app-textarea rows="2" [formControl]="form.controls.direccion"></textarea>
+        </div>
+      </div>
+    }
+  </div>
+
+  <div modal-footer class="flex flex-wrap items-center justify-end gap-2">
+    <button app-button variant="outline" type="button" (click)="close()" [disabled]="saving()">
+      {{ texts.cancel }}
+    </button>
+    @if (mode() === 'nuevo') {
+      <button app-button variant="default" type="button" (click)="createAndAssociate()" [disabled]="saving()">
+        {{ saving() ? texts.saving : 'Crear y asociar' }}
+      </button>
+    }
+  </div>
+</app-modal>

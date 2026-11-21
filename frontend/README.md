@@ -80,7 +80,8 @@ Todas las rutas están dentro del layout principal y protegidas por `authGuard`.
 |---|---|
 | `/` | Inicio |
 | `/agenda` | Agenda |
-| `/pacientes` | Pacientes |
+| `/pacientes` | Pacientes: listado, ficha, alta/edición, estados y tutores principales |
+| `/pacientes/:id` | Ficha del paciente |
 | `/inscripciones` | Inscripciones |
 | `/pagos` | Pagos y caja |
 | `/reportes` | Reportes |
@@ -95,7 +96,7 @@ Todas las rutas están dentro del layout principal y protegidas por `authGuard`.
 | `/seguridad/roles-permisos` | Matriz de roles y permisos |
 | `/seguridad/bitacora` | Consulta y reconstrucción de bitácora |
 
-Los módulos sin implementar muestran un estado vacío reutilizable (`app-module-placeholder`). Las rutas `/profesionales`, `/organizacion/sucursales`, `/organizacion/salas-ambientes`, `/organizacion/configuracion`, `/seguridad/usuarios`, `/seguridad/roles-permisos` y `/seguridad/bitacora` ya están implementadas y consumen la API real del backend.
+Los módulos sin implementar muestran un estado vacío reutilizable (`app-module-placeholder`). Las rutas `/pacientes`, `/profesionales`, `/organizacion/sucursales`, `/organizacion/salas-ambientes`, `/organizacion/configuracion`, `/seguridad/usuarios`, `/seguridad/roles-permisos` y `/seguridad/bitacora` ya están implementadas y consumen la API real del backend. `/pacientes` usa `permissionGuard` con `paciente.ver` y el sidebar oculta la entrada sin permiso.
 
 ### Páginas de referencia
 
@@ -1001,6 +1002,56 @@ Inputs: `title`, `description`. Estado vacío de los módulos pendientes.
 
 ---
 
+### 26. Pacientes
+
+**Rutas:** `/pacientes` (listado) y `/pacientes/:id` (ficha).
+**Entrada de sidebar:** `Pacientes` (visible con `paciente.ver`).
+
+**Archivos:**
+
+- `src/app/pages/pacientes/pacientes.page.ts`
+- `src/app/pages/pacientes/pacientes.page.html`
+- `src/app/pages/pacientes/paciente-ficha.page.ts`
+- `src/app/pages/pacientes/paciente-ficha.page.html`
+- `src/app/pages/pacientes/pacientes.routes.ts`
+- `src/app/pages/pacientes/pacientes.service.ts`
+- `src/app/pages/pacientes/pacientes.models.ts`
+- `src/app/pages/pacientes/paciente-form-modal.component.*`
+- `src/app/pages/pacientes/paciente-status-modal.component.*`
+- `src/app/pages/pacientes/paciente-tutor-modal.component.*`
+- `src/app/pages/pacientes/paciente-date-input.component.ts`
+
+**API consumida:**
+
+| Entidad | Endpoints |
+|---|---|
+| Pacientes | `GET/POST /api/pacientes/pacientes`, `GET/PATCH /pacientes/{id}`, `GET /opciones`, `POST /{id}/estado`, `DELETE /{id}` |
+| Tutores del paciente | `GET/POST /pacientes/{id}/tutores`, `POST /{tutorId}/principal`, `DELETE /{tutorId}` |
+| Tutores | `GET/POST /api/pacientes/tutores`, `GET/PATCH /tutores/{id}` |
+
+**Funcionalidad:**
+
+- Listado paginado con búsqueda por nombre/documento/código, filtros por estado, sucursal de registro y “solo sin diagnóstico”, orden y paginación. El filtro por tipo de diagnóstico está deshabilitado hasta el módulo 05; el de sucursal de inscripción, hasta el 06.
+- La tabla no muestra alergias, condiciones ni observaciones.
+- Ficha con datos, edad calculada por el backend, estado, sucursal de registro, diagnóstico o “sin diagnóstico definido”, observaciones, última modificación y aviso de auditoría.
+- Datos sensibles (alergias/condiciones) solo con `can.view_sensibles`; si no, tarjeta protegida. El backend nunca los envía sin permiso.
+- Alta en modal con tutor principal nuevo o existente. El paciente no puede quedar activo sin tutor. Si el submódulo no estuviera disponible, el submit se bloquea con mensaje explícito.
+- Edición en modal reutilizando la ficha cargada (sin GET extra); campos sensibles bajo `app-switch` y permiso.
+- Cambio de estado con transiciones permitidas y motivo obligatorio según la regla. `PATIENT_TUTOR_REQUIRED` se muestra si falta tutor para activar.
+- Duplicados: bloqueo duro por documento y confirmación con motivo para coincidencias por nombre/fecha. Los datos fuera de alcance no se muestran; “Abrir ficha” navega y audita.
+- Sección de tutores real (04.02 núcleo): principal, agregar existente/nuevo, hacer principal y quitar. El backend impide quitar el principal de un paciente activo.
+- Errores 422 por campo, 409 de concurrencia con recarga, 409 de duplicado, 403/404/503 con `app-alert`. `503 AUDIT_UNAVAILABLE` no muestra la ficha (fail-closed).
+- Sin prefetch: la ficha solo se carga al navegar a `/pacientes/:id`; cada apertura queda auditada.
+- Sin botón de exportación (pendiente de infraestructura) y sin datos mock.
+
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-pagination`, `app-modal`, `TABLE_IMPORTS`, `input[app-input]`, `app-select-field`, `textarea[app-textarea]`, `app-switch` y `ToastService`. La fecha usa Flatpickr mediante `app-paciente-date-input`, con `maxDate: today`.
+
+**Permisos y alcance:** `permissionGuard` con `paciente.ver`; el sidebar oculta la entrada sin permiso. La API devuelve `can` de pantalla y por fila. Sin alcance global, el usuario solo ve pacientes de su sucursal de registro; la ficha fuera de alcance responde 404. El registro de tutores se muestra según `tutores_disponibles`.
+
+**Estado:** 04.02 núcleo y 04.01 Fase 1 implementados en backend y frontend. Pendientes: 04.02 completo (contactos de emergencia, ficha/listado standalone, activar/desactivar tutor y export), 04.03, 04.04, catálogo 05, filtro/visibilidad 06, ejecución 07/08, exportación PDF/Excel e importación CSV.
+
+---
+
 ## Paleta de colores
 
 Definida en `src/styles.css` dentro de `@theme`.
@@ -1044,9 +1095,15 @@ No se agregaron `swiper` ni `jsvectormap` porque sus componentes no forman parte
 - Coming Soon.
 - Carrusel, mapas vectoriales, avatares, tabs y popovers no solicitados. Los diálogos de las páginas de negocio usan el modal compartido `app-modal`; las tabs de salas/ambientes siguen siendo propias de esa página.
 - Exportación PDF/Excel de parámetros (RF-015): sin librerías instaladas y sin botón en la UI.
-- Exportaciones de usuarios/matriz/bitácora/profesionales y envío automático de contraseña temporal (pendiente de infraestructura).
+- Exportaciones de usuarios/matriz/bitácora/profesionales/pacientes y envío automático de contraseña temporal (pendiente de infraestructura).
 - Persistencia real de asignaciones a turnos/diagnósticos (módulo 07). Los contratos/stubs de Fase 3 ya están implementados en backend.
 - Asignación de profesionales a turnos/diagnósticos (módulo 07): solo se documentan los contratos.
+- 04.02 completo: contactos de emergencia, ficha/listado standalone de tutores, activar/desactivar tutor con motivo y exportación de tutores.
+- 04.03 ficha de ingreso/entrevista y 04.04 búsqueda global/ficha resumen.
+- Catálogo de tipos de diagnóstico (05): el campo queda “sin diagnóstico definido” y el filtro deshabilitado.
+- Filtro y visibilidad por sucursal de inscripción vigente (06), y bloqueo real de inscripciones/turnos (06/07).
+- Importación CSV de pacientes: no hay planilla del cliente; técnicamente viable sin librerías.
+- Cifrado de campo de datos clínicos (`encrypted`): no implementado por defecto; se evalúa con el cliente.
 - Registro, recuperación de contraseña y verificación en dos pasos.
 - Widget promocional del sidebar.
 
