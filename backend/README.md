@@ -972,9 +972,341 @@ registrarConsultaBitacora(filtros, cantidad, ?usuarioId, ?ip);
 | CU-12 exportar bitácora | Pendiente de infraestructura | sin botón |
 | FP-09 registrar/consultar/exportar bitácora | Consulta completa; export pendiente | API + página |
 
+## Módulo 03 — Profesionales (Fases 1, 2 y 3)
+
+Implementa el directorio de profesionales, el catálogo de especialidades, las sucursales de trabajo y la consulta de la matriz profesional–especialidad–sucursal. Los profesionales **no son usuarios del sistema** (03/RN-19): no tienen cuenta, rol Spatie ni FK a `users`.
+
+### Estructura
+
+```text
+app/Modules/Profesionales/
+├── Actions/Directorio/       CRUD, estado, especialidades y sucursales
+├── Actions/Especialidades/   CRUD y estado del catálogo
+├── Contracts/                Directorio y validador de asignación
+├── Enums/                    TipoEspecialidad, MotivoNoAsignable
+├── Events/                   Eventos de dominio por pilar
+├── Exceptions/               Errores con render HTTP
+├── Http/Controllers/         Directorio y especialidades
+├── Http/Requests/            Validación y autorización por campo
+├── Http/Resources/           Profesional, especialidad y relación
+├── Listeners/                RecordProfesionalesAudit
+├── Models/                   Profesional, Especialidad, pivotes y bitácora
+├── Providers/                ProfesionalesServiceProvider
+├── Queries/                  Listados, ficha, opciones y sucursales
+├── Rules/                    Reglas puras
+├── Support/                  Permisos, habilidades, alcance y snapshots
+├── routes-directorio.php
+├── routes-especialidades.php
+└── routes-matriz.php
+```
+
+`ProfesionalesServiceProvider` se registra después de `SeguridadServiceProvider`. Prefijo público: `App\Modules\Profesionales\Support\ProfesionalesModule::MODULE_URL = '/profesionales'`.
+
+### Endpoints
+
+Prefijo real: `/api/profesionales`.
+
+| Método | Ruta | Acción / Query | Permiso |
+|---|---|---|---|
+| GET | `/profesionales` | `ListProfesionalesQuery` | `profesional.ver` |
+| GET | `/profesionales/opciones` | `GetProfesionalFormOptionsQuery` | `profesional.ver` |
+| GET | `/profesionales/{id}` | `GetProfesionalQuery` | `profesional.ver` |
+| POST | `/profesionales` | `CreateProfesionalAction` | `profesional.crear` |
+| PATCH | `/profesionales/{id}` | `UpdateProfesionalAction` | `profesional.editar_datos` o `profesional.editar_contacto` según campos |
+| POST | `/profesionales/{id}/activar` | `ActivateProfesionalAction` | `profesional.cambiar_estado` |
+| POST | `/profesionales/{id}/desactivar` | `DeactivateProfesionalAction` | `profesional.cambiar_estado` |
+| DELETE | `/profesionales/{id}` | `RejectProfesionalDeletionAction` → 409 | `profesional.cambiar_estado` |
+| GET | `/profesionales/{id}/sucursales` | `ListProfesionalSucursalesQuery` | `profesional.ver` |
+| POST | `/profesionales/{id}/sucursales` | `AssignProfesionalSucursalAction` | `profesional_sucursal.administrar` |
+| POST | `/profesionales/{id}/sucursales/{sucursalId}/activar` | `ActivateProfesionalSucursalAction` | `profesional_sucursal.administrar` |
+| POST | `/profesionales/{id}/sucursales/{sucursalId}/desactivar` | `DeactivateProfesionalSucursalAction` | `profesional_sucursal.administrar` |
+| DELETE | `/profesionales/{id}/sucursales/{sucursalId}` | `RejectProfesionalSucursalDeletionAction` → 409 | `profesional_sucursal.administrar` |
+| GET | `/especialidades` | `ListEspecialidadesQuery` | `especialidad.ver` |
+| GET | `/especialidades/{id}` | `GetEspecialidadQuery` | `especialidad.ver` |
+| POST | `/especialidades` | `CreateEspecialidadAction` | `especialidad.administrar` |
+| PATCH | `/especialidades/{id}` | `UpdateEspecialidadAction` | `especialidad.administrar` |
+| POST | `/especialidades/{id}/activar` | `ActivateEspecialidadAction` | `especialidad.administrar` |
+| POST | `/especialidades/{id}/desactivar` | `DeactivateEspecialidadAction` | `especialidad.administrar` |
+| DELETE | `/especialidades/{id}` | `RejectEspecialidadDeletionAction` → 409 | `especialidad.administrar` |
+| GET | `/matriz` | `ListMatrizQuery` | `profesional.ver_matriz` |
+| GET | `/matriz/opciones` | `GetMatrizFilterOptionsQuery` | `profesional.ver_matriz` |
+
+Parámetros de profesionales: `search`, `especialidad_id`, `sucursal_id`, `estado` (`activo|inactivo`), `page`, `per_page` (máx. 50), `sort` (`nombre_completo|ci|activo|updated_at`), `direction`.
+Parámetros de especialidades: `search`, `estado`, `page`, `per_page`, `sort` (`nombre|activo|updated_at`), `direction`.
+Parámetros de matriz: `search`, `profesional_id`, `especialidad_id`, `sucursal_id`, `estado` (`activo|inactivo` del profesional), `solo_asignables`, `page`, `per_page`, `sort` (`profesional_nombre|profesional_ci|especialidad_nombre|sucursal_nombre`), `direction`.
+
+La respuesta incluye `data`, `links`, `meta` y `can` de pantalla. Cada fila incluye su propio `can` (`update_data`, `update_contact`, `change_status`, `delete=false`, `manage_branches`). La UI usa `can` solo para ocultar acciones; el backend siempre revalida.
+
+### Matriz profesional–especialidad–sucursal (03/RF-E08)
+
+`GET /api/profesionales/matriz` devuelve la grilla vigente de relaciones activas:
+
+- profesional × especialidad (principal o secundaria) × sucursal de trabajo;
+- solo relaciones activas (`profesional_especialidad.activo` y `profesional_sucursal.activo`);
+- estados de profesional, especialidad y sucursal;
+- `asignable` y `motivos_no_asignable` por fila (`PROFESIONAL_INACTIVO`, `ESPECIALIDAD_INACTIVA`, `SUCURSAL_INACTIVA`);
+- alcance por sucursal fail-closed: sin alcance global solo se ven las sucursales accesibles; si el filtro pide una sucursal fuera de alcance, la respuesta es vacía;
+- el profesional sin sucursal o sin especialidad no genera filas; se ve en el directorio con `asignable=false`;
+- `GET /matriz/opciones` devuelve profesionales visibles, especialidades y sucursales accesibles para los filtros.
+
+Es solo lectura. La administración de la relación profesional–sucursal se hace desde la ficha o desde el acceso directo de la fila (mismo modal). `can.export=false`.
+
+### Reglas y estados
+
+- Sin SoftDeletes ni borrado físico: `activo`, `motivo_estado`, `estado_cambiado_en` y `version`.
+- `DELETE` siempre responde `409` (`PROFESIONAL_DELETE_NOT_ALLOWED`, `ESPECIALIDAD_DELETE_NOT_ALLOWED`, `PROFESIONAL_SUCURSAL_DELETE_NOT_ALLOWED`). El chequeo real de historial queda pendiente de 06/07/11.
+- El motivo es obligatorio al activar y desactivar profesional, especialidad y relación profesional–sucursal.
+- `version` optimista: `409 PROFESIONAL_VERSION_CONFLICT`, `ESPECIALIDAD_VERSION_CONFLICT` o `PROFESIONAL_SUCURSAL_VERSION_CONFLICT`.
+- Documento único funcional (`lower(trim(ci))`) y nombre de especialidad único funcional.
+- Exactamente una especialidad principal activa por profesional. Se guarda solo en `profesional_especialidad` (`tipo='principal'`) con índice parcial.
+- Especialidades secundarias: el modelo y la API las soportan, pero `ProfesionalesModule::SECUNDARIAS_HABILITADAS = false` hasta confirmación del cliente (03/RF-D09, 03/RF-E05).
+- Un profesional sin sucursal activa no es asignable; la ficha lo muestra con `asignable=false` y `motivos_no_asignable`.
+- No se permite desactivar una especialidad con profesionales activos asociados (`409 ESPECIALIDAD_IN_USE`).
+- `matricula` es nullable y opcional (supuesto a validar).
+
+### Permisos
+
+Seeder: `ProfesionalesPermissionSeeder`, con `InitialPermissionMatrix` y marca `profesionales`.
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `profesional.ver` | sí | sí | sí |
+| `profesional.crear` | sí | no | no |
+| `profesional.editar_datos` | sí | no | no |
+| `profesional.editar_contacto` | sí | sí | no |
+| `profesional.cambiar_estado` | sí | no | no |
+| `profesional.exportar` (reservado) | sí | sí | no |
+| `profesional.ver_matriz` (reservado Fase 2) | sí | sí | sí |
+| `especialidad.ver` | sí | sí | sí |
+| `especialidad.administrar` | sí | no | no |
+| `profesional_sucursal.administrar` | sí | no | no |
+| `asignacion.ver` (reservado hasta 07) | sí | sí | sí |
+| `asignacion.crear` (reservado hasta 07) | sí | sí | sí |
+| `asignacion.reasignar` (reservado hasta 07) | sí | sí | sí |
+| `asignacion.desasignar` (reservado hasta 07) | sí | sí | sí |
+| `asignacion.exportar` (reservado) | sí | sí | no |
+| `diagnostico.asignar_profesionales` (reservado hasta 07) | sí | sí | sí |
+
+No se creó ningún `matriz.*` nuevo: `matriz.exportar` sigue perteneciendo al módulo 02.
+
+### Alcance por sucursal
+
+- Profesional y catálogo de especialidades son globales; la visibilidad del directorio depende de `profesional_sucursal`.
+- Sin `sucursal.alcance_global`, el usuario solo ve profesionales con una relación **activa** con alguna de sus sucursales accesibles. Sin sucursales asignadas, la lista es vacía (fail-closed).
+- Un profesional sin sucursal solo es visible para el alcance global.
+- La ficha filtra las sucursales devueltas al alcance del usuario; nunca expone sucursales ajenas.
+- Administración edita solo contactos de profesionales de sus sucursales; Recepción solo consulta.
+
+### Eventos y bitácora
+
+| Entidad (`bitacora.entidad`) | Acciones | `sucursal_id` |
+|---|---|---|
+| `profesional` | `CREAR`, `ACTUALIZAR`, `ACTIVAR`, `DESACTIVAR` | Una fila por sucursal activa del profesional; `NULL` si no tiene. |
+| `especialidad` | `CREAR`, `ACTUALIZAR`, `ACTIVAR`, `DESACTIVAR` | `NULL` (catálogo global). |
+| `profesional_especialidad` | `ACTUALIZAR` | Una fila por sucursal activa del profesional; `NULL` si no tiene. |
+| `profesional_sucursal` | `CREAR`, `ACTIVAR`, `DESACTIVAR` | La sucursal afectada. |
+
+`RecordProfesionalesAudit` es síncrono y fail-closed. Escribe `modulo='profesionales'`, `resultado='exito'`, `ip` y snapshots con whitelist. Las desactivaciones de profesional y especialidad se marcan `critico=true`.
+
+`ProfesionalesAccionAuditadaSeeder` agrega las acciones al catálogo compartido `accion_auditada` sin modificar el seeder del módulo 02. `AuditModuleResolver` puede mostrar etiquetas de fallback; no se modificó código de 02.
+
+### Catálogo inicial
+
+`EspecialidadCatalogoSeeder` siembra **solo si la tabla está vacía** (instalación nueva):
+
+- Psicología
+- Psicopedagogía
+- Terapia Ocupacional
+- Fisioterapia
+- Terapia de Lenguaje
+
+Están marcadas como **PROPUESTO - VALIDAR**. El consolidado menciona “6” pero lista cinco. Si el cliente renombra o agrega especialidades, el seeder no vuelve a sembrar ni pisa cambios.
+
+### Contratos expuestos
+
+**`ProfessionalDirectoryContract`** — implementado por `EloquentProfessionalDirectory`:
+
+```php
+public function existe(int $profesionalId): bool;
+public function estaActivo(int $profesionalId): bool;
+public function asegurarActivo(int $profesionalId): void; // ProfesionalNotFoundException / ProfesionalInactivoException
+```
+
+Agenda, diagnósticos, asistencia y reportes deben llamar a `asegurarActivo()` antes de asignar (03/RF-D13, 03/RF-A11).
+
+**`ProfessionalAssignmentValidatorContract`** — implementado por `EloquentProfessionalAssignmentValidator`:
+
+```php
+public function puedeAsignar(
+    int $profesionalId,
+    int $especialidadId,
+    int $sucursalId,
+): ResultadoAsignacion;
+
+public function asegurarAsignable(
+    int $profesionalId,
+    int $especialidadId,
+    int $sucursalId,
+): void; // ProfesionalNotAssignableException (409 PROFESIONAL_NOT_ASSIGNABLE)
+```
+
+`ResultadoAsignacion` devuelve `puede`, `codigo` y `mensaje`. Códigos: `ASIGNACION_VALIDA`, `PROFESIONAL_NO_ENCONTRADO`, `PROFESIONAL_INACTIVO`, `ESPECIALIDAD_NO_ENCONTRADA`, `ESPECIALIDAD_INACTIVA`, `ESPECIALIDAD_NO_ASIGNADA`, `SUCURSAL_INACTIVA`, `SUCURSAL_NO_ASIGNADA`.
+
+Ejemplo para el módulo 07:
+
+```php
+$resultado = app(ProfessionalAssignmentValidatorContract::class)
+    ->puedeAsignar($profesionalId, $especialidadId, $sucursalId);
+
+if (! $resultado->puede) {
+    // Mostrar $resultado->codigo y $resultado->mensaje; no consultar otras sucursales.
+}
+```
+
+El validador verifica profesional activo, especialidad activa, relación especialidad–profesional activa, sucursal activa (en vivo con `BranchDirectoryContract`) y relación profesional–sucursal activa. No verifica solapamiento ni estado del turno: eso es del módulo 07.
+
+### Caché del validador
+
+- Store `file` (sin tags), TTL 300 s.
+- Clave de época `profesionales.validador.epoch`; claves `profesionales.validador.{epoch}.{profesional}.{especialidad}.{sucursal}`.
+- `InvalidateProfesionalValidatorCache` incrementa la época al crear/editar/cambiar estado de profesional, especialidad, asignación de especialidad o relación con sucursal.
+- La sucursal activa se consulta en vivo en cada validación para no quedar obsoleta si 01 la desactiva.
+- Tests: acierto de caché, invalidación por estado/relación, rechazo inmediato por sucursal inactiva.
+
+### Fase 3 — Contratos y stubs (sin persistencia)
+
+Fase 3 se entrega como contratos + stubs que fallan de forma explícita. No hay endpoints, pantalla ni cambios a `turno`.
+
+| Contrato | Métodos | Implementación actual |
+|---|---|---|
+| `ProfessionalScheduleContract` | `haySolapamiento(profesionalId, inicio, fin)`, `tieneAsignacionesFuturas(profesionalId, desde)` | `StubProfessionalScheduleContract` lanza `LogicException('Módulo 07 — Agenda y turnos no implementado todavía.')` |
+| `ProfessionalDiagnosticRequirementsContract` | `especialidadesRequeridas(tipoDiagnosticoId)` | `StubProfessionalDiagnosticRequirementsContract` lanza `LogicException('Módulo 05/06 — Diagnósticos no implementado todavía.')` |
+| `ProfessionalExporterContract` | `exportarDirectorio`, `exportarMatriz`, `exportarAsignaciones` | `UnavailableProfessionalExporter` lanza `LogicException('Exportación PDF/Excel pendiente de infraestructura.')` |
+
+Los stubs están bindeados en `ProfesionalesServiceProvider`. Las Actions de desactivación **no** llaman todavía a `tieneAsignacionesFuturas()`: hacerlo haría fallar la operación hasta que exista 07. El límite queda documentado.
+
+#### TODOs exactos para módulos consumidores
+
+- **07 — Agenda y turnos** (`docs/07_AGENDA_TURNOS/02_programacion_turnos_patrones.md`, `03_reprogramacion_cancelacion_turnos.md`, `05_diagnostico_varios_profesionales.md`):
+  - implementar `ProfessionalScheduleContract` con turnos reales;
+  - persistir `turno.profesional_id` nullable («sin asignar»), reasignación con motivo, desasignación, estado `programado` y `turno_profesional`;
+  - llamar a `ProfessionalAssignmentValidatorContract::asegurarAsignable()` antes de guardar;
+  - validar solapamiento global incluyendo otras sucursales, sin revelar datos de sucursales fuera del alcance en el mensaje;
+  - convertir fecha/hora con `zona_horaria` y guardar UTC (RT-06);
+  - cubrir RT-09 antes de desactivar profesionales/especialidades.
+- **05 — Catálogo de servicios** (`docs/05_CATALOGO_SERVICIOS_TARIFAS/03_tipos_diagnostico_evaluacion.md`) y **06 — Inscripciones/atenciones** (`docs/06_INSCRIPCIONES_ATENCIONES/03_entrevista_diagnostico_atenciones.md`): implementar `ProfessionalDiagnosticRequirementsContract` desde `tipo_diagnostico_profesional` (especialidad y cantidad mínima) y validar la asignación múltiple.
+- **11 — Evaluaciones/resultados** (`docs/11_EVALUACIONES_RESULTADOS/02_resultados_diagnostico.md`): historial clínico para el chequeo real de `DELETE` de profesional.
+- **Infraestructura:** implementar `ProfessionalExporterContract` y llamar a `AuditRecorderContract::registrarExportacion`; no se instalan librerías ni se muestra botón.
+- La asignación real a turnos, “sin asignar”, reasignación, desasignación y diagnóstico múltiple pertenecen al módulo 07. Los permisos `asignacion.*` y `diagnostico.asignar_profesionales` quedan sembrados y documentados, sin endpoint.
+- No se modificó `turno`: su creación y la columna `profesional_id` nullable corresponden a 07.
+
+### Checklist Fases 1 y 2 (numeración consolidada)
+
+| Requisito | Estado | Evidencia |
+|---|---|---|
+| 03/RF-D01 crear profesional | Completo | `CreateProfesionalAction`, `ProfesionalCrudTest` |
+| 03/RF-D02 unicidad de documento | Completo | `ProfesionalDocumentUniquenessRule`, índice funcional, tests |
+| 03/RF-D03 obligatorios | Completo | `StoreProfesionalRequest`, tests |
+| 03/RF-D04 listado/filtros/alcance | Completo | `ListProfesionalesQuery`, `ProfesionalListTest` |
+| 03/RF-D05 ficha | Completo | `GetProfesionalQuery`, `ProfesionalResource` |
+| 03/RF-D06 edición + bitácora | Completo | `UpdateProfesionalAction`, `ProfesionalAuditTest` |
+| 03/RF-D07 activar/desactivar con motivo | Completo | `ChangesProfesionalStatus`, `ProfesionalStatusTest` |
+| 03/RF-D08 bloquear eliminación | Parcial | `DELETE` 409; historial real pendiente de 06/07/11 |
+| 03/RF-D09 especialidad principal/secundarias | Parcial/condicional | Principal completa; secundarias tras bandera |
+| 03/RF-D10 exponer profesional a matriz | Completo | `ProfessionalDirectoryContract` + pivote |
+| 03/RF-D11 bitácora | Completo | `RecordProfesionalesAudit` |
+| 03/RF-D12 API a consumidores | Completo | REST + contrato |
+| 03/RF-D13 inactivo no asignable | Completo | `asegurarActivo`, `asignable=false` |
+| 03/RF-D14 restricción por rol | Completo | permisos + tests |
+| 03/RF-D15 exportar | Pendiente infraestructura | sin librerías ni botón; `UnavailableProfessionalExporter` |
+| 03/RF-E01 crear especialidad | Completo | `CreateEspecialidadAction` |
+| 03/RF-E02 editar/desactivar con bloqueo | Completo | `EspecialidadDeactivationRule`, tests |
+| 03/RF-E03 listar especialidades | Completo | `ListEspecialidadesQuery` |
+| 03/RF-E04 una principal | Completo | pivote + índice parcial + regla |
+| 03/RF-E05 secundarias | Condicional | igual que D09 |
+| 03/RF-E06 sucursales de trabajo | Completo | acciones y pivote |
+| 03/RF-E07 no duplicar relaciones | Completo | reglas + índices parciales |
+| 03/RF-E08 matriz | Completo | `ListMatrizQuery`, `MatrizTest`, tab Matriz |
+| 03/RF-E09 validación agenda/diagnóstico | Completo (fundación) | `ProfessionalAssignmentValidatorContract` |
+| 03/RF-E10 bitácora de matriz | Completo | eventos de sucursal |
+| 03/RF-E11 eliminación con historial | Parcial | `DELETE` 409; historial pendiente |
+| 03/RF-E12 exportar matriz | Pendiente infraestructura | sin botón; `UnavailableProfessionalExporter` |
+| 03/RF-E13 especialidad inactiva | Completo | validación de alta; lado turnos en Fase 2 |
+| 03/RF-E14 roles de catálogo/matriz | Completo | permisos + tests |
+| 03/RF-A01–A15 | Fase 3 / módulo 07 | A03/A11/A14 tienen validador/alcance; A04/A07/A08/A15 tienen contratos/stubs; persistencia en 07; export pendiente |
+| 03/RN-01, RN-02, RN-04–RN-07, RN-09, RN-10, RN-17–RN-20 | Completo/Parcial | ver tests y limitaciones anteriores |
+| 03/RN-03, RN-08, RN-11–RN-16 | Fase 2/3 o 07 | validador y contratos pendientes |
+| 03/CU-01–CU-05 | Completo | acciones y tests |
+| 03/CU-06 | Fase 2 | validador pendiente |
+| 03/CU-07–CU-09 | Fase 3 / 07 | contratos/stubs listos; UI y persistencia en 07 |
+| 03/CU-10 | Pendiente infraestructura | exportación |
+
+#### RN y CU de las Fases 1 y 2
+
+| Requisito | Estado |
+|---|---|
+| 03/RN-01 unicidad de documento | Completo |
+| 03/RN-02 una principal | Completo |
+| 03/RN-03 inactivo no asignable | Completo: contrato + validador |
+| 03/RN-04 no eliminación | Parcial: `DELETE` 409, historial real pendiente |
+| 03/RN-05 catálogo configurable | Completo |
+| 03/RN-06 nombre único | Completo |
+| 03/RN-07 sucursal activa para asignar | Completo en asignabilidad |
+| 03/RN-08 validación de matriz | Completo: `ProfessionalAssignmentValidatorContract` |
+| 03/RN-09 especialidad inactiva | Completo: alta + validador |
+| 03/RN-10 relación independiente de especialidad | Completo |
+| 03/RN-11 asignación manual | Módulo 07 |
+| 03/RN-12 asignación opcional | Módulo 07 |
+| 03/RN-13 sin solapamiento | Stub `ProfessionalScheduleContract`; 07 |
+| 03/RN-14 solo programado | Pendiente 07 (estado del turno) |
+| 03/RN-15 reasignación con motivo | Pendiente 07 |
+| 03/RN-16 diagnóstico integral | Stub de requisitos; 05/06/07 |
+| 03/RN-17 trazabilidad | Completo para directorio/catálogo; asignaciones en 07 |
+| 03/RN-18 alcance por sucursal | Completo |
+| 03/RN-19 profesional sin usuario | Completo |
+| 03/RN-20 motivo obligatorio | Completo |
+| 03/CU-01 registrar profesional | Completo |
+| 03/CU-02 editar profesional | Completo |
+| 03/CU-03 desactivar profesional | Completo |
+| 03/CU-04 registrar especialidad | Completo |
+| 03/CU-05 asignar sucursales | Completo |
+| 03/CU-06 validar asignación | Completo: contrato interno |
+| 03/CU-07 asignar a turno | Módulo 07 |
+| 03/CU-08 reasignar/desasignar | Módulo 07 |
+| 03/CU-09 diagnóstico múltiple | Fase 3 / 05, 06, 07 |
+| 03/CU-10 exportar | Pendiente infraestructura |
+
+#### Checklist Fase 3 (contratos y stubs)
+
+| Requisito | Estado | Evidencia |
+|---|---|---|
+| 03/RF-A04 solapamiento | Stub | `ProfessionalScheduleContract::haySolapamiento`; 07 implementa |
+| 03/RF-A07 diagnóstico múltiple | Stub | `ProfessionalDiagnosticRequirementsContract`; 05/06/07 implementan |
+| 03/RF-A08 especialidades requeridas | Stub | mismo contrato; origen `tipo_diagnostico_profesional` |
+| 03/RF-A15 exportar asignaciones | Pendiente infraestructura | `UnavailableProfessionalExporter::exportarAsignaciones` |
+| 03/RF-D15 / 03/RF-E12 exportar | Pendiente infraestructura | `UnavailableProfessionalExporter`; sin botón |
+| 03/RN-13 sin solapamiento | Stub | `ProfessionalScheduleContract`; 07 |
+| 03/RN-14 solo programado | Pendiente 07 | estado del turno |
+| 03/RN-15 reasignación con motivo | Pendiente 07 | persistencia y bitácora en 07 |
+| 03/RN-16 diagnóstico integral | Stub de requisitos | 05/06/07 |
+| 03/CU-07 asignar a turno | Pendiente 07 | no hay endpoint en 03 |
+| 03/CU-08 reasignar/desasignar | Pendiente 07 | no hay endpoint en 03 |
+| 03/CU-09 diagnóstico múltiple | Stub | requisitos + validación; 05/06/07 |
+
+### Migraciones
+
+- `2026_11_22_000000_create_especialidad_table.php`
+- `2026_11_22_000100_create_profesional_table.php`
+- `2026_11_22_000200_create_profesional_especialidad_table.php`
+- `2026_11_22_000300_create_profesional_sucursal_table.php`
+
+El esquema de referencia se mantiene sincronizado en `database/database.md` y `database/talitacumi_schema.sql`.
+
 ### Pendientes de fases siguientes
 
-- Solo infraestructura: PDF/Excel (RF-U15, RF-R03, RF-B09), envío automático de contraseña temporal y plantilla de importación RT-08.
+- Solo infraestructura: PDF/Excel (RF-U15, RF-R03, RF-B09, RF-D15, RF-E12, RF-A15), envío automático de contraseña temporal y plantilla de importación RT-08.
+- Módulo 03: persistencia real de asignaciones en 07 y exportación PDF/Excel. Los contratos/stubs de Fase 3 ya están implementados.
+- Importación inicial de profesionales desde planilla del cliente: pendiente de que exista la planilla; un CSV se puede procesar sin librerías externas.
 - Consumidores de auditoría de datos sensibles y exportaciones en los módulos 04, 08, 09 y 11.
 
 ---
