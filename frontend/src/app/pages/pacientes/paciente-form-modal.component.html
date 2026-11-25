@@ -1,0 +1,374 @@
+<app-modal
+  [open]="open"
+  [title]="isEdit ? texts.edit : texts.create"
+  size="xl"
+  [showFooter]="true"
+  (closed)="close()"
+>
+  <div class="space-y-6">
+    @if (error(); as apiError) {
+      <app-alert
+        variant="error"
+        title="No se pudo guardar"
+        [message]="apiError.message"
+      />
+    }
+
+    @if (!isEdit && sucursalOptions.length === 0) {
+      <app-alert
+        variant="warning"
+        title="Sin sucursales asignadas"
+        message="No tenés sucursales habilitadas para registrar pacientes. Contactá a Administración."
+      />
+    }
+
+    @if (showDuplicatePanel()) {
+      <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-500/10">
+        @if (hardDuplicate()) {
+          <h3 class="text-sm font-semibold text-amber-800 dark:text-amber-200">
+            {{ texts.duplicateHardTitle }}
+          </h3>
+          <p class="mt-1 text-sm text-amber-700 dark:text-amber-300">
+            El documento ya está registrado. No se puede crear otro paciente con el mismo documento.
+          </p>
+
+          @if (duplicateData()?.paciente_existente; as existing) {
+            <div class="mt-3 flex flex-wrap items-center gap-2">
+              <span class="text-sm font-medium text-gray-800 dark:text-white/90">
+                {{ existing.nombre_completo }}
+              </span>
+              <span class="text-xs text-gray-500">
+                {{ existing.codigo || 'Sin código' }} · {{ existing.estado_label }}
+              </span>
+              <button app-button variant="outline" size="sm" type="button" (click)="openExistingFicha()">
+                {{ texts.openFicha }}
+              </button>
+            </div>
+          } @else if (duplicateData()?.fuera_de_alcance) {
+            <p class="mt-2 text-sm text-amber-700 dark:text-amber-300">
+              El documento pertenece a un paciente fuera de tu alcance. Contactá a Administración.
+            </p>
+          }
+        } @else {
+          <h3 class="text-sm font-semibold text-amber-800 dark:text-amber-200">
+            {{ texts.duplicateTitle }}
+          </h3>
+          <p class="mt-1 text-sm text-amber-700 dark:text-amber-300">
+            Se encontraron coincidencias por nombre y fecha de nacimiento. Revisá si es el mismo paciente.
+          </p>
+
+          @for (match of duplicateData()?.coincidencias ?? []; track match.id) {
+            <div class="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-white/70 p-3 dark:bg-gray-900/50">
+              <span class="text-sm font-medium text-gray-800 dark:text-white/90">{{ match.nombre_completo }}</span>
+              <span class="text-xs text-gray-500">{{ match.codigo || 'Sin código' }} · {{ match.estado_label }}</span>
+              <span class="text-xs text-gray-500">{{ match.tipo_coincidencia_label }}</span>
+              <button app-button variant="ghost" size="sm" type="button" (click)="openExistingFicha()">
+                {{ texts.openFicha }}
+              </button>
+            </div>
+          }
+
+          @if (duplicateData()?.coincidencias_fuera_de_alcance) {
+            <p class="mt-3 text-sm text-amber-700 dark:text-amber-300">
+              {{ texts.outOfScopeDuplicate }}
+            </p>
+          }
+
+          <div class="mt-4">
+            <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="duplicate-reason">
+              {{ texts.duplicateReason }} *
+            </label>
+            <textarea
+              id="duplicate-reason"
+              app-textarea
+              rows="2"
+              maxlength="500"
+              [value]="duplicateReason()"
+              (input)="duplicateReason.set($any($event.target).value)"
+              placeholder="Explicá por qué es otra persona"
+            ></textarea>
+            @if (fieldError('motivo_confirmacion'); as message) {
+              <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+            }
+          </div>
+
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button app-button variant="default" size="sm" type="button" (click)="confirmDuplicate()">
+              {{ texts.duplicateConfirm }}
+            </button>
+            <button app-button variant="outline" size="sm" type="button" (click)="showDuplicatePanel.set(false)">
+              {{ texts.cancel }}
+            </button>
+          </div>
+        }
+      </div>
+    }
+
+    <div class="grid gap-4 md:grid-cols-2">
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="paciente-nombre">Nombre *</label>
+        <input id="paciente-nombre" app-input type="text" [formControl]="form.controls.nombre" />
+        @if (form.controls.nombre.touched && form.controls.nombre.invalid) {
+          <p class="mt-1 text-xs text-red-500">El nombre es obligatorio.</p>
+        }
+        @if (fieldError('nombre'); as message) {
+          <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+        }
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="paciente-apellido-paterno">Apellido paterno *</label>
+        <input id="paciente-apellido-paterno" app-input type="text" [formControl]="form.controls.apellido_paterno" />
+        @if (form.controls.apellido_paterno.touched && form.controls.apellido_paterno.invalid) {
+          <p class="mt-1 text-xs text-red-500">El apellido paterno es obligatorio.</p>
+        }
+        @if (fieldError('apellido_paterno'); as message) {
+          <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+        }
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="paciente-apellido-materno">Apellido materno</label>
+        <input id="paciente-apellido-materno" app-input type="text" [formControl]="form.controls.apellido_materno" />
+        @if (fieldError('apellido_materno'); as message) {
+          <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+        }
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Fecha de nacimiento *</label>
+        <app-paciente-date-input [formControl]="form.controls.fecha_nacimiento" />
+        @if (form.controls.fecha_nacimiento.touched && form.controls.fecha_nacimiento.invalid) {
+          <p class="mt-1 text-xs text-red-500">La fecha de nacimiento es obligatoria.</p>
+        }
+        @if (fieldError('fecha_nacimiento'); as message) {
+          <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+        }
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Sexo *</label>
+        <app-select-field
+          [options]="sexoOptions"
+          [value]="form.controls.sexo.value"
+          placeholder="Seleccioná el sexo"
+          ariaLabel="Sexo"
+          (valueChange)="form.controls.sexo.setValue($any($event))"
+        />
+        @if (fieldError('sexo'); as message) {
+          <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+        }
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="paciente-ci">Documento del menor</label>
+        <input id="paciente-ci" app-input type="text" [formControl]="form.controls.ci" placeholder="Opcional" />
+        @if (fieldError('ci'); as message) {
+          <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+        }
+      </div>
+
+      @if (!isEdit) {
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Sucursal de registro *</label>
+          <app-select-field
+            [options]="sucursalOptions"
+            [value]="form.controls.sucursal_registro_id.value"
+            placeholder="Seleccioná la sucursal"
+            ariaLabel="Sucursal de registro"
+            (valueChange)="form.controls.sucursal_registro_id.setValue($event)"
+          />
+          @if (fieldError('sucursal_registro_id'); as message) {
+            <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+          }
+        </div>
+      } @else {
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Sucursal de registro</label>
+          <input app-input type="text" [value]="paciente?.sucursal_registro?.nombre || '—'" disabled />
+          <p class="mt-1 text-xs text-gray-500">La sucursal de registro no se cambia desde la edición.</p>
+        </div>
+      }
+
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Tipo de diagnóstico</label>
+        <input
+          app-input
+          type="text"
+          [value]="options?.tipos_diagnostico?.disponible ? '' : 'Sin diagnóstico definido — catálogo pendiente (05)'"
+          disabled
+        />
+        <p class="mt-1 text-xs text-gray-500">{{ texts.diagnosticsUnavailable }}</p>
+      </div>
+    </div>
+
+    <div>
+      <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="paciente-observaciones">Observaciones generales</label>
+      <textarea id="paciente-observaciones" app-textarea rows="3" [formControl]="form.controls.observaciones"></textarea>
+      @if (fieldError('observaciones'); as message) {
+        <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+      }
+    </div>
+
+    @if (canViewSensitive) {
+      <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+        <div class="flex items-center gap-3">
+          <app-switch
+            [checked]="mostrarSensibles()"
+            ariaLabel="Registrar datos sensibles"
+            (checkedChange)="mostrarSensibles.set($event)"
+          />
+          <div>
+            <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Registrar datos sensibles</p>
+            <p class="text-xs text-gray-500">Alergias y condiciones médicas. Requieren permiso paciente.ver_sensibles.</p>
+          </div>
+        </div>
+
+        @if (mostrarSensibles()) {
+          <div class="mt-4 grid gap-4 md:grid-cols-2">
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="paciente-alergias">Alergias</label>
+              <textarea id="paciente-alergias" app-textarea rows="3" [formControl]="form.controls.alergias"></textarea>
+              @if (fieldError('alergias'); as message) {
+                <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+              }
+            </div>
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="paciente-condiciones">Condiciones médicas</label>
+              <textarea id="paciente-condiciones" app-textarea rows="3" [formControl]="form.controls.condiciones_medicas"></textarea>
+              @if (fieldError('condiciones_medicas'); as message) {
+                <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    }
+
+    @if (!isEdit) {
+      <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 class="text-sm font-semibold text-gray-800 dark:text-white/90">Tutor principal</h3>
+            <p class="text-xs text-gray-500">El paciente no puede quedar activo sin tutor principal.</p>
+          </div>
+          <div class="flex gap-2">
+            <button
+              app-button
+              type="button"
+              size="sm"
+              [variant]="tutorMode() === 'nuevo' ? 'default' : 'outline'"
+              (click)="setTutorMode('nuevo')"
+            >
+              {{ texts.newTutor }}
+            </button>
+            <button
+              app-button
+              type="button"
+              size="sm"
+              [variant]="tutorMode() === 'existente' ? 'default' : 'outline'"
+              (click)="setTutorMode('existente')"
+            >
+              {{ texts.existingTutor }}
+            </button>
+          </div>
+        </div>
+
+        @if (!tutoresDisponibles) {
+          <app-alert
+            class="mt-4"
+            variant="warning"
+            title="Tutores no disponibles"
+            [message]="texts.tutorsUnavailable"
+          />
+        } @else if (tutorMode() === 'nuevo') {
+          <div class="mt-4 grid gap-4 md:grid-cols-2">
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-nombre">Nombre completo *</label>
+              <input id="tutor-nombre" app-input type="text" [formControl]="form.controls.tutor_nombre" />
+            </div>
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Parentesco *</label>
+              <app-select-field
+                [options]="parentescoOptions"
+                [value]="form.controls.tutor_parentesco_id.value"
+                placeholder="Seleccioná el parentesco"
+                ariaLabel="Parentesco del tutor"
+                (valueChange)="form.controls.tutor_parentesco_id.setValue($event)"
+              />
+              @if (fieldError('tutor_principal.parentesco_id'); as message) {
+                <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+              }
+            </div>
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-telefono">Teléfono principal *</label>
+              <input id="tutor-telefono" app-input type="text" [formControl]="form.controls.tutor_telefono" />
+            </div>
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-telefono-alt">Teléfono alternativo</label>
+              <input id="tutor-telefono-alt" app-input type="text" [formControl]="form.controls.tutor_telefono_alternativo" />
+            </div>
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-ci">Documento</label>
+              <input id="tutor-ci" app-input type="text" [formControl]="form.controls.tutor_ci" placeholder="Opcional" />
+            </div>
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-email">Correo</label>
+              <input id="tutor-email" app-input type="email" [formControl]="form.controls.tutor_email" placeholder="Opcional" />
+            </div>
+            <div class="md:col-span-2">
+              <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tutor-direccion">Dirección</label>
+              <textarea id="tutor-direccion" app-textarea rows="2" [formControl]="form.controls.tutor_direccion"></textarea>
+            </div>
+          </div>
+        } @else {
+          <div class="mt-4 space-y-3">
+            <input
+              app-input
+              type="text"
+              [formControl]="tutorSearch"
+              [placeholder]="texts.tutorSearch"
+              aria-label="Buscar tutor existente"
+            />
+
+            @if (selectedTutor(); as tutor) {
+              <div class="flex flex-wrap items-center gap-2 rounded-lg bg-green-50 p-3 text-sm dark:bg-green-500/10">
+                <span class="font-medium text-gray-800 dark:text-white/90">{{ tutor.nombre_completo }}</span>
+                <span class="text-xs text-gray-500">{{ tutor.telefono }}</span>
+                <span class="text-xs text-gray-500">{{ tutor.parentesco }}</span>
+                <button app-button variant="ghost" size="sm" type="button" (click)="clearSelectedTutor()">Cambiar</button>
+              </div>
+            }
+
+            @for (tutor of tutorResults(); track tutor.id) {
+              <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+                <div>
+                  <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ tutor.nombre_completo }}</p>
+                  <p class="text-xs text-gray-500">{{ tutor.telefono }} · {{ tutor.parentesco || 'Sin parentesco' }}</p>
+                </div>
+                <button app-button variant="outline" size="sm" type="button" (click)="selectTutor(tutor)">
+                  Seleccionar
+                </button>
+              </div>
+            } @empty {
+              @if (tutorSearch.value.trim().length >= 2) {
+                <p class="text-sm text-gray-500">{{ texts.noTutorsFound }}</p>
+              }
+            }
+          </div>
+        }
+      </div>
+    }
+  </div>
+
+  <div modal-footer class="flex flex-wrap items-center justify-end gap-2">
+    <button app-button variant="outline" type="button" (click)="close()" [disabled]="saving()">
+      {{ texts.cancel }}
+    </button>
+    @if (!showDuplicatePanel()) {
+      <button app-button variant="default" type="button" (click)="submit()" [disabled]="saving()">
+        {{ saving() ? texts.saving : texts.save }}
+      </button>
+    }
+  </div>
+</app-modal>

@@ -1,0 +1,365 @@
+<div>
+  <app-page-breadcrumb [pageTitle]="texts.title" />
+
+  <div class="space-y-5 sm:space-y-6">
+    @if (error(); as apiError) {
+      <app-alert variant="error" [title]="texts.errorTitle" [message]="apiError.message" />
+    }
+
+    @if (loading()) {
+      <app-component-card>
+        <p class="py-10 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.loading }}</p>
+      </app-component-card>
+    } @else if (notFound()) {
+      <app-component-card>
+        <div class="space-y-4 py-8 text-center">
+          <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.notFound }}</p>
+          <button app-button variant="outline" type="button" (click)="back()">{{ texts.back }}</button>
+        </div>
+      </app-component-card>
+    } @else if (resumen(); as r) {
+      <app-component-card>
+        <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <h2 class="text-xl font-semibold text-gray-800 dark:text-white/90">
+                {{ r.paciente.nombre_completo }}
+              </h2>
+              <app-badge [color]="estadoColor(r.paciente.estado)" variant="light" size="sm">
+                {{ r.paciente.estado_label }}
+              </app-badge>
+              <app-badge color="gray" variant="light" size="sm">
+                {{ r.paciente.codigo || 'Sin código' }}
+              </app-badge>
+            </div>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {{ r.paciente.edad.etiqueta }} · {{ r.paciente.sexo_label }} ·
+              {{ formatDate(r.paciente.fecha_nacimiento) }}
+            </p>
+            <p class="mt-1 text-xs text-gray-400">
+              {{ r.paciente.sucursal_registro.nombre || ('Sucursal ' + r.paciente.sucursal_registro.id) }}
+            </p>
+            <p class="mt-2 max-w-2xl text-xs text-gray-500 dark:text-gray-400">{{ texts.readOnly }}</p>
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            <button app-button variant="outline" type="button" (click)="back()">
+              {{ texts.back }}
+            </button>
+            <button app-button variant="outline" type="button" (click)="openFullFicha()">
+              {{ texts.fullFicha }}
+            </button>
+            @if (can().view_ficha_ingreso) {
+              <button app-button variant="outline" type="button" (click)="openFichaIngreso()">
+                {{ texts.fichaIngreso }}
+              </button>
+            }
+            <button app-button variant="default" type="button" (click)="refreshIndicators()" [disabled]="refreshing()">
+              {{ refreshing() ? texts.refreshing : texts.refresh }}
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-wrap gap-4 border-t border-gray-100 pt-3 text-xs text-gray-500 dark:border-gray-800">
+          <span>{{ texts.updatedAt }}: {{ formatDateTime(r.generado_en) }}</span>
+          @if (r.fecha_corte) {
+            <span>{{ texts.cutoff }}: {{ formatDate(r.fecha_corte) }}</span>
+          } @else {
+            <span>{{ texts.cutoffPending }}</span>
+          }
+          <span>{{ texts.currentContext }}: {{ contextoLabel() }}</span>
+        </div>
+        <p class="mt-2 text-xs text-gray-400">{{ texts.auditNotice }}</p>
+      </app-component-card>
+
+      <div class="grid gap-5 lg:grid-cols-2">
+        <app-component-card [title]="texts.basicData">
+          <dl class="grid gap-3 text-sm sm:grid-cols-2">
+            <div>
+              <dt class="text-gray-500">{{ texts.code }}</dt>
+              <dd class="font-medium text-gray-800 dark:text-white/90">{{ r.paciente.codigo || '—' }}</dd>
+            </div>
+            <div>
+              <dt class="text-gray-500">{{ texts.document }}</dt>
+              <dd class="font-medium text-gray-800 dark:text-white/90">{{ r.paciente.ci || '—' }}</dd>
+            </div>
+            <div>
+              <dt class="text-gray-500">{{ texts.birthDate }}</dt>
+              <dd class="font-medium text-gray-800 dark:text-white/90">{{ formatDate(r.paciente.fecha_nacimiento) }}</dd>
+            </div>
+            <div>
+              <dt class="text-gray-500">{{ texts.age }}</dt>
+              <dd class="font-medium text-gray-800 dark:text-white/90">{{ r.paciente.edad.etiqueta }}</dd>
+            </div>
+            <div>
+              <dt class="text-gray-500">{{ texts.sex }}</dt>
+              <dd class="font-medium text-gray-800 dark:text-white/90">{{ r.paciente.sexo_label }}</dd>
+            </div>
+            <div>
+              <dt class="text-gray-500">{{ texts.branch }}</dt>
+              <dd class="font-medium text-gray-800 dark:text-white/90">
+                {{ r.paciente.sucursal_registro.nombre || ('Sucursal ' + r.paciente.sucursal_registro.id) }}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-gray-500">{{ texts.status }}</dt>
+              <dd class="font-medium text-gray-800 dark:text-white/90">{{ r.paciente.estado_label }}</dd>
+            </div>
+            <div>
+              <dt class="text-gray-500">{{ texts.diagnosis }}</dt>
+              <dd class="font-medium text-gray-800 dark:text-white/90">
+                @if (r.paciente.sin_diagnostico_definido) {
+                  {{ texts.sinDiagnostico }}
+                } @else {
+                  #{{ r.paciente.tipo_diagnostico_id }}
+                }
+              </dd>
+            </div>
+          </dl>
+        </app-component-card>
+
+        <app-component-card [title]="texts.sensitive">
+          @if (r.bloques.datos_sensibles.data; as sensible) {
+            @if (tieneBanderasSensibles(sensible)) {
+              <div class="flex flex-wrap gap-2">
+                @if (sensible.tiene_alergias) {
+                  <app-badge color="warning" variant="light" size="sm">{{ texts.hasAllergies }}</app-badge>
+                }
+                @if (sensible.tiene_condiciones_medicas) {
+                  <app-badge color="warning" variant="light" size="sm">{{ texts.hasConditions }}</app-badge>
+                }
+                @if (sensible.tiene_observaciones) {
+                  <app-badge color="warning" variant="light" size="sm">{{ texts.hasObservations }}</app-badge>
+                }
+              </div>
+            } @else {
+              <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.noSensitive }}</p>
+            }
+            <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">{{ texts.sensitiveHelp }}</p>
+          } @else {
+            <app-alert variant="warning" [message]="r.bloques.datos_sensibles.mensaje" />
+          }
+        </app-component-card>
+
+        <app-component-card [title]="texts.tutors">
+          @if (r.bloques.tutores.estado === 'disponible') {
+            @if (r.bloques.tutores.data; as tutores) {
+              <div class="space-y-3">
+                @for (tutor of tutores.items; track tutor.tutor_id) {
+                  <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ tutor.nombre_completo }}</p>
+                      <div class="flex flex-wrap gap-1">
+                        @if (tutor.es_principal) {
+                          <app-badge color="success" variant="light" size="sm">{{ texts.principal }}</app-badge>
+                        }
+                        @if (!tutor.activo) {
+                          <app-badge color="gray" variant="light" size="sm">{{ texts.inactive }}</app-badge>
+                        }
+                      </div>
+                    </div>
+                    <p class="mt-1 text-xs text-gray-500">
+                      {{ tutor.parentesco || 'Sin parentesco' }} · {{ tutor.telefono }}
+                    </p>
+                    @if (tutor.email) {
+                      <p class="mt-1 text-xs text-gray-500">{{ tutor.email }}</p>
+                    }
+                  </div>
+                } @empty {
+                  <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.noTutors }}</p>
+                }
+              </div>
+            }
+          } @else {
+            <app-alert variant="warning" [message]="r.bloques.tutores.mensaje" />
+          }
+        </app-component-card>
+
+        <app-component-card [title]="texts.contacts">
+          @if (r.bloques.contactos_emergencia.estado === 'disponible') {
+            @if (r.bloques.contactos_emergencia.data; as contactos) {
+              <div class="space-y-3">
+                @for (contacto of contactos.items; track contacto.id) {
+                  <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+                    <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ contacto.nombre_completo }}</p>
+                    <p class="mt-1 text-xs text-gray-500">
+                      {{ contacto.parentesco || 'Sin parentesco' }} · {{ contacto.telefono }}
+                    </p>
+                  </div>
+                } @empty {
+                  <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.noContacts }}</p>
+                }
+              </div>
+            }
+          } @else {
+            <app-alert variant="warning" [message]="r.bloques.contactos_emergencia.mensaje" />
+          }
+        </app-component-card>
+
+        <app-component-card [title]="texts.services">
+          @if (r.bloques.servicios_vigentes.estado === 'disponible') {
+            @if (r.bloques.servicios_vigentes.data; as servicios) {
+              <div class="space-y-3">
+                @for (servicio of servicios.items; track servicio.sucursal_id + '-' + servicio.servicio) {
+                  <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ servicio.servicio }}</p>
+                      <app-badge color="success" variant="light" size="sm">{{ servicio.estado }}</app-badge>
+                    </div>
+                    <p class="mt-1 text-xs text-gray-500">
+                      {{ tipoServicioLabel(servicio.tipo) }} ·
+                      {{ servicio.sucursal_nombre || ('Sucursal ' + servicio.sucursal_id) }}
+                    </p>
+                    <p class="mt-1 text-xs text-gray-500">
+                      {{ texts.period }}: {{ formatDate(servicio.periodo_inicio) }} –
+                      {{ formatDate(servicio.periodo_fin) }}
+                    </p>
+                    @if (servicio.sesiones_pactadas !== null) {
+                      <p class="mt-1 text-xs text-gray-500">
+                        {{ texts.sessions }}: {{ servicio.sesiones_disponibles ?? 0 }} / {{ servicio.sesiones_pactadas }}
+                      </p>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          } @else {
+            <app-alert variant="info" [message]="r.bloques.servicios_vigentes.mensaje" />
+          }
+          <div class="mt-3">
+            <button app-button variant="outline" size="sm" type="button" [disabled]="true">
+              {{ texts.viewEnrollments }}
+            </button>
+            <p class="mt-1 text-xs text-gray-400">{{ texts.module06 }}</p>
+          </div>
+        </app-component-card>
+
+        <app-component-card [title]="texts.payment">
+          @if (r.bloques.estado_pago.estado === 'disponible') {
+            @if (r.bloques.estado_pago.data; as pago) {
+              <div class="flex flex-wrap items-center gap-3">
+                <app-badge [color]="estadoPagoColor(pago.estado)" variant="light" size="sm">
+                  {{ estadoPagoLabel(pago.estado) }}
+                </app-badge>
+                @if (pago.saldo !== null) {
+                  <span class="text-sm font-medium text-gray-800 dark:text-white/90">
+                    {{ pago.saldo }} {{ pago.moneda }}
+                  </span>
+                }
+              </div>
+              <p class="mt-2 text-xs text-gray-500">{{ texts.cutoff }}: {{ formatDate(pago.fecha_corte) }}</p>
+              @if (pago.proximo_vencimiento) {
+                <p class="mt-1 text-xs text-gray-500">
+                  {{ texts.nextDue }}: {{ formatDate(pago.proximo_vencimiento) }}
+                </p>
+              }
+            }
+          } @else {
+            <app-alert variant="info" [message]="r.bloques.estado_pago.mensaje" />
+          }
+          <div class="mt-3">
+            <button app-button variant="outline" size="sm" type="button" [disabled]="true">
+              {{ texts.viewPayments }}
+            </button>
+            <p class="mt-1 text-xs text-gray-400">{{ texts.module08 }}</p>
+          </div>
+        </app-component-card>
+
+        <app-component-card [title]="texts.attendance">
+          @if (r.bloques.asistencia.estado === 'disponible') {
+            @if (r.bloques.asistencia.data; as asistencia) {
+              <div class="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <p class="text-lg font-semibold text-gray-800 dark:text-white/90">{{ asistencia.asistidos }}</p>
+                  <p class="text-xs text-gray-500">{{ texts.attended }}</p>
+                </div>
+                <div>
+                  <p class="text-lg font-semibold text-gray-800 dark:text-white/90">{{ asistencia.falto }}</p>
+                  <p class="text-xs text-gray-500">{{ texts.missed }}</p>
+                </div>
+                <div>
+                  <p class="text-lg font-semibold text-gray-800 dark:text-white/90">{{ asistencia.cancelados }}</p>
+                  <p class="text-xs text-gray-500">{{ texts.cancelled }}</p>
+                </div>
+              </div>
+              <p class="mt-3 text-sm text-gray-700 dark:text-gray-300">
+                {{ texts.percentage }}: {{ asistencia.porcentaje }}%
+              </p>
+              <p class="mt-1 text-xs text-gray-500">
+                {{ texts.period }}: {{ formatDate(asistencia.periodo_inicio) }} –
+                {{ formatDate(asistencia.periodo_fin) }}
+              </p>
+            }
+          } @else {
+            <app-alert variant="info" [message]="r.bloques.asistencia.mensaje" />
+          }
+          <div class="mt-3">
+            <button app-button variant="outline" size="sm" type="button" [disabled]="true">
+              {{ texts.viewAppointments }}
+            </button>
+            <p class="mt-1 text-xs text-gray-400">{{ texts.module07 }}</p>
+          </div>
+        </app-component-card>
+
+        <app-component-card [title]="texts.nextDue">
+          @if (r.bloques.proximo_vencimiento.estado === 'disponible') {
+            @if (r.bloques.proximo_vencimiento.data; as vencimiento) {
+              @if (vencimiento.fecha) {
+                <p class="text-lg font-semibold text-gray-800 dark:text-white/90">
+                  {{ formatDate(vencimiento.fecha) }}
+                </p>
+              } @else {
+                <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.nextDueNone }}</p>
+              }
+            }
+          } @else {
+            <app-alert variant="info" [message]="r.bloques.proximo_vencimiento.mensaje" />
+          }
+        </app-component-card>
+
+        <app-component-card [title]="texts.branches">
+          @if (r.bloques.sucursales.estado === 'disponible') {
+            @if (r.bloques.sucursales.data; as sucursales) {
+              <div class="flex flex-wrap gap-2">
+                @for (sucursal of sucursales.items; track sucursal.id) {
+                  <app-badge color="info" variant="light" size="sm">
+                    {{ sucursal.nombre || ('Sucursal ' + sucursal.id) }}
+                  </app-badge>
+                }
+              </div>
+            }
+          } @else {
+            <app-alert variant="info" [message]="r.bloques.sucursales.mensaje" />
+          }
+          <p class="mt-3 text-xs text-gray-400">{{ texts.currentContext }}: {{ contextoLabel() }}</p>
+        </app-component-card>
+
+        <app-component-card [title]="texts.paymentAlert">
+          @if (r.bloques.alerta_pago.estado === 'disponible') {
+            @if (r.bloques.alerta_pago.data; as alerta) {
+              <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ alerta.tutor_nombre }}</p>
+              <p class="mt-1 text-xs text-gray-500">{{ alerta.telefono }}</p>
+              <p class="mt-2 text-sm text-gray-700 dark:text-gray-300">{{ alerta.mensaje }}</p>
+              <a
+                [href]="alerta.whatsapp_url"
+                target="_blank"
+                rel="noopener"
+                app-button
+                variant="default"
+                class="mt-3"
+              >
+                {{ texts.openWhatsApp }}
+              </a>
+            }
+          } @else {
+            <app-alert variant="info" [message]="r.bloques.alerta_pago.mensaje" />
+            <button app-button variant="outline" size="sm" type="button" [disabled]="true" class="mt-3">
+              {{ texts.alertButton }}
+            </button>
+            <p class="mt-1 text-xs text-gray-400">{{ texts.paymentAlertPending }}</p>
+          }
+        </app-component-card>
+      </div>
+    }
+  </div>
+</div>

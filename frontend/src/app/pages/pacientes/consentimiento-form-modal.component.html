@@ -1,0 +1,92 @@
+<app-modal
+  [open]="open"
+  [title]="texts.consentRegisterTitle"
+  subtitle="La autorización queda asociada a la ficha y al tutor seleccionado."
+  size="lg"
+  [showFooter]="true"
+  (closed)="close()"
+>
+  <form [formGroup]="form" class="space-y-5" (ngSubmit)="submit()">
+    @if (error(); as apiError) {
+      <app-alert variant="error" title="No se pudo registrar" [message]="apiError.message" />
+    }
+
+    <div class="grid gap-4 md:grid-cols-2">
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="consentimiento-tipo">
+          {{ texts.consentType }}
+        </label>
+        <app-select-field
+          [options]="tipoOptions"
+          [value]="form.controls.tipo_id.value"
+          placeholder="Seleccioná un tipo"
+          ariaLabel="Tipo de consentimiento"
+          (valueChange)="form.controls.tipo_id.setValue($event)"
+        />
+        @if (fieldError('consentimiento_tipo_id'); as message) {
+          <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+        }
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="consentimiento-tutor">
+          {{ texts.consentTutor }}
+        </label>
+        <app-select-field
+          [options]="tutorOptions"
+          [value]="form.controls.tutor_id.value"
+          placeholder="Seleccioná el tutor"
+          ariaLabel="Tutor que autoriza"
+          (valueChange)="form.controls.tutor_id.setValue($event)"
+        />
+        @if (fieldError('tutor_id'); as message) {
+          <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+        }
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          {{ texts.consentDate }}
+        </label>
+        <app-paciente-date-input formControlName="fecha" ariaLabel="Fecha del consentimiento" />
+        @if (fieldError('fecha'); as message) {
+          <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+        }
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          {{ texts.consentResult }}
+        </label>
+        <app-select-field
+          [options]="resultadoOptions"
+          [value]="form.controls.resultado.value"
+          ariaLabel="Resultado del consentimiento"
+          (valueChange)="form.controls.resultado.setValue($event === 'negado' ? 'negado' : 'otorgado')"
+        />
+      </div>
+
+      <div class="md:col-span-2">
+        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="consentimiento-motivo">
+          {{ texts.consentReason }}
+        </label>
+        <textarea
+          id="consentimiento-motivo"
+          app-textarea
+          rows="3"
+          formControlName="motivo"
+          placeholder="Observación opcional"
+        ></textarea>
+      </div>
+    </div>
+  </form>
+
+  <div modal-footer class="flex flex-wrap justify-end gap-2">
+    <button app-button variant="outline" type="button" (click)="close()" [disabled]="saving()">
+      {{ texts.cancel }}
+    </button>
+    <button app-button variant="default" type="button" (click)="submit()" [disabled]="saving()">
+      {{ saving() ? texts.saving : texts.consentRegister }}
+    </button>
+  </div>
+</app-modal>

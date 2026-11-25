@@ -5,7 +5,6 @@ import { permissionGuard } from './core/guards/permission.guard';
 import { AppLayoutComponent } from './layout/shell/app-layout/app-layout.component';
 import { HomeComponent } from './pages/home/home.component';
 import { AgendaComponent } from './pages/agenda/agenda.component';
-import { PacientesComponent } from './pages/pacientes/pacientes.component';
 import { InscripcionesComponent } from './pages/inscripciones/inscripciones.component';
 import { PagosComponent } from './pages/pagos/pagos.component';
 import { ReportesComponent } from './pages/reportes/reportes.component';
@@ -40,8 +39,12 @@ export const routes: Routes = [
       },
       {
         path: 'pacientes',
-        component: PacientesComponent,
-        title: 'Pacientes | TalitaCumi',
+        canActivate: [permissionGuard],
+        data: { permissions: ['paciente.ver', 'tutor.ver', 'ficha_ingreso.ver'] },
+        loadChildren: () =>
+          import('./pages/pacientes/pacientes.routes').then(
+            (m) => m.PACIENTES_ROUTES,
+          ),
       },
       {
         path: 'inscripciones',

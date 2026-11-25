@@ -1,0 +1,61 @@
+<app-modal
+  [open]="open"
+  [title]="texts.observationTitle"
+  size="lg"
+  [showFooter]="true"
+  (closed)="close()"
+>
+  <form [formGroup]="form" class="space-y-5" (ngSubmit)="submit()">
+    @if (error(); as apiError) {
+      <app-alert variant="error" title="No se pudo registrar" [message]="apiError.message" />
+    }
+
+    <div>
+      <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+        {{ texts.observationDate }}
+      </label>
+      <app-paciente-date-input formControlName="fecha" ariaLabel="Fecha de la observación" />
+      @if (fieldError('fecha'); as message) {
+        <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+      }
+    </div>
+
+    <div>
+      <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300" for="observacion-texto">
+        {{ texts.observationText }}
+      </label>
+      <textarea
+        id="observacion-texto"
+        app-textarea
+        rows="5"
+        formControlName="texto"
+        placeholder="Escribí la observación"
+      ></textarea>
+      @if (fieldError('texto'); as message) {
+        <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+      }
+    </div>
+
+    <div>
+      <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+        {{ texts.observationReference }}
+      </label>
+      <app-select-field
+        [options]="referenciaOptions"
+        [value]="form.controls.referencia.value"
+        ariaLabel="Observación de referencia"
+        (valueChange)="form.controls.referencia.setValue($event)"
+      />
+      <p class="mt-1 text-xs text-gray-400">{{ texts.observationReferenceHelp }}</p>
+    </div>
+  </form>
+
+  <div modal-footer class="flex flex-wrap justify-end gap-2">
+    <button app-button variant="outline" type="button" (click)="close()" [disabled]="saving()">
+      {{ texts.cancel }}
+    </button>
+    <button app-button variant="default" type="button" (click)="submit()" [disabled]="saving()">
+      {{ saving() ? texts.saving : texts.observationAdd }}
+    </button>
+  </div>
+</app-modal>

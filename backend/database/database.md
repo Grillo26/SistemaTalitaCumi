@@ -25,9 +25,9 @@ Referencia del esquema PostgreSQL del sistema. Las migraciones deben coincidir c
 | Tiempo | `timestamptz` guardado en UTC y mostrado en `America/La_Paz`. `date` para valores sin hora (vencimientos, fechas de inicio y fin). |
 | Estados | `varchar` + `CHECK (... IN (...))`, mapeado a enums PHP. No usar el tipo ENUM de Postgres. |
 | FKs | Siempre con índice explícito (Postgres no los crea). `ON DELETE RESTRICT` en todo lo transaccional. |
-| Borrado | **Soft delete solo en maestros**: `paciente`, `tutor`, `servicio`, `material_didactico`. `profesional` se activa/desactiva con motivo y bitácora (03/RN-04, 03/RN-20), sin `deleted_at`. Todo lo demás se anula con estado. |
+| Borrado | **Sin borrado físico en pacientes ni tutores**: se usa estado (`paciente.estado = retirado`; tutor activo/inactivo en 04.02) y bitácora. `profesional` se activa/desactiva con motivo (03/RN-04, 03/RN-20), sin `deleted_at`. Todo lo transaccional se anula con estado. |
 | Nulos | Columnas `NOT NULL` salvo las marcadas como NULL en el diccionario. |
-| Búsqueda | Extensión `pg_trgm` con índices GIN en nombres de paciente, tutor, profesional, servicio y material. |
+| Búsqueda | Normalización en PHP (sin acentos, minúsculas, espacios colapsados) y columnas normalizadas con índices btree. No se usan `pg_trgm` ni `unaccent`: no están instaladas en la base viva y la suite corre en SQLite. |
 | SQL crudo | CHECKs complejos, índices parciales, `UNIQUE NULLS NOT DISTINCT` y triggers van en las migraciones con `DB::statement`. |
 | Correlativos | `numero_correlativo` por sucursal y tipo, tomado de `secuencia_pago` con `SELECT … FOR UPDATE` (o `INSERT … ON CONFLICT DO UPDATE`) dentro de la transacción del documento. |
 | Auditoría | Trigger `fn_auditar_cambio()` en tablas críticas. Los eventos se registran con `SET LOCAL app.usuario_id`.
@@ -174,6 +174,8 @@ erDiagram
 
 ### Pacientes y tutores
 
+> **Implementación real 04.01 + 04.02 Fase A:** las tablas físicas son `paciente`, `tutor`, `parentesco`, `paciente_tutor` y `estado_paciente_historial`. `paciente` es global y usa `sucursal_registro_id` como ancla de visibilidad, `version` para concurrencia optimista, columnas normalizadas para búsqueda/unicidad y `tipo_diagnostico_id` con **FK diferida** hasta el módulo 05. No hay `deleted_at`: el retiro es `estado = retirado` (04.01/RF-009, 04.01/RN-006). `tutor` tampoco usa SoftDeletes; se crea activo y se desactiva con motivo. `tutor.sucursal_registro_id` es su home branch y `paciente_tutor.parentesco_id` es el parentesco autoritativo de la relación. `estado_paciente_historial.usuario_id` apunta a `users` en la implementación real.
+
 ```mermaid
 erDiagram
     paciente {
@@ -182,18 +184,43 @@ erDiagram
         varchar nombre
         varchar apellido_paterno
         date fecha_nacimiento
+        varchar sexo
+        varchar ci
+        bigint sucursal_registro_id FK
+        bigint tipo_diagnostico_id FK
         varchar estado
+        integer version
+    }
+    parentesco {
+        bigint id PK
+        varchar nombre
+        varchar nombre_normalizado UK
+        boolean activo
+        integer orden
     }
     tutor {
         bigint id PK
+        bigint sucursal_registro_id FK
         varchar nombre_completo
         varchar telefono
         varchar parentesco
+        bigint parentesco_id FK
+        boolean activo
+        integer version
     }
     paciente_tutor {
         bigint paciente_id FK
         bigint tutor_id FK
+        bigint parentesco_id FK
         boolean es_principal
+    }
+    contacto_emergencia {
+        bigint id PK
+        bigint paciente_id FK
+        varchar nombre_completo
+        bigint parentesco_id FK
+        varchar telefono
+        integer version
     }
     estado_paciente_historial {
         bigint id PK
@@ -206,16 +233,66 @@ erDiagram
     ficha_ingreso {
         bigint id PK
         bigint paciente_id FK
+        bigint sucursal_ingreso_id FK
         bigint tutor_principal_id FK
         text motivo_consulta_inicial
         date fecha_ingreso
+        varchar estado
+        integer version
+    }
+    ficha_ingreso_revision {
+        bigint id PK
+        bigint ficha_ingreso_id FK
+        integer version
+        varchar accion
+        json snapshot
+        bigint usuario_id FK
+    }
+    consentimiento_tipo {
+        bigint id PK
+        varchar codigo UK
+        varchar nombre
+        integer orden
+        boolean activo
+        integer version
+    }
+    consentimiento {
+        bigint id PK
+        bigint ficha_ingreso_id FK
+        bigint consentimiento_tipo_id FK
+        bigint tutor_id FK
+        varchar resultado
+        date fecha
+        bigint usuario_id FK
+        bigint revoca_a_id FK
+    }
+    ficha_ingreso_observacion {
+        bigint id PK
+        bigint ficha_ingreso_id FK
+        date fecha
+        text texto
+        bigint observacion_referencia_id FK
+        bigint usuario_id FK
     }
 
     paciente ||--o{ paciente_tutor : "tiene"
     tutor ||--o{ paciente_tutor : "es tutor de"
+    paciente ||--o{ contacto_emergencia : "contactos"
+    parentesco ||--o{ tutor : "referencia"
+    parentesco ||--o{ paciente_tutor : "relación"
     paciente ||--o{ estado_paciente_historial : "registra cambios"
     paciente ||--o{ ficha_ingreso : "tiene"
     tutor ||--o{ ficha_ingreso : "firma"
+    sucursal ||--o{ ficha_ingreso : "ingreso"
+    ficha_ingreso ||--o{ ficha_ingreso_revision : "revisiones"
+    ficha_ingreso ||--o{ consentimiento : "consentimientos"
+    consentimiento_tipo ||--o{ consentimiento : "tipo"
+    tutor ||--o{ consentimiento : "autoriza"
+    consentimiento ||--o{ consentimiento : "revocación"
+    ficha_ingreso ||--o{ ficha_ingreso_observacion : "observaciones fechadas"
+    ficha_ingreso_observacion ||--o{ ficha_ingreso_observacion : "corrección"
+    sucursal ||--o{ paciente : "registra"
+    sucursal ||--o{ tutor : "home branch"
 ```
 
 ### Catálogo de servicios, tarifas, salas y ambientes
@@ -948,49 +1025,141 @@ Timestamps: `created_at`, `updated_at`.
 
 ---
 
+### Implementación real módulo 04 — Pacientes y tutores
+
+**Migraciones del módulo 04 (04.01 Fase 1 + 04.02 Fase A):**
+
+- `2026_11_23_000000_create_tutor_table.php`
+- `2026_11_23_000100_create_paciente_table.php`
+- `2026_11_23_000200_create_paciente_tutor_table.php`
+- `2026_11_23_000300_create_estado_paciente_historial_table.php`
+- `2026_11_24_000000_create_parentesco_table.php`
+- `2026_11_24_000100_add_tutor_fields_table.php`
+- `2026_11_24_000200_add_parentesco_to_paciente_tutor_table.php`
+- `2026_11_24_000300_create_contacto_emergencia_table.php`
+- `2026_11_24_000400_create_ficha_ingreso_tables.php`
+- `2026_11_24_000500_create_consentimiento_tables.php`
+- `2026_11_24_000600_create_ficha_ingreso_observacion_table.php`
+
+**Seeders:** `PacientesPermissionSeeder` (matriz inicial `pacientes`), `PacientesAccionAuditadaSeeder` (5 acciones de paciente), `ParentescoCatalogoSeeder` (catálogo inicial propuesto), `TutoresPermissionSeeder` (matriz inicial `pacientes.tutores`), `TutoresAccionAuditadaSeeder` (7 acciones de tutor y asociación), `ContactosEmergenciaPermissionSeeder` (matriz inicial `pacientes.contactos_emergencia`), `ContactosEmergenciaAccionAuditadaSeeder` (3 acciones de contacto), `FichaIngresoPermissionSeeder` (matriz inicial `pacientes.ficha_ingreso`), `FichaIngresoAccionAuditadaSeeder` (7 acciones de ficha), `ConsentimientoPermissionSeeder` (matriz inicial `pacientes.ficha_ingreso_consentimiento`), `ConsentimientoTipoSeeder` (3 tipos propuestos), `ConsentimientoAccionAuditadaSeeder` (6 acciones de consentimiento), `ObservacionPermissionSeeder` (matriz `pacientes.ficha_ingreso_observacion`) y `ObservacionAccionAuditadaSeeder` (1 acción de observación).
+
+**Decisiones de esquema:**
+
+- `tipo_diagnostico_id` queda nullable y **sin FK física** hasta que exista la migración del módulo 05. La Action rechaza valores no nulos mientras `PacientesModule::DIAGNOSTICOS_DISPONIBLES = false`.
+- `sucursal_registro_id` es `NOT NULL` y se valida contra el alcance del usuario. No cambia desde la edición.
+- `sexo` es obligatorio (`M`/`F`).
+- `codigo` se genera como `PAC-` + id con 6 dígitos.
+- No se aplica el trigger genérico `tg_paciente_audit` del .sql: la bitácora la escribe `RecordPacientesAudit`, que no copia contenido clínico.
+- `paciente`, `tutor` y `paciente_tutor` no usan `deleted_at`.
+- `parentesco` es un catálogo configurable; los valores iniciales del seeder son una propuesta a validar con el cliente.
+- `tutor.sucursal_registro_id` (home branch) es nullable por compatibilidad, pero la aplicación lo exige al crear según el alcance del usuario. La migración hace backfill con el primer paciente asociado o la última fila `CREAR` de bitácora.
+- `paciente_tutor.parentesco_id` es el parentesco autoritativo por relación; `tutor.parentesco_id` solo es el valor de referencia.
+- La migración de `parentesco` en SQLite recrea el índice parcial `paciente_tutor_principal_uk` después del `ALTER TABLE`, porque la reconstrucción de tabla lo pierde.
+- `contacto_emergencia` pertenece al paciente, no al tutor. Se elimina físicamente; la bitácora conserva el snapshot con el teléfono completo. `version` habilita concurrencia optimista.
+- `ficha_ingreso` es administrativa y de contexto; no es la entrevista del módulo 06 ni el registro clínico del módulo 11. Una sola ficha no archivada por paciente mediante índice parcial; las anteriores quedan archivadas y consultables.
+- `ficha_ingreso_revision` guarda el snapshot completo e inmutable. La bitácora solo conserva metadatos, banderas `tiene_*` y campos modificados; nunca contenido sensible.
+- `tutor_principal_id` es nullable para permitir ficha sin tutor. Los consentimientos exigen al menos un tutor activo asociado.
+- `consentimiento_tipo` es un catálogo configurable (no enum) y no se elimina: se activa o desactiva. Los tipos iniciales son una propuesta a validar con el cliente.
+- `consentimiento` es un evento inmutable: no se edita ni se borra. La revocación es una fila nueva con `resultado='revocado'` y `revoca_a_id` apuntando al consentimiento original. El motivo libre no se copia a la bitácora.
+- La vigencia se calcula como un `otorgado` sin una revocación posterior. No hay vencimiento automático; queda pendiente de definición del cliente.
+- `ficha_ingreso_observacion` es solo inserción: no se edita ni se borra. Una corrección es una observación nueva con `observacion_referencia_id` apuntando a la anterior (RN-003). El texto es sensible y no se copia a la bitácora.
+- `04.04` (búsqueda y ficha resumen) no agrega tablas, columnas ni índices. Reutiliza `paciente` (columnas normalizadas), `tutor` (nombre y teléfono normalizados), `paciente_tutor` (unique parcial del principal), `bitacora` y `accion_auditada`. La exportación CSV no persiste datos.
+
+---
+
 ### Pacientes y tutores
 
 #### `paciente` — Pacientes (niños)
 
-*Maestro.* Paciente global (no por sucursal). Estado: activo, en pausa, retirado.
+*Maestro.* Paciente global (no por sucursal). Estado: activo, en pausa, retirado. `sucursal_registro_id` es el ancla de visibilidad, no una duplicación por sucursal.
 
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `codigo` | `varchar(30)` |  | `UK` | Autogenerado |
+| `codigo` | `varchar(30)` | sí | `UK` | Autogenerado `PAC-000001` |
 | `nombre` | `varchar(100)` |  |  |  |
 | `apellido_paterno` | `varchar(100)` |  |  |  |
 | `apellido_materno` | `varchar(100)` | sí |  |  |
-| `fecha_nacimiento` | `date` |  |  |  |
-| `sexo` | `char(1)` | sí | `CHECK IN ('M','F')` |  |
-| `ci` | `varchar(20)` | sí |  |  |
+| `fecha_nacimiento` | `date` |  |  | No futura; sin rango máximo/mínimo |
+| `sexo` | `varchar(1)` |  | `CHECK IN ('M','F')` | Obligatorio |
+| `ci` | `varchar(20)` | sí |  | Documento opcional; único normalizado |
+| `tipo_diagnostico_id` | `bigint` | sí | `FK diferida → tipo_diagnostico` | Catálogo del módulo 05 |
+| `sucursal_registro_id` | `bigint` |  | `FK → sucursal` | Visibilidad inicial |
 | `estado` | `varchar(20)` |  | `DEFAULT 'activo'`, `CHECK IN ('activo','en_pausa','retirado')` |  |
-| `observaciones` | `text` | sí |  |  |
+| `alergias` | `text` | sí |  | Sensible |
+| `condiciones_medicas` | `text` | sí |  | Sensible |
+| `observaciones` | `text` | sí |  | No se copia a bitácora |
+| `nombre_normalizado` | `varchar(100)` |  |  | Sin acentos, minúsculas |
+| `apellido_paterno_normalizado` | `varchar(100)` |  |  |  |
+| `apellido_materno_normalizado` | `varchar(100)` | sí |  |  |
+| `nombre_completo_normalizado` | `varchar(320)` |  |  | Búsqueda/orden |
+| `documento_normalizado` | `varchar(30)` | sí | `UK` | Múltiples NULL permitidos |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
 
-Índices: `(estado)`, `(apellido_paterno, apellido_materno)`, `(ci)`, GIN `(nombre || ' ' || apellido_paterno)` con `pg_trgm`. Timestamps: `created_at`, `updated_at`. Soft delete: `deleted_at`.
+Índices: `(estado)`, `(fecha_nacimiento)`, `(sucursal_registro_id)`, `(tipo_diagnostico_id)`, `(nombre_normalizado)`, `(apellido_paterno_normalizado)`, `(apellido_materno_normalizado)`, `(nombre_completo_normalizado)`, `(documento_normalizado)`, `(updated_at)`. Timestamps: `created_at`, `updated_at`. **Sin `deleted_at`**: el retiro es `estado = retirado`.
 
 #### `tutor` — Tutores
 
-*Maestro.* Tutor del paciente. Teléfono obligatorio para alertas de WhatsApp.
+*Maestro.* Tutor global. Teléfono obligatorio para alertas de WhatsApp. Se crea activo y se desactiva con motivo; no se elimina.
 
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
+| `sucursal_registro_id` | `bigint` | sí | `FK → sucursal`, `RESTRICT` | Home branch; obligatoria al crear según alcance |
 | `nombre_completo` | `varchar(200)` |  |  |  |
-| `ci` | `varchar(20)` | sí |  |  |
-| `telefono` | `varchar(30)` |  |  |  |
-| `telefono_alternativo` | `varchar(30)` | sí |  |  |
+| `ci` | `varchar(20)` | sí |  | Único normalizado |
+| `telefono` | `varchar(30)` |  |  | 8 dígitos normalizados; móvil 6/7 |
+| `telefono_alternativo` | `varchar(30)` | sí |  | 8 dígitos; 2/3/4/6/7 |
 | `email` | `varchar(150)` | sí |  |  |
 | `direccion` | `text` | sí |  |  |
-| `parentesco` | `varchar(50)` | sí |  |  |
+| `parentesco` | `varchar(50)` | sí |  | Texto legacy; se resuelve al catálogo |
+| `parentesco_id` | `bigint` | sí | `FK → parentesco`, `RESTRICT` | Parentesco de referencia |
+| `activo` | `boolean` |  | `DEFAULT true` | Desactivar exige motivo |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
+| `motivo_estado` | `text` | sí |  | Motivo de desactivación |
+| `estado_cambiado_en` | `timestamptz` | sí |  |  |
+| `nombre_completo_normalizado` | `varchar(200)` |  |  |  |
+| `documento_normalizado` | `varchar(20)` | sí | `UK` |  |
+| `telefono_normalizado` | `varchar(30)` |  |  | Solo dígitos |
 
-Índices: `(telefono)`. Timestamps: `created_at`, `updated_at`. Soft delete: `deleted_at`.
+Índices: `(activo)`, `(sucursal_registro_id)`, `(parentesco_id)`, `(nombre_completo_normalizado)`, `(telefono_normalizado)`, `(documento_normalizado)` y único `(nombre_completo_normalizado, telefono_normalizado)`. Timestamps: `created_at`, `updated_at`. **Sin `deleted_at`**.
+
+#### `parentesco` — Catálogo de parentescos
+
+*Catálogo.* Valores configurables; el seeder inicial es una propuesta a validar.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `nombre` | `varchar(50)` |  |  |  |
+| `nombre_normalizado` | `varchar(50)` |  | `UK` | Sin acentos, minúsculas |
+| `activo` | `boolean` |  | `DEFAULT true` |  |
+| `orden` | `integer` |  | `DEFAULT 0` | Orden de presentación |
 
 #### `paciente_tutor` — Paciente y tutores
 
-*Pivot.* Un paciente puede tener varios tutores. Exactamente uno debe ser principal (lógica de aplicación).
+*Pivot.* Un paciente puede tener varios tutores. Exactamente uno debe ser principal; índice único parcial `(paciente_id) WHERE es_principal`.
 
-`PRIMARY KEY (paciente_id, tutor_id)`. `es_principal boolean DEFAULT false`. Sin timestamps.
+`PRIMARY KEY (paciente_id, tutor_id)`. `parentesco_id bigint FK → parentesco` (autoritativo por relación). `es_principal boolean DEFAULT false`. Sin timestamps.
+
+#### `contacto_emergencia` — Contactos de emergencia del paciente
+
+*Detalle.* Persona adicional al tutor a la que contactar en una emergencia (04.02/RF-012). No es global ni tiene relación con otros pacientes.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `paciente_id` | `bigint` |  | `FK → paciente`, `CASCADE` |  |
+| `nombre_completo` | `varchar(200)` |  |  |  |
+| `nombre_normalizado` | `varchar(200)` |  |  | Sin acentos, minúsculas |
+| `parentesco_id` | `bigint` |  | `FK → parentesco`, `RESTRICT` | Catálogo activo |
+| `telefono` | `varchar(30)` |  |  | 8 dígitos normalizados; fijo 2/3/4 o móvil 6/7 |
+| `telefono_normalizado` | `varchar(30)` |  |  | Solo dígitos, sin 591/0 inicial |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
+| `created_at` | `timestamptz` |  |  |  |
+| `updated_at` | `timestamptz` |  |  |  |
+
+Índices: `(paciente_id)`, `(parentesco_id)`, `(paciente_id, nombre_normalizado)`, `(telefono_normalizado)`. **Sin `deleted_at`**: se elimina físicamente y la bitácora conserva el snapshot.
 
 #### `estado_paciente_historial` — Historial del estado del paciente
 
@@ -1000,31 +1169,119 @@ Timestamps: `created_at`, `updated_at`.
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
 | `paciente_id` | `bigint` |  | `FK → paciente` |  |
-| `estado_anterior` | `varchar(20)` | sí |  | NULL en el alta |
+| `estado_anterior` | `varchar(20)` | sí | `CHECK IN ('activo','en_pausa','retirado')` | NULL en el alta |
 | `estado_nuevo` | `varchar(20)` |  | `CHECK IN ('activo','en_pausa','retirado')` |  |
-| `motivo` | `text` | sí |  | Obligatorio en pausa/retiro |
-| `usuario_id` | `bigint` |  | `FK → usuario` |  |
+| `motivo` | `text` | sí |  | Obligatorio en retiro, retorno de retiro y pausa (supuesto validado con 06.05) |
+| `usuario_id` | `bigint` |  | `FK → users` | Implementación real |
 | `created_at` | `timestamptz` |  | `DEFAULT now()` |  |
 
-Sin `updated_at`.
+Sin `updated_at`. Índice `(paciente_id, created_at)`.
 
 #### `ficha_ingreso` — Ficha de ingreso
 
-*Documento.* Datos administrativos de ingreso del paciente (no clínicos).
+*Documento.* Datos administrativos y de contexto del ingreso (no clínicos). Una sola ficha no archivada por paciente.
 
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `paciente_id` | `bigint` |  | `FK → paciente` |  |
-| `tutor_principal_id` | `bigint` |  | `FK → tutor` |  |
-| `motivo_consulta_inicial` | `text` | sí |  |  |
-| `derivado_por` | `varchar(200)` | sí |  |  |
-| `antecedentes_familiares` | `text` | sí |  |  |
-| `observaciones` | `text` | sí |  |  |
-| `fecha_ingreso` | `date` |  | `DEFAULT CURRENT_DATE` |  |
-| `usuario_registro_id` | `bigint` |  | `FK → usuario` |  |
+| `paciente_id` | `bigint` |  | `FK → paciente`, `RESTRICT` |  |
+| `sucursal_ingreso_id` | `bigint` |  | `FK → sucursal`, `RESTRICT` | Contexto del ingreso |
+| `tutor_principal_id` | `bigint` | sí | `FK → tutor`, `RESTRICT` | Snapshot; nullable para ficha sin tutor |
+| `motivo_consulta_inicial` | `text` |  |  | Obligatorio; sensible |
+| `fecha_ingreso` | `date` |  |  | No futura |
+| `composicion_familiar` | `text` | sí |  | Sensible |
+| `antecedentes_familiares` | `text` | sí |  | Sensible |
+| `observaciones` | `text` | sí |  | Observaciones iniciales; sensible |
+| `derivado_por` | `varchar(200)` | sí |  | Nombre/institusión que deriva |
+| `derivado_por_institucion` | `varchar(150)` | sí |  |  |
+| `derivado_por_contacto` | `varchar(150)` | sí |  | Sensible |
+| `estado` | `varchar(20)` |  | `DEFAULT 'borrador'` | `borrador/completa/archivada` |
+| `estado_anterior` | `varchar(20)` | sí |  | Para reactivación |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
+| `usuario_registro_id` | `bigint` |  | `FK → users`, `RESTRICT` | Implementación real |
+| `completada_en` | `timestamptz` | sí |  |  |
+| `completada_por_id` | `bigint` | sí | `FK → users`, `RESTRICT` |  |
+| `archivada_en` | `timestamptz` | sí |  |  |
+| `archivada_por_id` | `bigint` | sí | `FK → users`, `RESTRICT` |  |
+| `motivo_archivado` | `text` | sí |  | Motivo de archivo; sensible |
+| `created_at`, `updated_at` | `timestamptz` |  |  |  |
 
-Timestamps: `created_at`, `updated_at`.
+Índices: `(paciente_id)`, `(sucursal_ingreso_id)`, `(fecha_ingreso)`, `(paciente_id, estado)`. Índice único parcial:
+
+```sql
+CREATE UNIQUE INDEX ficha_ingreso_abierta_uk
+    ON ficha_ingreso (paciente_id)
+    WHERE estado <> 'archivada';
+```
+
+#### `ficha_ingreso_revision` — Revisiones inmutables
+
+*Historial.* Snapshot completo de cada versión. Solo se expone con `ficha_ingreso.ver_sensibles`.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `ficha_ingreso_id` | `bigint` |  | `FK → ficha_ingreso`, `RESTRICT` |  |
+| `version` | `integer` |  | `UNIQUE (ficha_ingreso_id, version)` |  |
+| `accion` | `varchar(30)` |  |  | CREAR/ACTUALIZAR/COMPLETAR/ARCHIVAR/REACTIVAR |
+| `snapshot` | `json` |  |  | Contenido completo de la ficha |
+| `campos_modificados` | `json` | sí |  | Lista de campos |
+| `usuario_id` | `bigint` |  | `FK → users`, `RESTRICT` |  |
+| `created_at` | `timestamptz` |  | `DEFAULT now()` |  |
+
+Sin `updated_at`; se escribe una revisión por mutación y no se actualiza ni borra.
+
+#### `consentimiento_tipo` — Catálogo de consentimientos
+
+*Catálogo.* Tipos configurables por el cliente. No se eliminan: se activan o desactivan. Los valores iniciales son **PROPUESTO - VALIDAR**.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `codigo` | `varchar(60)` |  | `UNIQUE` | Inmutable después del alta |
+| `nombre` | `varchar(150)` |  |  |  |
+| `descripcion` | `text` | sí |  |  |
+| `orden` | `integer` |  | `DEFAULT 0` |  |
+| `activo` | `boolean` |  | `DEFAULT true` | Un tipo inactivo no admite nuevos registros |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
+| `created_at`, `updated_at` | `timestamptz` |  |  |  |
+
+Índices: `(activo)`, `(orden)`, `UNIQUE (codigo)`.
+
+#### `consentimiento` — Eventos de consentimiento
+
+*Historial.* Solo inserción. Cada fila es un evento inmutable.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `ficha_ingreso_id` | `bigint` |  | `FK → ficha_ingreso`, `RESTRICT` |  |
+| `consentimiento_tipo_id` | `bigint` |  | `FK → consentimiento_tipo`, `RESTRICT` |  |
+| `tutor_id` | `bigint` |  | `FK → tutor`, `RESTRICT` | Tutor asociado y activo al registrar |
+| `resultado` | `varchar(20)` |  |  | `otorgado/negado/revocado` |
+| `fecha` | `date` |  |  | No futura |
+| `motivo` | `text` | sí |  | Obligatorio al revocar; no se copia a bitácora |
+| `usuario_id` | `bigint` |  | `FK → users`, `RESTRICT` |  |
+| `revoca_a_id` | `bigint` | sí | `FK → consentimiento`, `RESTRICT` | Apunta al consentimiento otorgado original |
+| `created_at` | `timestamptz` |  | `DEFAULT now()` |  |
+
+Índices: `(ficha_ingreso_id, resultado)`, `(consentimiento_tipo_id, resultado)`, `(tutor_id)`, `(revoca_a_id)`. Sin `updated_at`; la vigencia se calcula con `otorgado` sin revocación posterior.
+
+#### `ficha_ingreso_observacion` — Observaciones fechadas
+
+*Historial.* Solo inserción. Las correcciones son observaciones nuevas que referencian a la anterior (RF-006, RN-003).
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `ficha_ingreso_id` | `bigint` |  | `FK → ficha_ingreso`, `RESTRICT` |  |
+| `fecha` | `date` |  |  | No futura |
+| `texto` | `text` |  |  | Sensible; no se copia a bitácora |
+| `observacion_referencia_id` | `bigint` | sí | `FK → ficha_ingreso_observacion`, `RESTRICT` | Observación que se corrige |
+| `usuario_id` | `bigint` |  | `FK → users`, `RESTRICT` |  |
+| `created_at` | `timestamptz` |  | `DEFAULT now()` |  |
+
+Índices: `(ficha_ingreso_id, fecha)`, `(observacion_referencia_id)`, `(usuario_id)`. Sin `updated_at`; no se actualiza ni borra.
 
 ---
 

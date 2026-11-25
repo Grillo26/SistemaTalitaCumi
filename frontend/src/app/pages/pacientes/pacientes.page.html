@@ -1,0 +1,322 @@
+<div>
+  <app-page-breadcrumb pageTitle="Pacientes" />
+
+  <div class="space-y-5 sm:space-y-6">
+    @if (error(); as apiError) {
+      <app-alert
+        variant="error"
+        title="No se pudo completar la operación"
+        [message]="apiError.message"
+      />
+    }
+
+    <app-component-card [title]="texts.title" [desc]="texts.description">
+      <div class="space-y-4">
+        <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <div class="w-full sm:w-72">
+              <div class="relative">
+                <span
+                  class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-gray-400"
+                  aria-hidden="true"
+                >
+                  <svg class="size-5" viewBox="0 0 20 20" fill="none">
+                    <path
+                      d="M14.382 14.383l3.325 3.326m-1.249-8.334a7.082 7.082 0 01-7.083 7.081 7.082 7.082 0 110-14.163 7.082 7.082 0 017.083 7.082z"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </span>
+                <input
+                  app-input
+                  type="text"
+                  [formControl]="searchControl"
+                  class="ps-10"
+                  [placeholder]="texts.searchPlaceholder"
+                  aria-label="Buscar pacientes"
+                />
+              </div>
+              @if (searchHint(); as hint) {
+                <p class="mt-1 text-xs text-amber-600">{{ hint }}</p>
+              }
+            </div>
+
+            <div class="w-full sm:w-44">
+              <app-select-field
+                [options]="estadoFilterOptions"
+                [value]="estadoFilter()"
+                placeholder="Todos los estados"
+                ariaLabel="Filtrar por estado"
+                (valueChange)="onEstadoFilter($event)"
+              />
+            </div>
+
+            <div class="w-full sm:w-52">
+              <app-select-field
+                [options]="sucursalFilterOptions()"
+                [value]="sucursalFilter() === '' ? '' : sucursalFilter().toString()"
+                placeholder="Todas las sucursales"
+                ariaLabel="Filtrar por sucursal de registro"
+                (valueChange)="onSucursalFilter($event)"
+              />
+            </div>
+
+            <div class="w-full sm:w-52">
+              <app-select-field
+                [options]="sinDiagnosticoOptions"
+                [value]="sinDiagnostico() ? '1' : ''"
+                placeholder="Todos los diagnósticos"
+                ariaLabel="Filtrar por diagnóstico"
+                (valueChange)="onSinDiagnostico($event)"
+              />
+            </div>
+
+            <div class="w-full sm:w-52">
+              <app-select-field
+                [options]="inscripcionFilterOptions"
+                value=""
+                placeholder="Sucursal de inscripción"
+                ariaLabel="Filtrar por sucursal de inscripción"
+                [disabled]="true"
+              />
+            </div>
+
+            <div class="w-full sm:w-52">
+              <app-select-field
+                [options]="servicioFilterOptions"
+                value=""
+                placeholder="Tipo de servicio"
+                ariaLabel="Filtrar por tipo de servicio"
+                [disabled]="true"
+              />
+            </div>
+
+            <div class="w-full sm:w-52">
+              <app-select-field
+                [options]="pagoFilterOptions"
+                value=""
+                placeholder="Estado de pago"
+                ariaLabel="Filtrar por estado de pago"
+                [disabled]="true"
+              />
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            @if (abilities().export_listado) {
+              <button
+                app-button
+                variant="outline"
+                type="button"
+                (click)="exportCsv()"
+                [disabled]="exporting()"
+              >
+                {{ exporting() ? texts.exportingCsv : texts.exportCsv }}
+              </button>
+            }
+            @if (abilities().create) {
+              <button app-button variant="default" type="button" (click)="openCreate()">
+                {{ texts.create }}
+              </button>
+            }
+          </div>
+        </div>
+
+        @if (options()?.tipos_diagnostico; as diagnostico) {
+          @if (!diagnostico.disponible) {
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+              {{ texts.diagnosticsUnavailable }}
+            </p>
+          }
+        }
+
+        <div class="space-y-1">
+          <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.searchHelp }}</p>
+          @if (!abilities().search_by_tutor_phone) {
+            <p class="text-xs text-amber-600">{{ texts.searchPhoneHelp }}</p>
+          }
+          <p class="text-xs text-gray-500 dark:text-gray-400">
+            {{ texts.enrollmentFilterUnavailable }}
+            {{ texts.serviceFilterUnavailable }}
+            {{ texts.paymentFilterUnavailable }}
+          </p>
+        </div>
+
+        <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+          <table app-table class="min-w-full">
+            <thead
+              app-table-header
+              class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900"
+            >
+              <tr app-table-row>
+                <th app-table-cell class="px-4 py-3 text-start">
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                    (click)="sortBy('codigo')"
+                    [attr.aria-sort]="ariaSort('codigo')"
+                  >
+                    Código
+                    <span aria-hidden="true">{{ sortIndicator('codigo') }}</span>
+                  </button>
+                </th>
+                <th app-table-cell class="px-4 py-3 text-start">
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                    (click)="sortBy('apellido')"
+                    [attr.aria-sort]="ariaSort('apellido')"
+                  >
+                    Apellido y nombre
+                    <span aria-hidden="true">{{ sortIndicator('apellido') }}</span>
+                  </button>
+                </th>
+                <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Edad</th>
+                <th app-table-cell class="px-4 py-3 text-start">
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                    (click)="sortBy('fecha_nacimiento')"
+                    [attr.aria-sort]="ariaSort('fecha_nacimiento')"
+                  >
+                    Nacimiento
+                    <span aria-hidden="true">{{ sortIndicator('fecha_nacimiento') }}</span>
+                  </button>
+                </th>
+                <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Sexo</th>
+                <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Documento</th>
+                <th app-table-cell class="px-4 py-3 text-start">
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                    (click)="sortBy('estado')"
+                    [attr.aria-sort]="ariaSort('estado')"
+                  >
+                    Estado
+                    <span aria-hidden="true">{{ sortIndicator('estado') }}</span>
+                  </button>
+                </th>
+                <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Diagnóstico</th>
+                <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Sucursal de registro</th>
+                <th app-table-cell class="px-4 py-3 text-start">
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
+                    (click)="sortBy('updated_at')"
+                    [attr.aria-sort]="ariaSort('updated_at')"
+                  >
+                    Última modificación
+                    <span aria-hidden="true">{{ sortIndicator('updated_at') }}</span>
+                  </button>
+                </th>
+                <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
+              </tr>
+            </thead>
+            <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+              @if (loading()) {
+                <tr app-table-row>
+                  <td app-table-cell colspan="11" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                    {{ texts.loading }}
+                  </td>
+                </tr>
+              } @else {
+                @for (paciente of rows(); track paciente.id) {
+                  <tr
+                    app-table-row
+                    class="cursor-pointer hover:bg-gray-50/70 dark:hover:bg-white/[0.02]"
+                    (click)="openResumen(paciente)"
+                  >
+                    <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                      {{ paciente.codigo || '—' }}
+                    </td>
+                    <td app-table-cell class="px-4 py-4 text-sm font-medium text-gray-800 dark:text-white/90">
+                      {{ paciente.nombre_completo }}
+                    </td>
+                    <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                      {{ paciente.edad.etiqueta }}
+                    </td>
+                    <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                      {{ formatDateOnly(paciente.fecha_nacimiento) }}
+                    </td>
+                    <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                      {{ paciente.sexo_label }}
+                    </td>
+                    <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                      {{ paciente.ci || '—' }}
+                    </td>
+                    <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                      <app-badge [color]="estadoColor(paciente.estado)" variant="light" size="sm">
+                        {{ paciente.estado_label }}
+                      </app-badge>
+                    </td>
+                    <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                      @if (paciente.sin_diagnostico_definido) {
+                        <span class="text-gray-400">Sin diagnóstico definido</span>
+                      } @else {
+                        <span>Diagnóstico #{{ paciente.tipo_diagnostico_id }}</span>
+                      }
+                    </td>
+                    <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                      {{ sucursalName(paciente) }}
+                    </td>
+                    <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                      {{ formatDateTime(paciente.updated_at) }}
+                    </td>
+                    <td app-table-cell class="whitespace-nowrap px-4 py-4 text-end">
+                      <button
+                        app-button
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        (click)="$event.stopPropagation(); openResumen(paciente)"
+                      >
+                        {{ texts.viewResumen }}
+                      </button>
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr app-table-row>
+                    <td app-table-cell colspan="11" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                      <p>{{ texts.noResults }}</p>
+                      @if (abilities().create) {
+                        <button app-button variant="outline" size="sm" type="button" class="mt-3" (click)="openCreate()">
+                          {{ texts.create }}
+                        </button>
+                      }
+                    </td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p class="text-sm text-gray-500 dark:text-gray-400">
+            Mostrando {{ from() ?? 0 }}–{{ to() ?? 0 }} de {{ total() }}
+          </p>
+          <app-pagination
+            [currentPage]="page()"
+            [totalPages]="lastPage()"
+            variant="text-icon"
+            (pageChange)="goToPage($event)"
+          />
+        </div>
+      </div>
+    </app-component-card>
+  </div>
+
+  @if (createOpen() && options(); as opts) {
+    <app-paciente-form-modal
+      [open]="true"
+      mode="create"
+      [options]="opts"
+      [defaultBranchId]="opts.sucursales.length === 1 ? opts.sucursales[0].id : null"
+      (closed)="closeCreate()"
+      (saved)="onCreated($event)"
+    />
+  }
+</div>

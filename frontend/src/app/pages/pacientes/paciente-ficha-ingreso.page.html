@@ -1,0 +1,589 @@
+<div>
+  <app-page-breadcrumb pageTitle="Ficha de ingreso" />
+
+  <div class="space-y-5 sm:space-y-6">
+    @if (error(); as apiError) {
+      <app-alert variant="error" title="No se pudo completar la operación" [message]="apiError.message" />
+    }
+
+    @if (loading()) {
+      <app-component-card>
+        <p class="py-10 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.loading }}</p>
+      </app-component-card>
+    } @else if (notFound()) {
+      <app-component-card>
+        <div class="space-y-4 py-8 text-center">
+          <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.notFound }}</p>
+          <button app-button variant="outline" type="button" (click)="back()">{{ texts.back }}</button>
+        </div>
+      </app-component-card>
+    } @else if (paciente(); as p) {
+      <app-component-card>
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <h2 class="text-xl font-semibold text-gray-800 dark:text-white/90">{{ p.nombre_completo }}</h2>
+              <app-badge color="gray" variant="light" size="sm">{{ p.estado_label }}</app-badge>
+              @if (ficha(); as f) {
+                <app-badge [color]="estadoColor(f.estado)" variant="light" size="sm">{{ f.estado_label }}</app-badge>
+              }
+            </div>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {{ p.codigo || 'Sin código' }} · {{ p.sucursal_registro.nombre || ('Sucursal ' + p.sucursal_registro.id) }}
+            </p>
+            <p class="mt-1 text-xs text-gray-400">
+              {{ texts.description }}
+            </p>
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            <button app-button variant="outline" type="button" (click)="back()">{{ texts.back }}</button>
+            @if (ficha(); as f) {
+              @if (f.can.edit) {
+                <button app-button variant="default" type="button" (click)="save()" [disabled]="saving()">
+                  {{ saving() ? texts.saving : texts.save }}
+                </button>
+              }
+              @if (f.can.complete) {
+                <button app-button variant="outline" type="button" (click)="complete()" [disabled]="saving()">
+                  {{ texts.complete }}
+                </button>
+              }
+              @if (f.can.archive) {
+                <button app-button variant="outline" type="button" (click)="openArchive()">{{ texts.archive }}</button>
+              }
+              @if (f.can.reactivate) {
+                <button app-button variant="default" type="button" (click)="openReactivate()">{{ texts.reactivate }}</button>
+              }
+              <button app-button variant="outline" type="button" (click)="openRevisions()">{{ texts.revisions }}</button>
+            }
+          </div>
+        </div>
+      </app-component-card>
+
+      @if (ficha(); as f) {
+        <div class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <app-component-card [title]="texts.title">
+            <form [formGroup]="form" class="space-y-5">
+              @if (f.sensibles_protegidos) {
+                <app-alert variant="warning" [message]="texts.sensitiveProtected" />
+              }
+
+              <div class="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.date }}</label>
+                  <app-paciente-date-input
+                    formControlName="fecha_ingreso"
+                    ariaLabel="Fecha de ingreso"
+                  />
+                  @if (fieldError('fecha_ingreso'); as message) {
+                    <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+                  }
+                </div>
+
+                <div>
+                  <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.branch }}</label>
+                  @if (f) {
+                    <p class="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 dark:border-gray-800 dark:text-gray-300">
+                      {{ f.sucursal_ingreso?.nombre || ('Sucursal ' + (f.sucursal_ingreso?.id || '')) }}
+                    </p>
+                  } @else {
+                    <app-select-field
+                      [options]="sucursalOptions()"
+                      [value]="form.controls.sucursal_ingreso_id.value"
+                      placeholder="Seleccioná la sucursal"
+                      ariaLabel="Sucursal de ingreso"
+                      [disabled]="!canEdit()"
+                      (valueChange)="form.controls.sucursal_ingreso_id.setValue($event)"
+                    />
+                  }
+                </div>
+
+                <div class="md:col-span-2">
+                  <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.motive }}</label>
+                  @if (!canViewSensitive()) {
+                    <p class="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-500 dark:bg-gray-900 dark:text-gray-400">
+                      {{ texts.protectedField }}
+                    </p>
+                  } @else if (sensitiveVisible()) {
+                    <textarea app-textarea rows="3" formControlName="motivo_consulta_inicial"></textarea>
+                  } @else {
+                    <button type="button" class="w-full rounded-lg border border-dashed border-gray-300 px-3 py-2 text-start text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400" (click)="toggleSensibles()">
+                      {{ texts.protectedField }} · {{ texts.sensitiveShow }}
+                    </button>
+                  }
+                  @if (fieldError('motivo_consulta_inicial'); as message) {
+                    <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+                  }
+                </div>
+
+                <div class="md:col-span-2">
+                  <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.composition }}</label>
+                  @if (!canViewSensitive()) {
+                    <p class="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-500 dark:bg-gray-900 dark:text-gray-400">{{ texts.protectedField }}</p>
+                  } @else if (sensitiveVisible()) {
+                    <textarea app-textarea rows="3" formControlName="composicion_familiar"></textarea>
+                  } @else {
+                    <button type="button" class="w-full rounded-lg border border-dashed border-gray-300 px-3 py-2 text-start text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400" (click)="toggleSensibles()">
+                      {{ texts.protectedField }} · {{ texts.sensitiveShow }}
+                    </button>
+                  }
+                </div>
+
+                <div class="md:col-span-2">
+                  <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.antecedents }}</label>
+                  @if (!canViewSensitive()) {
+                    <p class="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-500 dark:bg-gray-900 dark:text-gray-400">{{ texts.protectedField }}</p>
+                  } @else if (sensitiveVisible()) {
+                    <textarea app-textarea rows="4" formControlName="antecedentes_familiares"></textarea>
+                  } @else {
+                    <button type="button" class="w-full rounded-lg border border-dashed border-gray-300 px-3 py-2 text-start text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400" (click)="toggleSensibles()">
+                      {{ texts.protectedField }} · {{ texts.sensitiveShow }}
+                    </button>
+                  }
+                </div>
+
+                <div class="md:col-span-2">
+                  <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.observations }}</label>
+                  @if (!canViewSensitive()) {
+                    <p class="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-500 dark:bg-gray-900 dark:text-gray-400">{{ texts.protectedField }}</p>
+                  } @else if (sensitiveVisible()) {
+                    <textarea app-textarea rows="3" formControlName="observaciones"></textarea>
+                  } @else {
+                    <button type="button" class="w-full rounded-lg border border-dashed border-gray-300 px-3 py-2 text-start text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400" (click)="toggleSensibles()">
+                      {{ texts.protectedField }} · {{ texts.sensitiveShow }}
+                    </button>
+                  }
+                </div>
+              </div>
+
+              <div class="border-t border-gray-100 pt-5 dark:border-gray-800">
+                <h3 class="mb-4 text-sm font-semibold text-gray-800 dark:text-white/90">{{ texts.referredBy }}</h3>
+                <div class="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre</label>
+                    <input app-input type="text" formControlName="derivado_por" />
+                  </div>
+                  <div>
+                    <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.referredInstitution }}</label>
+                    <input app-input type="text" formControlName="derivado_por_institucion" />
+                  </div>
+                  <div class="md:col-span-2">
+                    <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.referredContact }}</label>
+                    @if (!canViewSensitive()) {
+                      <p class="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-500 dark:bg-gray-900 dark:text-gray-400">{{ texts.protectedField }}</p>
+                    } @else if (sensitiveVisible()) {
+                      <input app-input type="text" formControlName="derivado_por_contacto" />
+                    } @else {
+                      <button type="button" class="w-full rounded-lg border border-dashed border-gray-300 px-3 py-2 text-start text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400" (click)="toggleSensibles()">
+                        {{ texts.protectedField }} · {{ texts.sensitiveShow }}
+                      </button>
+                    }
+                  </div>
+                </div>
+              </div>
+
+              @if (canViewSensitive()) {
+                <div class="flex flex-wrap items-center gap-3">
+                  <app-switch
+                    [checked]="mostrarSensibles()"
+                    ariaLabel="Mostrar datos sensibles"
+                    (checkedChange)="toggleSensibles()"
+                  />
+                  <span class="text-sm text-gray-600 dark:text-gray-400">
+                    {{ mostrarSensibles() ? texts.sensitiveHide : texts.sensitiveShow }}
+                  </span>
+                </div>
+              }
+
+              <div class="flex flex-wrap justify-end gap-2">
+                @if (f.can.edit) {
+                  <button app-button variant="default" type="button" (click)="save()" [disabled]="saving()">
+                    {{ saving() ? texts.saving : texts.save }}
+                  </button>
+                }
+                @if (f.can.complete) {
+                  <button app-button variant="outline" type="button" (click)="complete()" [disabled]="saving()">
+                    {{ texts.complete }}
+                  </button>
+                }
+              </div>
+            </form>
+          </app-component-card>
+
+          <div class="space-y-5">
+            <app-component-card [title]="texts.status">
+              <dl class="space-y-3 text-sm">
+                <div class="flex justify-between gap-3">
+                  <dt class="text-gray-500">{{ texts.status }}</dt>
+                  <dd><app-badge [color]="estadoColor(f.estado)" variant="light" size="sm">{{ f.estado_label }}</app-badge></dd>
+                </div>
+                <div class="flex justify-between gap-3">
+                  <dt class="text-gray-500">{{ texts.version }}</dt>
+                  <dd class="font-medium text-gray-800 dark:text-white/90">{{ f.version }}</dd>
+                </div>
+                <div class="flex justify-between gap-3">
+                  <dt class="text-gray-500">{{ texts.updatedAt }}</dt>
+                  <dd class="text-end font-medium text-gray-800 dark:text-white/90">{{ formatDateTime(f.updated_at) }}</dd>
+                </div>
+                @if (f.completada_en) {
+                  <div class="flex justify-between gap-3">
+                    <dt class="text-gray-500">{{ texts.completedAt }}</dt>
+                    <dd class="text-end font-medium text-gray-800 dark:text-white/90">{{ formatDateTime(f.completada_en) }}</dd>
+                  </div>
+                }
+                @if (f.archivada_en) {
+                  <div class="flex justify-between gap-3">
+                    <dt class="text-gray-500">{{ texts.archivedAt }}</dt>
+                    <dd class="text-end font-medium text-gray-800 dark:text-white/90">{{ formatDateTime(f.archivada_en) }}</dd>
+                  </div>
+                }
+              </dl>
+            </app-component-card>
+
+            <app-component-card [title]="texts.contacts">
+              <div class="space-y-3">
+                @for (contacto of f.contactos_emergencia; track contacto.id) {
+                  <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+                    <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ contacto.nombre_completo }}</p>
+                    <p class="mt-1 text-xs text-gray-500">{{ contacto.parentesco || 'Sin parentesco' }} · {{ contacto.telefono }}</p>
+                  </div>
+                } @empty {
+                  <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.noContacts }}</p>
+                }
+                <button app-button variant="outline" size="sm" type="button" (click)="openPatientContacts()">
+                  {{ texts.contactsHelp }}
+                </button>
+              </div>
+            </app-component-card>
+
+            <app-component-card [title]="texts.history">
+              <div class="space-y-2">
+                @for (item of historial(); track item.id) {
+                  <button
+                    type="button"
+                    class="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 p-3 text-start hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-white/[0.02]"
+                    (click)="openArchived(item.id)"
+                  >
+                    <span class="text-sm text-gray-700 dark:text-gray-300">{{ formatDate(item.fecha_ingreso) }}</span>
+                    <span class="text-xs text-gray-500">{{ item.estado_label }} · v{{ item.version }}</span>
+                  </button>
+                } @empty {
+                  <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.noHistory }}</p>
+                }
+              </div>
+            </app-component-card>
+
+            <p class="text-xs text-gray-400">{{ texts.auditNotice }}</p>
+          </div>
+        </div>
+
+        @if (f.can.consent_view) {
+          <app-component-card [title]="texts.consents">
+            <div class="space-y-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <p class="max-w-2xl text-sm text-gray-500 dark:text-gray-400">
+                {{ texts.consentsHelp }}
+              </p>
+              <div class="flex flex-wrap gap-2">
+                @if (canManageConsentCatalog()) {
+                  <button app-button variant="outline" type="button" (click)="openConsentTipos()">
+                    {{ texts.consentCatalog }}
+                  </button>
+                }
+                @if (canRegisterConsent()) {
+                  <button app-button variant="default" type="button" (click)="openConsentForm()">
+                    {{ texts.consentRegister }}
+                  </button>
+                }
+              </div>
+            </div>
+
+            @if (isArchived()) {
+              <app-alert variant="warning" [message]="texts.consentsArchived" />
+            } @else if (!hasActiveConsentTutors()) {
+              <app-alert variant="warning" [message]="texts.consentsNoTutors" />
+            }
+
+            @if (consentimientosLoading()) {
+              <p class="py-6 text-center text-sm text-gray-500">{{ texts.loading }}</p>
+            } @else {
+              <div>
+                <h3 class="mb-2 text-sm font-semibold text-gray-800 dark:text-white/90">
+                  {{ texts.consentCurrent }}
+                </h3>
+                <div class="space-y-2">
+                  @for (consentimiento of consentimientosVigentes(); track consentimiento.id) {
+                    <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+                      <div class="min-w-0">
+                        <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+                          {{ consentimiento.tipo?.nombre || 'Consentimiento' }}
+                        </p>
+                        <p class="text-xs text-gray-500">
+                          {{ consentimiento.tutor.nombre_completo || 'Tutor' }}
+                          @if (consentimiento.tutor.parentesco) {
+                            · {{ consentimiento.tutor.parentesco }}
+                          }
+                          · {{ formatDate(consentimiento.fecha) }}
+                        </p>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <app-badge
+                          [color]="consentResultColor(consentimiento.resultado)"
+                          variant="light"
+                          size="sm"
+                        >
+                          {{ consentimiento.resultado_label }}
+                        </app-badge>
+                        @if (canRevokeConsent()) {
+                          <button
+                            app-button
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            (click)="openConsentRevoke(consentimiento)"
+                          >
+                            {{ texts.consentRevoke }}
+                          </button>
+                        }
+                      </div>
+                    </div>
+                  } @empty {
+                    <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.consentsNoCurrent }}</p>
+                  }
+                </div>
+              </div>
+
+              <div class="border-t border-gray-100 pt-4 dark:border-gray-800">
+                <h3 class="mb-2 text-sm font-semibold text-gray-800 dark:text-white/90">
+                  {{ texts.consentHistory }}
+                </h3>
+                <div class="space-y-2">
+                  @for (consentimiento of consentimientosHistorial(); track consentimiento.id) {
+                    <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 p-2.5 dark:border-gray-800">
+                      <div class="min-w-0">
+                        <p class="text-sm text-gray-700 dark:text-gray-300">
+                          {{ consentimiento.tipo?.nombre || 'Consentimiento' }} ·
+                          {{ consentimiento.tutor.nombre_completo || 'Tutor' }}
+                        </p>
+                        <p class="text-xs text-gray-500">
+                          {{ formatDate(consentimiento.fecha) }}
+                          @if (consentimiento.revoca_a_id) {
+                            · revoca #{{ consentimiento.revoca_a_id }}
+                          }
+                          @if (consentimiento.motivo_protegido) {
+                            · {{ texts.consentMotivoProtected }}
+                          } @else if (consentimiento.motivo) {
+                            · {{ consentimiento.motivo }}
+                          }
+                        </p>
+                      </div>
+                      <app-badge
+                        [color]="consentResultColor(consentimiento.resultado)"
+                        variant="light"
+                        size="sm"
+                      >
+                        {{ consentimiento.resultado_label }}
+                      </app-badge>
+                    </div>
+                  } @empty {
+                    <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.consentsEmpty }}</p>
+                  }
+                </div>
+              </div>
+            }
+            </div>
+          </app-component-card>
+        }
+
+        @if (f.can.observation_view) {
+          <app-component-card [title]="texts.observationsLog">
+            <div class="space-y-4">
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <p class="max-w-2xl text-sm text-gray-500 dark:text-gray-400">
+                  {{ texts.observationsLogHelp }}
+                </p>
+                @if (canAddObservation()) {
+                  <button app-button variant="default" type="button" (click)="openObservacionForm()">
+                    {{ texts.observationAdd }}
+                  </button>
+                }
+              </div>
+
+              @if (isArchived()) {
+                <app-alert variant="warning" [message]="texts.observationsLogArchived" />
+              }
+
+              @if (observacionesLoading()) {
+                <p class="py-6 text-center text-sm text-gray-500">{{ texts.loading }}</p>
+              } @else {
+                <div class="space-y-2">
+                  @for (observacion of observaciones(); track observacion.id) {
+                    <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+                      <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <span class="text-sm font-medium text-gray-800 dark:text-white/90">
+                            {{ formatDate(observacion.fecha) }}
+                          </span>
+                          <span class="text-xs text-gray-500">
+                            {{ observacion.usuario_nombre || ('Usuario ' + observacion.usuario_id) }}
+                          </span>
+                        </div>
+                        @if (observacion.referencia) {
+                          <span class="text-xs text-gray-500">
+                            {{ texts.observationReferenceLabel }}
+                            {{ formatDate(observacion.referencia.fecha) }}
+                          </span>
+                        }
+                      </div>
+
+                      @if (observacion.texto_protegido) {
+                        <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                          {{ texts.observationProtected }}
+                        </p>
+                      } @else {
+                        <p class="mt-2 whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">
+                          {{ observacion.texto }}
+                        </p>
+                      }
+                    </div>
+                  } @empty {
+                    <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.observationsLogEmpty }}</p>
+                  }
+                </div>
+              }
+            </div>
+          </app-component-card>
+        }
+      } @else {
+        <app-component-card [title]="texts.title">
+          @if (canCreate()) {
+            <form [formGroup]="form" class="space-y-5">
+              <app-alert variant="info" [message]="texts.noFicha" />
+              <div class="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.date }}</label>
+                  <app-paciente-date-input formControlName="fecha_ingreso" ariaLabel="Fecha de ingreso" />
+                  @if (fieldError('fecha_ingreso'); as message) {
+                    <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+                  }
+                </div>
+                <div>
+                  <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.branch }}</label>
+                  <app-select-field
+                    [options]="sucursalOptions()"
+                    [value]="form.controls.sucursal_ingreso_id.value"
+                    placeholder="Seleccioná la sucursal"
+                    ariaLabel="Sucursal de ingreso"
+                    (valueChange)="form.controls.sucursal_ingreso_id.setValue($event)"
+                  />
+                </div>
+                <div class="md:col-span-2">
+                  <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.motive }}</label>
+                  @if (canViewSensitive()) {
+                    <textarea app-textarea rows="3" formControlName="motivo_consulta_inicial"></textarea>
+                  } @else {
+                    <p class="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-500 dark:bg-gray-900 dark:text-gray-400">{{ texts.protectedField }}</p>
+                  }
+                  @if (fieldError('motivo_consulta_inicial'); as message) {
+                    <p class="mt-1 text-xs text-red-500">{{ message }}</p>
+                  }
+                </div>
+                @if (canViewSensitive() && sensitiveVisible()) {
+                  <div class="md:col-span-2">
+                    <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.composition }}</label>
+                    <textarea app-textarea rows="3" formControlName="composicion_familiar"></textarea>
+                  </div>
+                  <div class="md:col-span-2">
+                    <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.antecedents }}</label>
+                    <textarea app-textarea rows="4" formControlName="antecedentes_familiares"></textarea>
+                  </div>
+                  <div class="md:col-span-2">
+                    <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.observations }}</label>
+                    <textarea app-textarea rows="3" formControlName="observaciones"></textarea>
+                  </div>
+                }
+                <div>
+                  <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.referredBy }}</label>
+                  <input app-input type="text" formControlName="derivado_por" />
+                </div>
+                <div>
+                  <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.referredInstitution }}</label>
+                  <input app-input type="text" formControlName="derivado_por_institucion" />
+                </div>
+                <div class="md:col-span-2">
+                  <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.referredContact }}</label>
+                  @if (canViewSensitive()) {
+                    <input app-input type="text" formControlName="derivado_por_contacto" />
+                  } @else {
+                    <p class="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-500 dark:bg-gray-900 dark:text-gray-400">{{ texts.protectedField }}</p>
+                  }
+                </div>
+              </div>
+              <div class="flex justify-end">
+                <button app-button variant="default" type="button" (click)="save()" [disabled]="saving()">
+                  {{ saving() ? texts.saving : texts.saveDraft }}
+                </button>
+              </div>
+              <p class="text-xs text-gray-400">{{ texts.auditNotice }}</p>
+            </form>
+          } @else {
+            <p class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.noFicha }}</p>
+          }
+        </app-component-card>
+      }
+    }
+  </div>
+
+  @if (ficha(); as f) {
+    <app-ficha-ingreso-estado-modal
+      [open]="estadoModalOpen()"
+      [accion]="estadoAccion()"
+      [pacienteId]="paciente()?.id || 0"
+      [ficha]="f"
+      (closed)="closeEstadoModal()"
+      (saved)="onEstadoSaved($event)"
+    />
+
+    <app-ficha-ingreso-revisiones-modal
+      [open]="revisionesOpen()"
+      [revisions]="revisiones()"
+      [loading]="revisionesLoading()"
+      (closed)="closeRevisions()"
+    />
+
+    <app-consentimiento-form-modal
+      [open]="consentimientoFormOpen()"
+      [pacienteId]="paciente()?.id || 0"
+      [fichaId]="f.id"
+      [tipos]="consentimientoTipos()"
+      [tutores]="consentimientoTutores()"
+      (closed)="closeConsentForm()"
+      (saved)="onConsentSaved($event)"
+    />
+
+    <app-consentimiento-revoke-modal
+      [open]="consentimientoRevokeOpen()"
+      [pacienteId]="paciente()?.id || 0"
+      [fichaId]="f.id"
+      [consentimiento]="consentimientoSelected()"
+      (closed)="closeConsentRevoke()"
+      (revoked)="onConsentRevoked($event)"
+    />
+
+    <app-consentimiento-tipos-modal
+      [open]="consentimientoTiposOpen()"
+      (closed)="closeConsentTipos()"
+      (changed)="onConsentTiposChanged()"
+    />
+
+    <app-observacion-form-modal
+      [open]="observacionFormOpen()"
+      [pacienteId]="paciente()?.id || 0"
+      [fichaId]="f.id"
+      [observaciones]="observaciones()"
+      (closed)="closeObservacionForm()"
+      (saved)="onObservacionSaved($event)"
+    />
+  }
+</div>

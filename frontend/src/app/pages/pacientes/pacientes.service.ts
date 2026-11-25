@@ -1,0 +1,345 @@
+import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
+import { Injectable, inject } from '@angular/core';
+import { Observable, catchError, from, map, switchMap, throwError } from 'rxjs';
+import { environment } from '../../../environments/environment';
+import {
+  PacienteResumenIndicadoresResponse,
+  PacienteResumenResponse,
+} from './paciente-resumen.models';
+import {
+  ContactoEmergencia,
+  ContactoEmergenciaCreatePayload,
+  ContactoEmergenciaUpdatePayload,
+  PacienteCreatePayload,
+  PacienteExportParams,
+  PacienteListParams,
+  PacienteListResponse,
+  PacienteOptionsResponse,
+  PacienteResponse,
+  PacienteRowAbilities,
+  PacienteStatusPayload,
+  PacienteTutorAssociation,
+  PacienteUpdatePayload,
+  PacientesApiError,
+  Tutor,
+  TutorCreatePayload,
+  TutorListParams,
+  TutorListResponse,
+  TutorOptionsResponse,
+  TutorResponse,
+  TutorStatusPayload,
+  TutorUpdatePayload,
+} from './pacientes.models';
+
+@Injectable({ providedIn: 'root' })
+export class PacientesService {
+  private readonly http = inject(HttpClient);
+  private readonly baseUrl = `${environment.apiUrl}/pacientes`;
+
+  listPacientes(params: PacienteListParams): Observable<PacienteListResponse> {
+    return this.http
+      .get<PacienteListResponse>(`${this.baseUrl}/pacientes`, {
+        params: this.buildParams(params),
+      })
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  getPaciente(id: number): Observable<PacienteResponse> {
+    return this.http
+      .get<PacienteResponse>(`${this.baseUrl}/pacientes/${id}`)
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  getOptions(): Observable<PacienteOptionsResponse> {
+    return this.http
+      .get<PacienteOptionsResponse>(`${this.baseUrl}/pacientes/opciones`)
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  getPacienteResumen(
+    pacienteId: number,
+    sucursalId: number | null = null,
+  ): Observable<PacienteResumenResponse> {
+    let params = new HttpParams();
+
+    if (sucursalId !== null) {
+      params = params.set('sucursal_id', String(sucursalId));
+    }
+
+    return this.http
+      .get<PacienteResumenResponse>(
+        `${this.baseUrl}/pacientes/${pacienteId}/resumen`,
+        { params },
+      )
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  getPacienteResumenIndicadores(
+    pacienteId: number,
+    sucursalId: number | null = null,
+  ): Observable<PacienteResumenIndicadoresResponse> {
+    let params = new HttpParams();
+
+    if (sucursalId !== null) {
+      params = params.set('sucursal_id', String(sucursalId));
+    }
+
+    return this.http
+      .get<PacienteResumenIndicadoresResponse>(
+        `${this.baseUrl}/pacientes/${pacienteId}/resumen/indicadores`,
+        { params },
+      )
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  exportPacientes(params: PacienteExportParams): Observable<Blob> {
+    return this.http
+      .get(`${this.baseUrl}/pacientes/exportar`, {
+        params: this.buildParams(params),
+        responseType: 'blob',
+      })
+      .pipe(catchError((error: unknown) => this.failBlob(error)));
+  }
+
+  createPaciente(payload: PacienteCreatePayload): Observable<PacienteResponse> {
+    return this.http
+      .post<PacienteResponse>(`${this.baseUrl}/pacientes`, payload)
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  updatePaciente(id: number, payload: PacienteUpdatePayload): Observable<PacienteResponse> {
+    return this.http
+      .patch<PacienteResponse>(`${this.baseUrl}/pacientes/${id}`, payload)
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  changeStatus(id: number, payload: PacienteStatusPayload): Observable<PacienteResponse> {
+    return this.http
+      .post<PacienteResponse>(`${this.baseUrl}/pacientes/${id}/estado`, payload)
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  listContactosEmergencia(
+    pacienteId: number,
+  ): Observable<{ data: ContactoEmergencia[]; can: PacienteRowAbilities }> {
+    return this.http
+      .get<{ data: ContactoEmergencia[]; can: PacienteRowAbilities }>(
+        `${this.baseUrl}/pacientes/${pacienteId}/contactos-emergencia`,
+      )
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  createContactoEmergencia(
+    pacienteId: number,
+    payload: ContactoEmergenciaCreatePayload,
+  ): Observable<{ data: ContactoEmergencia; can: PacienteRowAbilities }> {
+    return this.http
+      .post<{ data: ContactoEmergencia; can: PacienteRowAbilities }>(
+        `${this.baseUrl}/pacientes/${pacienteId}/contactos-emergencia`,
+        payload,
+      )
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  updateContactoEmergencia(
+    pacienteId: number,
+    contactoId: number,
+    payload: ContactoEmergenciaUpdatePayload,
+  ): Observable<{ data: ContactoEmergencia; can: PacienteRowAbilities }> {
+    return this.http
+      .patch<{ data: ContactoEmergencia; can: PacienteRowAbilities }>(
+        `${this.baseUrl}/pacientes/${pacienteId}/contactos-emergencia/${contactoId}`,
+        payload,
+      )
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  deleteContactoEmergencia(
+    pacienteId: number,
+    contactoId: number,
+  ): Observable<{ message: string; can: PacienteRowAbilities }> {
+    return this.http
+      .delete<{ message: string; can: PacienteRowAbilities }>(
+        `${this.baseUrl}/pacientes/${pacienteId}/contactos-emergencia/${contactoId}`,
+      )
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  listTutores(params: TutorListParams): Observable<TutorListResponse> {
+    return this.http
+      .get<TutorListResponse>(`${this.baseUrl}/tutores`, {
+        params: this.buildParams(params),
+      })
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  exportTutores(params: TutorListParams): Observable<Blob> {
+    return this.http
+      .get(`${this.baseUrl}/tutores/exportar`, {
+        params: this.buildParams(params),
+        responseType: 'blob',
+      })
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  getTutor(id: number): Observable<TutorResponse> {
+    return this.http
+      .get<TutorResponse>(`${this.baseUrl}/tutores/${id}`)
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  getTutorOptions(): Observable<TutorOptionsResponse> {
+    return this.http
+      .get<TutorOptionsResponse>(`${this.baseUrl}/tutores/opciones`)
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  createTutor(payload: TutorCreatePayload): Observable<TutorResponse> {
+    return this.http
+      .post<TutorResponse>(`${this.baseUrl}/tutores`, payload)
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  updateTutor(id: number, payload: TutorUpdatePayload): Observable<TutorResponse> {
+    return this.http
+      .patch<TutorResponse>(`${this.baseUrl}/tutores/${id}`, payload)
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  changeTutorStatus(id: number, payload: TutorStatusPayload): Observable<TutorResponse> {
+    return this.http
+      .post<TutorResponse>(`${this.baseUrl}/tutores/${id}/estado`, payload)
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  associateTutor(
+    pacienteId: number,
+    tutorId: number,
+    esPrincipal = false,
+    parentescoId: number | null = null,
+    motivo: string | null = null,
+  ): Observable<PacienteTutorAssociation> {
+    return this.http
+      .post<PacienteTutorAssociation>(`${this.baseUrl}/pacientes/${pacienteId}/tutores`, {
+        tutor_id: tutorId,
+        es_principal: esPrincipal,
+        parentesco_id: parentescoId,
+        motivo,
+      })
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  setPrincipalTutor(
+    pacienteId: number,
+    tutorId: number,
+    motivo: string | null = null,
+  ): Observable<PacienteTutorAssociation> {
+    return this.http
+      .post<PacienteTutorAssociation>(
+        `${this.baseUrl}/pacientes/${pacienteId}/tutores/${tutorId}/principal`,
+        { motivo },
+      )
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  dissociateTutor(pacienteId: number, tutorId: number): Observable<{ message: string }> {
+    return this.http
+      .delete<{ message: string }>(
+        `${this.baseUrl}/pacientes/${pacienteId}/tutores/${tutorId}`,
+      )
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  private buildParams(params: object): HttpParams {
+    let httpParams = new HttpParams();
+
+    for (const [key, value] of Object.entries(params)) {
+      if (value === undefined || value === null || value === '') {
+        continue;
+      }
+
+      if (typeof value === 'boolean') {
+        httpParams = httpParams.set(key, value ? '1' : '0');
+        continue;
+      }
+
+      httpParams = httpParams.set(key, String(value));
+    }
+
+    return httpParams;
+  }
+
+  private fail(error: unknown): Observable<never> {
+    return throwError(() => this.normalizeError(error));
+  }
+
+  private failBlob(error: unknown): Observable<never> {
+    if (error instanceof HttpErrorResponse && error.error instanceof Blob) {
+      return from(error.error.text()).pipe(
+        map((text) => {
+          try {
+            const body = JSON.parse(text) as {
+              message?: string;
+              code?: string;
+              errors?: Record<string, string[]>;
+            };
+
+            return {
+              status: error.status,
+              message:
+                typeof body.message === 'string' && body.message.trim() !== ''
+                  ? body.message
+                  : 'No se pudo completar la operación.',
+              code: typeof body.code === 'string' ? body.code : undefined,
+              errors: body.errors,
+            } satisfies PacientesApiError;
+          } catch {
+            return {
+              status: error.status,
+              message: error.message,
+            } satisfies PacientesApiError;
+          }
+        }),
+        switchMap((apiError) => throwError(() => apiError)),
+      );
+    }
+
+    return throwError(() => this.normalizeError(error));
+  }
+
+  private normalizeError(error: unknown): PacientesApiError {
+    if (error instanceof HttpErrorResponse) {
+      const body = error.error;
+
+      if (body && typeof body === 'object') {
+        return {
+          status: error.status,
+          message:
+            typeof body.message === 'string' && body.message.trim() !== ''
+              ? body.message
+              : 'No se pudo completar la operación.',
+          code: typeof body.code === 'string' ? body.code : undefined,
+          errors:
+            body.errors && typeof body.errors === 'object'
+              ? (body.errors as Record<string, string[]>)
+              : undefined,
+          data:
+            body.data && typeof body.data === 'object'
+              ? (body.data as PacientesApiError['data'])
+              : undefined,
+        };
+      }
+
+      if (error.status === 0) {
+        return {
+          status: 0,
+          message: 'No se pudo conectar con el servidor. Reintentá la operación.',
+        };
+      }
+
+      return { status: error.status, message: error.message };
+    }
+
+    return { status: 0, message: 'Ocurrió un error inesperado.' };
+  }
+}

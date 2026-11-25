@@ -57,17 +57,17 @@ make logs
 
 | Servicio | URL / puerto |
 |---|---|
-| Aplicación Angular | http://localhost:8080 |
-| API Laravel | http://localhost:8080/api |
-| Healthcheck API + BD | http://localhost:8080/api/health |
-| PostgreSQL desde el host | `localhost:5433` |
+| Aplicación Angular | http://localhost:8090 |
+| API Laravel | http://localhost:8090/api |
+| Healthcheck API + BD | http://localhost:8090/api/health |
+| PostgreSQL desde el host | `localhost:5434` |
 | PostgreSQL dentro de Docker | `db:5432` |
 
-El puerto `5433` se usa en el host porque el `5432` local suele estar ocupado. Ambos puertos son configurables en `.env`:
+El puerto `5434` se usa en el host porque el `5432` local suele estar ocupado. Ambos puertos son configurables en `.env`:
 
 ```dotenv
-APP_PORT=8080
-POSTGRES_PORT=5433
+APP_PORT=8090
+POSTGRES_PORT=5434
 ```
 
 Después de cambiarlos:
@@ -86,14 +86,14 @@ docker compose up -d
 | Usuario | `talitacumi` |
 | Contraseña | `talitacumi_dev_password` |
 | Host (desde el host) | `localhost` |
-| Puerto (desde el host) | `5433` |
+| Puerto (desde el host) | `5434` |
 
 > Son credenciales de ejemplo para desarrollo. Cámbialas antes de desplegar en producción.
 
 Conexión manual:
 
 ```bash
-psql -h localhost -p 5433 -U talitacumi -d talitacumi
+psql -h localhost -p 5434 -U talitacumi -d talitacumi
 ```
 
 ---
@@ -173,7 +173,7 @@ El nombre del proyecto se define con `name: sistema-talitacumi` en `docker-compo
 Navegador
    │
    ▼
-Nginx :8080
+Nginx :8090
    ├── /api, /sanctum ──► php-fpm (backend:9000) ──► PostgreSQL (db:5432)
    └── / ───────────────► ng serve (frontend:4200)
 ```
@@ -273,7 +273,7 @@ docker compose logs --tail=100 frontend
 docker compose logs --tail=100 db
 
 # Probar la API
-curl http://localhost:8080/api/health
+curl http://localhost:8090/api/health
 
 # Ver migraciones
 docker compose exec backend php artisan migrate:status
