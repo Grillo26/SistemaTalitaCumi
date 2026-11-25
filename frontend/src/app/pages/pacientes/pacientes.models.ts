@@ -1,6 +1,12 @@
 export type PacienteEstado = 'activo' | 'en_pausa' | 'retirado';
 export type PacienteSexo = 'M' | 'F';
-export type PacienteSort = 'nombre_completo' | 'codigo' | 'fecha_nacimiento' | 'estado' | 'updated_at';
+export type PacienteSort =
+  | 'apellido'
+  | 'nombre_completo'
+  | 'codigo'
+  | 'fecha_nacimiento'
+  | 'estado'
+  | 'updated_at';
 
 export interface EdadPaciente {
   anios: number;
@@ -57,6 +63,9 @@ export interface PacienteRowAbilities {
   change_status: boolean;
   view_sensibles: boolean;
   delete: boolean;
+  view_resumen: boolean;
+  view_ficha_ingreso: boolean;
+  view_contact: boolean;
   view_tutors: boolean;
   manage_tutors: boolean;
   view_emergency_contacts: boolean;
@@ -69,6 +78,13 @@ export interface PacientePageAbilities {
   change_status: boolean;
   view_sensibles: boolean;
   export: boolean;
+  export_listado: boolean;
+  view_resumen: boolean;
+  search_by_tutor: boolean;
+  search_by_tutor_phone: boolean;
+  alerta_pago: boolean;
+  view_ficha_ingreso: boolean;
+  view_contact: boolean;
   tutors: boolean;
   diagnostics: boolean;
   manage_tutors: boolean;
@@ -169,6 +185,10 @@ export interface PacienteListParams {
   sort?: PacienteSort;
   direction?: 'asc' | 'desc';
 }
+
+export type PacienteExportParams = Omit<PacienteListParams, 'page' | 'per_page'> & {
+  formato?: 'csv';
+};
 
 export interface PacienteEstadoOption {
   value: PacienteEstado;
@@ -430,6 +450,13 @@ export const EMPTY_PACIENTE_ABILITIES: PacientePageAbilities = {
   change_status: false,
   view_sensibles: false,
   export: false,
+  export_listado: false,
+  view_resumen: false,
+  search_by_tutor: false,
+  search_by_tutor_phone: false,
+  alerta_pago: false,
+  view_ficha_ingreso: false,
+  view_contact: false,
   tutors: false,
   diagnostics: false,
   manage_tutors: false,
@@ -442,6 +469,9 @@ export const EMPTY_PACIENTE_ROW_ABILITIES: PacienteRowAbilities = {
   change_status: false,
   view_sensibles: false,
   delete: false,
+  view_resumen: false,
+  view_ficha_ingreso: false,
+  view_contact: false,
   view_tutors: false,
   manage_tutors: false,
   view_emergency_contacts: false,
@@ -467,7 +497,12 @@ export const EMPTY_TUTOR_PAGE_ABILITIES: TutorPageAbilities = {
 export const PACIENTES_TEXTS = {
   title: 'Pacientes',
   description: 'Fichas, búsqueda y seguimiento de los niños y niñas del centro.',
-  searchPlaceholder: 'Buscar por nombre, documento o código...',
+  searchPlaceholder: 'Nombre, apellido, documento, código, tutor o teléfono...',
+  searchHelp:
+    'Buscá por nombre, apellido, documento, código, tutor principal o teléfono del tutor.',
+  searchPhoneHelp:
+    'La búsqueda por teléfono del tutor requiere el permiso de contacto de tutores.',
+  searchTooShort: 'Ingresá al menos 2 caracteres para buscar.',
   noResults: 'No hay pacientes para los filtros seleccionados.',
   loading: 'Cargando pacientes...',
   create: 'Nuevo paciente',
@@ -479,10 +514,17 @@ export const PACIENTES_TEXTS = {
   close: 'Cerrar',
   back: 'Volver',
   fichaIngreso: 'Ficha de ingreso',
+  viewResumen: 'Ver resumen',
+  viewFullFicha: 'Ver ficha completa',
+  exportCsv: 'Exportar CSV',
+  exportingCsv: 'Exportando...',
+  exportSuccess: 'Exportación generada',
   deleteUnavailable: 'Los pacientes no se eliminan. Cambiá el estado a retirado.',
   tutorsUnavailable: 'Disponible con el submódulo de tutores y contactos (04.02).',
   diagnosticsUnavailable: 'Disponible con el catálogo de diagnósticos (módulo 05).',
   enrollmentFilterUnavailable: 'El filtro por sucursal de inscripción estará disponible con Inscripciones (módulo 06).',
+  serviceFilterUnavailable: 'El filtro por tipo de servicio estará disponible con Inscripciones (módulo 06).',
+  paymentFilterUnavailable: 'El filtro por estado de pago estará disponible con Pagos y caja (módulo 08).',
   sensitiveProtected: 'Datos sensibles protegidos. Necesitás el permiso paciente.ver_sensibles.',
   auditNotice: 'Esta consulta queda registrada en la bitácora.',
   noTutor: 'Sin tutor asociado',

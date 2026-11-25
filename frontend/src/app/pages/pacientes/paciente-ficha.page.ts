@@ -132,6 +132,10 @@ export class PacienteFichaPageComponent implements OnInit {
     this.statusOpen.set(false);
   }
 
+  openResumen(): void {
+    void this.router.navigate(['/pacientes', this.pacienteId, 'resumen']);
+  }
+
   openFichaIngreso(): void {
     void this.router.navigate(['/pacientes', this.pacienteId, 'ficha-ingreso']);
   }

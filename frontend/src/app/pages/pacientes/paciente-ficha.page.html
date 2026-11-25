@@ -39,6 +39,7 @@
 
           <div class="flex flex-wrap gap-2">
             <button app-button variant="outline" type="button" (click)="back()">{{ texts.back }}</button>
+            <button app-button variant="outline" type="button" (click)="openResumen()">{{ texts.viewResumen }}</button>
             @if (canViewFichaIngreso()) {
               <button app-button variant="outline" type="button" (click)="openFichaIngreso()">{{ texts.fichaIngreso }}</button>
             }

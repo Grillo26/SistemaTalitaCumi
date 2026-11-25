@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Modules\Pacientes;
 
+use App\Modules\Pacientes\Models\Tutor;
 use App\Modules\Pacientes\Queries\Registro\ListPacientesQuery;
 use Illuminate\Support\Facades\DB;
 
@@ -70,5 +71,38 @@ final class PacientePerformanceTest extends PacientesTestCase
 
         $this->assertGreaterThanOrEqual(1, $paginator->total());
         $this->assertLessThan(1.0, $elapsed, "La búsqueda tardó {$elapsed} s.");
+
+        $pacienteId = (int) DB::table('paciente')->value('id');
+        $tutor = Tutor::factory()->create([
+            'sucursal_registro_id' => $branch->id,
+            'telefono' => '71234567',
+        ]);
+
+        DB::table('paciente_tutor')->insert([
+            'paciente_id' => $pacienteId,
+            'tutor_id' => $tutor->id,
+            'es_principal' => true,
+        ]);
+
+        $start = microtime(true);
+
+        $porTelefono = app(ListPacientesQuery::class)(
+            search: '71234567',
+            estado: null,
+            tipoDiagnosticoId: null,
+            sinDiagnostico: null,
+            sucursalRegistroId: null,
+            page: 1,
+            perPage: 10,
+            sort: 'apellido',
+            direction: 'asc',
+            actor: auth()->user(),
+            puedeBuscarTelefonoTutor: true,
+        );
+
+        $elapsedTelefono = microtime(true) - $start;
+
+        $this->assertSame($pacienteId, $porTelefono->items()[0]->id);
+        $this->assertLessThan(1.0, $elapsedTelefono, "La búsqueda por teléfono tardó {$elapsedTelefono} s.");
     }
 }

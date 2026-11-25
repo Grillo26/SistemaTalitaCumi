@@ -1063,6 +1063,7 @@ Timestamps: `created_at`, `updated_at`.
 - `consentimiento` es un evento inmutable: no se edita ni se borra. La revocación es una fila nueva con `resultado='revocado'` y `revoca_a_id` apuntando al consentimiento original. El motivo libre no se copia a la bitácora.
 - La vigencia se calcula como un `otorgado` sin una revocación posterior. No hay vencimiento automático; queda pendiente de definición del cliente.
 - `ficha_ingreso_observacion` es solo inserción: no se edita ni se borra. Una corrección es una observación nueva con `observacion_referencia_id` apuntando a la anterior (RN-003). El texto es sensible y no se copia a la bitácora.
+- `04.04` (búsqueda y ficha resumen) no agrega tablas, columnas ni índices. Reutiliza `paciente` (columnas normalizadas), `tutor` (nombre y teléfono normalizados), `paciente_tutor` (unique parcial del principal), `bitacora` y `accion_auditada`. La exportación CSV no persiste datos.
 
 ---
 

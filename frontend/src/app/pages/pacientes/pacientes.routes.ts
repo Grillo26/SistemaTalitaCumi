@@ -5,6 +5,7 @@ import { PacienteFichaPageComponent } from './paciente-ficha.page';
 import { TutoresPageComponent } from './tutores.page';
 import { TutorFichaPageComponent } from './tutor-ficha.page';
 import { PacienteFichaIngresoPageComponent } from './paciente-ficha-ingreso.page';
+import { PacienteResumenPageComponent } from './paciente-resumen.page';
 
 export const PACIENTES_ROUTES: Routes = [
   {
@@ -27,6 +28,13 @@ export const PACIENTES_ROUTES: Routes = [
     canActivate: [permissionGuard],
     data: { permission: 'tutor.ver' },
     title: 'Ficha de tutor | TalitaCumi',
+  },
+  {
+    path: ':id/resumen',
+    component: PacienteResumenPageComponent,
+    canActivate: [permissionGuard],
+    data: { permission: 'paciente.ver' },
+    title: 'Ficha resumen | TalitaCumi',
   },
   {
     path: ':id/ficha-ingreso',

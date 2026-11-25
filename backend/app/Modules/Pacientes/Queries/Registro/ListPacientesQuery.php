@@ -4,14 +4,17 @@ namespace App\Modules\Pacientes\Queries\Registro;
 
 use App\Models\User;
 use App\Modules\Pacientes\Models\Paciente;
+use App\Modules\Pacientes\Rules\PacienteBusquedaRule;
 use App\Modules\Pacientes\Support\PacienteAccessScope;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
- * Listado paginado de pacientes (04.01/RF-005).
+ * Listado y búsqueda paginada de pacientes (04.01/RF-005, 04.04 Fase A).
  *
  * Selecciona solo columnas no sensibles: el listado nunca devuelve alergias,
- * condiciones ni observaciones.
+ * condiciones ni observaciones. La búsqueda por teléfono del tutor solo se
+ * activa si el actor tiene `tutor.ver_contacto`.
  */
 final class ListPacientesQuery
 {
@@ -28,13 +31,47 @@ final class ListPacientesQuery
         string $sort,
         string $direction,
         User $actor,
+        bool $puedeBuscarTelefonoTutor = false,
     ): LengthAwarePaginator {
         $page = max(1, $page);
         $perPage = max(1, min($perPage, 50));
-        $direction = $direction === 'desc' ? 'desc' : 'asc';
 
-        $allowedSorts = ['nombre_completo', 'codigo', 'fecha_nacimiento', 'estado', 'updated_at'];
-        $sort = in_array($sort, $allowedSorts, true) ? $sort : 'nombre_completo';
+        return $this->builder(
+            search: $search,
+            estado: $estado,
+            tipoDiagnosticoId: $tipoDiagnosticoId,
+            sinDiagnostico: $sinDiagnostico,
+            sucursalRegistroId: $sucursalRegistroId,
+            sort: $sort,
+            direction: $direction,
+            actor: $actor,
+            puedeBuscarTelefonoTutor: $puedeBuscarTelefonoTutor,
+        )
+            ->paginate($perPage, ['*'], 'page', $page)
+            ->withQueryString();
+    }
+
+    /**
+     * Query reutilizable por el listado paginado y la exportación CSV.
+     */
+    public function builder(
+        ?string $search,
+        ?string $estado,
+        ?int $tipoDiagnosticoId,
+        ?bool $sinDiagnostico,
+        ?int $sucursalRegistroId,
+        string $sort,
+        string $direction,
+        User $actor,
+        bool $puedeBuscarTelefonoTutor = false,
+    ): Builder {
+        PacienteBusquedaRule::assertValid($search);
+
+        $direction = $direction === 'desc' ? 'desc' : 'asc';
+        $sort = PacienteBusquedaRule::isAllowedSort($sort) ? $sort : 'nombre_completo';
+        $telefonoTutor = $puedeBuscarTelefonoTutor
+            ? PacienteBusquedaRule::tutorPhone($search)
+            : null;
 
         $query = Paciente::query()
             ->select([
@@ -58,12 +95,12 @@ final class ListPacientesQuery
         $this->scope->apply($query, $actor, $sucursalRegistroId);
 
         $query
-            ->buscar($search)
+            ->buscar($search, $telefonoTutor)
             ->estado($estado)
             ->tipoDiagnostico($tipoDiagnosticoId)
             ->sinDiagnostico($sinDiagnostico);
 
-        if ($sort === 'nombre_completo') {
+        if ($sort === 'nombre_completo' || $sort === 'apellido') {
             $query
                 ->orderBy('apellido_paterno_normalizado', $direction)
                 ->orderBy('apellido_materno_normalizado', $direction)
@@ -72,8 +109,6 @@ final class ListPacientesQuery
             $query->orderBy($sort, $direction);
         }
 
-        return $query
-            ->paginate($perPage, ['*'], 'page', $page)
-            ->withQueryString();
+        return $query;
     }
 }

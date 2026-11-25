@@ -15,9 +15,9 @@ docker compose up -d --build
 
 | Servicio | URL |
 |---|---|
-| API a través de Nginx | `http://localhost:8080/api` |
-| Healthcheck API + BD | `http://localhost:8080/api/health` |
-| PostgreSQL desde el host | `localhost:5433` |
+| API a través de Nginx | `http://localhost:8090/api` |
+| Healthcheck API + BD | `http://localhost:8090/api/health` |
+| PostgreSQL desde el host | `localhost:5434` |
 
 Comandos útiles:
 
@@ -934,9 +934,9 @@ registrarConsultaBitacora(filtros, cantidad, ?usuarioId, ?ip);
 #### TODOs de módulos consumidores
 
 - **RF-B07 — datos sensibles:**
-  - `docs/04_PACIENTES_TUTORES/03_ficha_ingreso_entrevista.md`
-  - `docs/04_PACIENTES_TUTORES/04_busqueda_ficha_resumen.md`
-  - `docs/11_EVALUACIONES_RESULTADOS/04_acceso_informacion_clinica.md`
+  - `docs/04_PACIENTES_TUTORES/03_ficha_ingreso_entrevista.md` — implementado en 04.03 (ficha, revisiones, consentimientos y observaciones).
+  - `docs/04_PACIENTES_TUTORES/04_busqueda_ficha_resumen.md` — implementado en 04.04 (`recurso=ficha_resumen`).
+  - `docs/11_EVALUACIONES_RESULTADOS/04_acceso_informacion_clinica.md` — pendiente del módulo 11.
   - Deben inyectar `AuditRecorderContract::registrarConsultaSensible` con referencias/ids, nunca contenido clínico.
 - **RF-B13 — anulación de pago crítica:**
   - `docs/08_PAGOS_CAJA/04_anulacion_pagos.md`
@@ -1926,6 +1926,159 @@ Seeder: `ObservacionPermissionSeeder`, marca `pacientes.ficha_ingreso_observacio
 - PDF: no hay librería instalada; requiere autorización para agregar una dependencia o definir el servicio externo.
 - Entrevista 06: no existe el módulo; la ficha mantiene el mensaje y el contrato stub.
 - Confirmar con el cliente si el texto de las observaciones debe tener un permiso propio distinto de `ver_sensibles`.
+
+---
+
+## Módulo 04.04 — Búsqueda y ficha resumen de pacientes
+
+Implementa el agregador de **solo lectura** de búsqueda y ficha resumen. No crea ni edita pacientes, tutores, inscripciones, turnos ni pagos. La escritura se limita a la bitácora.
+
+### Alcance entregado
+
+- **Fase A — Búsqueda:** extensión de `ListPacientesQuery` y `/pacientes` con búsqueda por tutor principal activo, teléfono exacto con permiso, orden por apellido, mínimo de 2 caracteres y filtros no disponibles deshabilitados.
+- **Fase B — Ficha resumen:** endpoint `/pacientes/{id}/resumen`, bloques de datos básicos, tutores, contactos, banderas sensibles, servicios, pago, asistencia, vencimiento, sucursales y alerta; degradación a `no_disponible`.
+- **Fase C — Exportación/alertas:** CSV del listado con permiso propio y auditoría; contratos/stubs de alerta de pago. El PDF queda pendiente de infraestructura.
+
+### Endpoints
+
+Prefijo real: `/api/pacientes`.
+
+| Método | Ruta | Query/Acción | Permiso |
+|---|---|---|---|
+| GET | `/pacientes` | `ListPacientesQuery` extendido | `paciente.ver` |
+| GET | `/pacientes/{id}/resumen` | `GetPacienteResumenQuery` + auditoría | `paciente.ver` |
+| GET | `/pacientes/{id}/resumen/indicadores` | `GetPacienteResumenIndicadoresQuery`; sin auditoría | `paciente.ver` |
+| GET | `/pacientes/exportar` | `ListPacientesQuery::builder` + `PacienteCsvExporter` | `paciente.exportar_listado` |
+
+### Búsqueda: cambios al contrato de 04.01
+
+- `search` ahora busca también el **tutor principal activo** por nombre normalizado y, con `tutor.ver_contacto`, por teléfono exacto de 8 dígitos.
+- `search` exige mínimo 2 caracteres; vacío lista todo.
+- `sort` agrega `apellido`; `nombre_completo` se mantiene y sigue ordenando por apellido.
+- `sucursal_inscripcion_id`, `tipo_servicio_id` y `estado_pago` quedan **prohibidos** hasta 06/08.
+- `per_page` máximo 50.
+- El listado no audita. El teléfono del tutor no se devuelve en la respuesta; solo se muestra en la ficha resumen según permiso.
+
+### Ficha resumen
+
+Cada bloque tiene:
+
+```json
+{
+  "estado": "disponible | no_disponible",
+  "motivo": null | "MODULO_NO_IMPLEMENTADO" | "SIN_SERVICIOS_VIGENTES" | "SIN_PERMISO" | "SIN_TUTOR" | "ERROR",
+  "mensaje": "texto para la UI",
+  "data": {}
+}
+```
+
+Hoy:
+
+- Disponibles: datos básicos, banderas sensibles (`tiene_alergias`, `tiene_condiciones_medicas`, `tiene_observaciones`, nunca contenido), tutores con teléfono enmascarado/completo y contactos de emergencia con permiso.
+- No disponibles por módulo inexistente: servicios (06), pago (08), asistencia (07), próximo vencimiento (06/08), sucursales múltiples (06) y alerta (04.02 Fase C + 09).
+- Nunca se devuelven ceros, “al día” por defecto ni datos de ejemplo.
+- Un bloque que falla se degrada a `ERROR`; no produce 500.
+
+### Auditoría
+
+- Apertura del resumen: `entidad='paciente'`, `entidad_id=paciente`, `sucursal_id=sucursal_registro_id`, `contexto=['recurso'=>'ficha_resumen']`, una sola fila, fail-closed `503 AUDIT_UNAVAILABLE`.
+- El resumen **no llama** a `GET /pacientes/{id}`. “Ver ficha completa” es una navegación separada y genera su propia auditoría `ficha_paciente`.
+- Refresco de indicadores: sin auditoría; solo devuelve bloques de indicadores, sin identidad, tutores ni contactos.
+- Búsqueda/listado: sin auditoría, consistente con 04.01.
+- Exportación: `entidad='exportacion'`, `accion='EXPORTAR'`, `critico=true`, filtros seguros (sin `search` crudo, sin teléfonos/documentos), cantidad y formato.
+
+### Permisos
+
+Seeder: `PacienteResumenPermissionSeeder`, marca `pacientes.resumen`.
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `paciente.ver` (ver resumen y buscar) | sí | sí | sí |
+| `tutor.ver_contacto` (teléfono y búsqueda por teléfono) | sí | sí | sí |
+| `paciente.ver_contacto_emergencia` | sí | sí | sí |
+| `paciente.exportar_listado` (nuevo) | sí | sí | **no** |
+| `paciente.exportar` (legado de 04.01) | sí | sí | sí |
+
+`paciente.exportar` **no se modificó** en 04.04: queda reservado para la ficha completa de 04.01. La exportación del listado usa el permiso nuevo. La asignación de Recepción al permiso legado queda como deuda documentada.
+
+### Contratos nuevos
+
+Todos incluyen `disponible(): bool` y reciben el alcance `?array $sucursalesAccesibles` (null = global) y, cuando aplica, `?int $sucursalContexto`.
+
+| Contrato | Implementación actual | Módulo futuro |
+|---|---|---|
+| `PatientServicesSummaryContract` | `StubPatientServicesSummaryContract` | 06 |
+| `PatientPaymentStatusContract` | `StubPatientPaymentStatusContract` | 08 |
+| `PatientAttendanceSummaryContract` | `StubPatientAttendanceSummaryContract` | 07 |
+| `TutorContactContract` | `StubTutorContactContract` | 04.02 Fase C |
+| `PatientPaymentAlertContract` | `StubPatientPaymentAlertContract` | 09 |
+
+DTOs: `ServicioVigenteResumen`, `EstadoPagoResumen`, `AsistenciaResumen`, `ContactoTutorResumen` y `AlertaPagoResumen`. Ningún stub devuelve datos falsos: `disponible()` es false y los métodos lanzan `LogicException`. La Query comprueba `disponible()` antes de invocar y captura errores por bloque.
+
+Documentos exactos para los consumidores:
+
+- 06: `docs/06_INSCRIPCIONES_ATENCIONES/01_inscripcion_salas_grupales.md`, `02_paquetes_sesiones_individuales.md`, `04_vigencia_vencimiento_renovacion.md`, `05_estados_paciente_inscripcion.md`.
+- 07: `docs/07_AGENDA_TURNOS/04_registro_asistencia_turno.md`.
+- 08: `docs/08_PAGOS_CAJA/01_registro_pagos_saldos.md`, `05_plan_cuotas.md`.
+- 09: `docs/09_REPORTES_ALERTAS/02_alertas_proximo_pago.md`.
+- 04.02 Fase C: `docs/04_PACIENTES_TUTORES/02_registro_tutores_contactos.md` (RF-013, RN-009).
+
+Los módulos 06/07/08/09 deben filtrar por las sucursales accesibles y por el contexto; el README de cada módulo debe conservar ese requisito.
+
+### Exportación CSV
+
+- Columnas: `ID`, `Código`, `Nombre completo`, `Documento`, `Fecha de nacimiento`, `Sexo`, `Estado`, `Sucursal de registro`.
+- Sin teléfonos, tutores, alergias, condiciones, observaciones ni datos clínicos.
+- BOM UTF-8, delimitador `;`, escape de fórmulas, `lazy(200)`.
+- Límite configurable: `config('pacientes.export_max_rows')` (10 000 por defecto); exceso → `422 PACIENTES_EXPORT_TOO_LARGE`.
+- PDF: contrato `PacienteListadoPdfExporterContract` + implementación `Unavailable...` con `LogicException`; sin endpoint ni botón.
+- Permiso: `paciente.exportar_listado`; Recepción no exporta.
+
+### Archivos principales
+
+- Búsqueda: `Rules/PacienteBusquedaRule.php`, `Queries/Registro/ListPacientesQuery.php`, `Http/Requests/Registro/IndexPacienteRequest.php`.
+- Resumen: `Queries/Resumen/GetPacienteResumenQuery.php`, `GetPacienteResumenIndicadoresQuery.php`, `Support/PacienteResumenBlock.php`, `PacienteResumenBlocksBuilder.php`, `Http/Controllers/Resumen/PacienteResumenController.php`, `routes-resumen.php`.
+- Exportación: `Http/Requests/Registro/ExportPacienteRequest.php`, `Support/PacienteCsvExporter.php`, `PacienteResumenPermissionSeeder`.
+- Frontend: `paciente-resumen.page.*`, `paciente-resumen.models.ts`, `pacientes.page.*`, `pacientes.service.ts`, `paciente-ficha.page.*`.
+
+No se agregaron tablas, columnas ni índices nuevos. Se usan los índices existentes de `paciente`, `tutor` y `paciente_tutor` (unique parcial del principal). `database.md` y `talitacumi_schema.sql` no cambian.
+
+### Fases y checklist 04.04
+
+| Fase | Requisitos | Estado |
+|---|---|---|
+| A | 04.04/RF-001, RF-002, RF-003, RF-004 (parcial), RF-010 (proxy), RF-017 | Implementada |
+| B | 04.04/RF-005 (parcial), RF-006, RF-007, RF-008, RF-009 (parcial), RF-011, RF-012, RF-014, RF-015, RF-016 | Implementada con bloques `no_disponible` |
+| C | 04.04/RF-013 (CSV; PDF pendiente), RF-009 (alerta deshabilitada) | Implementada parcialmente |
+
+| Requisito | Estado | Evidencia |
+|---|---|---|
+| 04.04/RF-001 nombre/apellido | Completo | `PacienteBusquedaRule`, `PacienteSearchTest` |
+| 04.04/RF-002 documento | Completo | `scopeBuscar`, `PacienteSearchTest` |
+| 04.04/RF-003 tutor | Completo | búsqueda por tutor principal activo |
+| 04.04/RF-004 estado/sucursal | Parcial: inscripción pendiente 06 | filtros actuales |
+| 04.04/RF-005 ficha resumen | Parcial: básicos/tutores/contactos + bloques no disponibles | `PacienteResumenTest` |
+| 04.04/RF-006 servicios | Contrato + `no_disponible` | `StubPatientServicesSummaryContract` |
+| 04.04/RF-007 pago | Contrato + `no_disponible` | `StubPatientPaymentStatusContract` |
+| 04.04/RF-008 asistencia | Contrato + `no_disponible` | `StubPatientAttendanceSummaryContract` |
+| 04.04/RF-009 acciones frecuentes | Parcial: ficha completa/ficha ingreso; resto deshabilitado | página de resumen |
+| 04.04/RF-010 scoping | Completo por proxy `sucursal_registro_id` | `PacienteAccessScope` |
+| 04.04/RF-011 sucursales múltiples | Contrato + `no_disponible` | `StubPatientServicesSummaryContract` |
+| 04.04/RF-012 bitácora de resumen | Completo | `PacienteResumenController::show` |
+| 04.04/RF-013 exportar | CSV completo; PDF pendiente | `PacienteCsvExporter`, `PacienteResumenExportTest` |
+| 04.04/RF-014 sensibles | Completo con banderas | `datos_sensibles` |
+| 04.04/RF-015 actualizar indicadores | Abrir + botón; sin datos hasta 07/08 | `/resumen/indicadores` |
+| 04.04/RF-016 próximo vencimiento | Contrato + `no_disponible` | `proximo_vencimiento` |
+| 04.04/RF-017 orden | Completo | `sort=apellido`, `fecha_nacimiento`, `estado` |
+
+RN-001 a RN-010, CU-01 a CU-03 y CA-001 a CA-010 quedan cubiertos según las dependencias anteriores. Las reglas de pago/asistencia siguen **PROPUESTO - VALIDAR** con el cliente.
+
+### Pendiente de 04.04
+
+- Implementar los contratos cuando existan 06/07/08/09; no cambiar la ficha resumen salvo el binding.
+- PDF del listado: pendiente de infraestructura.
+- Confirmar con el cliente la visibilidad de Recepción entre sucursales, la definición de “al día/con saldo/vencido”, el período de asistencia, el uso de teléfono para búsqueda y la exportación de Recepción.
+- La alternancia de contexto de sucursal queda preparada por `sucursal_id`, pero la UI la habilitará con 06.
 
 ---
 

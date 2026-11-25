@@ -14,29 +14,34 @@
       <div class="space-y-4">
         <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-            <div class="relative w-full sm:w-72">
-              <span
-                class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-gray-400"
-                aria-hidden="true"
-              >
-                <svg class="size-5" viewBox="0 0 20 20" fill="none">
-                  <path
-                    d="M14.382 14.383l3.325 3.326m-1.249-8.334a7.082 7.082 0 01-7.083 7.081 7.082 7.082 0 110-14.163 7.082 7.082 0 017.083 7.082z"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </span>
-              <input
-                app-input
-                type="text"
-                [formControl]="searchControl"
-                class="ps-10"
-                [placeholder]="texts.searchPlaceholder"
-                aria-label="Buscar pacientes"
-              />
+            <div class="w-full sm:w-72">
+              <div class="relative">
+                <span
+                  class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-gray-400"
+                  aria-hidden="true"
+                >
+                  <svg class="size-5" viewBox="0 0 20 20" fill="none">
+                    <path
+                      d="M14.382 14.383l3.325 3.326m-1.249-8.334a7.082 7.082 0 01-7.083 7.081 7.082 7.082 0 110-14.163 7.082 7.082 0 017.083 7.082z"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </span>
+                <input
+                  app-input
+                  type="text"
+                  [formControl]="searchControl"
+                  class="ps-10"
+                  [placeholder]="texts.searchPlaceholder"
+                  aria-label="Buscar pacientes"
+                />
+              </div>
+              @if (searchHint(); as hint) {
+                <p class="mt-1 text-xs text-amber-600">{{ hint }}</p>
+              }
             </div>
 
             <div class="w-full sm:w-44">
@@ -68,13 +73,56 @@
                 (valueChange)="onSinDiagnostico($event)"
               />
             </div>
+
+            <div class="w-full sm:w-52">
+              <app-select-field
+                [options]="inscripcionFilterOptions"
+                value=""
+                placeholder="Sucursal de inscripción"
+                ariaLabel="Filtrar por sucursal de inscripción"
+                [disabled]="true"
+              />
+            </div>
+
+            <div class="w-full sm:w-52">
+              <app-select-field
+                [options]="servicioFilterOptions"
+                value=""
+                placeholder="Tipo de servicio"
+                ariaLabel="Filtrar por tipo de servicio"
+                [disabled]="true"
+              />
+            </div>
+
+            <div class="w-full sm:w-52">
+              <app-select-field
+                [options]="pagoFilterOptions"
+                value=""
+                placeholder="Estado de pago"
+                ariaLabel="Filtrar por estado de pago"
+                [disabled]="true"
+              />
+            </div>
           </div>
 
-          @if (abilities().create) {
-            <button app-button variant="default" type="button" (click)="openCreate()">
-              {{ texts.create }}
-            </button>
-          }
+          <div class="flex flex-wrap gap-2">
+            @if (abilities().export_listado) {
+              <button
+                app-button
+                variant="outline"
+                type="button"
+                (click)="exportCsv()"
+                [disabled]="exporting()"
+              >
+                {{ exporting() ? texts.exportingCsv : texts.exportCsv }}
+              </button>
+            }
+            @if (abilities().create) {
+              <button app-button variant="default" type="button" (click)="openCreate()">
+                {{ texts.create }}
+              </button>
+            }
+          </div>
         </div>
 
         @if (options()?.tipos_diagnostico; as diagnostico) {
@@ -85,9 +133,17 @@
           }
         }
 
-        <p class="text-xs text-gray-500 dark:text-gray-400">
-          {{ texts.enrollmentFilterUnavailable }}
-        </p>
+        <div class="space-y-1">
+          <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.searchHelp }}</p>
+          @if (!abilities().search_by_tutor_phone) {
+            <p class="text-xs text-amber-600">{{ texts.searchPhoneHelp }}</p>
+          }
+          <p class="text-xs text-gray-500 dark:text-gray-400">
+            {{ texts.enrollmentFilterUnavailable }}
+            {{ texts.serviceFilterUnavailable }}
+            {{ texts.paymentFilterUnavailable }}
+          </p>
+        </div>
 
         <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
           <table app-table class="min-w-full">
@@ -111,11 +167,11 @@
                   <button
                     type="button"
                     class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-brand-600 dark:text-gray-400"
-                    (click)="sortBy('nombre_completo')"
-                    [attr.aria-sort]="ariaSort('nombre_completo')"
+                    (click)="sortBy('apellido')"
+                    [attr.aria-sort]="ariaSort('apellido')"
                   >
-                    Paciente
-                    <span aria-hidden="true">{{ sortIndicator('nombre_completo') }}</span>
+                    Apellido y nombre
+                    <span aria-hidden="true">{{ sortIndicator('apellido') }}</span>
                   </button>
                 </th>
                 <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Edad</th>
@@ -171,7 +227,7 @@
                   <tr
                     app-table-row
                     class="cursor-pointer hover:bg-gray-50/70 dark:hover:bg-white/[0.02]"
-                    (click)="openFicha(paciente)"
+                    (click)="openResumen(paciente)"
                   >
                     <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
                       {{ paciente.codigo || '—' }}
@@ -215,16 +271,21 @@
                         variant="ghost"
                         size="sm"
                         type="button"
-                        (click)="$event.stopPropagation(); openFicha(paciente)"
+                        (click)="$event.stopPropagation(); openResumen(paciente)"
                       >
-                        Ver ficha
+                        {{ texts.viewResumen }}
                       </button>
                     </td>
                   </tr>
                 } @empty {
                   <tr app-table-row>
                     <td app-table-cell colspan="11" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
-                      {{ texts.noResults }}
+                      <p>{{ texts.noResults }}</p>
+                      @if (abilities().create) {
+                        <button app-button variant="outline" size="sm" type="button" class="mt-3" (click)="openCreate()">
+                          {{ texts.create }}
+                        </button>
+                      }
                     </td>
                   </tr>
                 }

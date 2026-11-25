@@ -5,6 +5,7 @@ namespace App\Modules\Pacientes\Models;
 use App\Modules\Organizacion\Models\Branch;
 use App\Modules\Pacientes\Enums\EstadoPaciente;
 use App\Modules\Pacientes\Enums\Sexo;
+use App\Modules\Pacientes\Rules\PacienteBusquedaRule;
 use App\Modules\Pacientes\Support\PacienteNormalizer;
 use Database\Factories\PacienteFactory;
 use Illuminate\Database\Eloquent\Builder;
@@ -133,17 +134,28 @@ class Paciente extends Model
         return $this->relacionesTutor()->where('es_principal', true)->exists();
     }
 
-    public function scopeBuscar(Builder $query, ?string $term): Builder
-    {
-        $term = PacienteNormalizer::key($term);
+    /**
+     * Búsqueda por nombre, apellido, documento, código y tutor principal
+     * activo (04.04/RF-001, 04.04/RF-002, 04.04/RF-003).
+     *
+     * El teléfono del tutor solo se pasa cuando el actor tiene
+     * `tutor.ver_contacto`; la comparación es exacta sobre el teléfono
+     * normalizado de 8 dígitos.
+     */
+    public function scopeBuscar(
+        Builder $query,
+        ?string $term,
+        ?string $telefonoTutor = null,
+    ): Builder {
+        $term = PacienteBusquedaRule::term($term);
 
         if ($term === '') {
             return $query;
         }
 
-        $tokens = array_values(array_filter(explode(' ', $term), static fn (string $token): bool => $token !== ''));
+        $tokens = PacienteBusquedaRule::tokens($term);
 
-        return $query->where(function (Builder $query) use ($term, $tokens): void {
+        return $query->where(function (Builder $query) use ($term, $tokens, $telefonoTutor): void {
             $query
                 ->where('documento_normalizado', 'like', $term.'%')
                 ->orWhereRaw('lower(codigo) like ?', ['%'.$term.'%'])
@@ -154,6 +166,28 @@ class Paciente extends Model
                 })
                 ->orWhere('apellido_paterno_normalizado', 'like', $term.'%')
                 ->orWhere('apellido_materno_normalizado', 'like', $term.'%');
+
+            if ($tokens === [] && $telefonoTutor === null) {
+                return;
+            }
+
+            $query->orWhereHas('relacionesTutor', function (Builder $relacion) use ($tokens, $telefonoTutor): void {
+                $relacion
+                    ->where('es_principal', true)
+                    ->whereHas('tutor', function (Builder $tutor) use ($tokens, $telefonoTutor): void {
+                        $tutor->where('activo', true);
+
+                        $tutor->where(function (Builder $tutor) use ($tokens, $telefonoTutor): void {
+                            foreach ($tokens as $token) {
+                                $tutor->where('nombre_completo_normalizado', 'like', '%'.$token.'%');
+                            }
+
+                            if ($telefonoTutor !== null) {
+                                $tutor->orWhere('telefono_normalizado', $telefonoTutor);
+                            }
+                        });
+                    });
+            });
         });
     }
 

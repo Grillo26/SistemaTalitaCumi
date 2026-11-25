@@ -1,12 +1,17 @@
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, catchError, throwError } from 'rxjs';
+import { Observable, catchError, from, map, switchMap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import {
+  PacienteResumenIndicadoresResponse,
+  PacienteResumenResponse,
+} from './paciente-resumen.models';
 import {
   ContactoEmergencia,
   ContactoEmergenciaCreatePayload,
   ContactoEmergenciaUpdatePayload,
   PacienteCreatePayload,
+  PacienteExportParams,
   PacienteListParams,
   PacienteListResponse,
   PacienteOptionsResponse,
@@ -49,6 +54,51 @@ export class PacientesService {
     return this.http
       .get<PacienteOptionsResponse>(`${this.baseUrl}/pacientes/opciones`)
       .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  getPacienteResumen(
+    pacienteId: number,
+    sucursalId: number | null = null,
+  ): Observable<PacienteResumenResponse> {
+    let params = new HttpParams();
+
+    if (sucursalId !== null) {
+      params = params.set('sucursal_id', String(sucursalId));
+    }
+
+    return this.http
+      .get<PacienteResumenResponse>(
+        `${this.baseUrl}/pacientes/${pacienteId}/resumen`,
+        { params },
+      )
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  getPacienteResumenIndicadores(
+    pacienteId: number,
+    sucursalId: number | null = null,
+  ): Observable<PacienteResumenIndicadoresResponse> {
+    let params = new HttpParams();
+
+    if (sucursalId !== null) {
+      params = params.set('sucursal_id', String(sucursalId));
+    }
+
+    return this.http
+      .get<PacienteResumenIndicadoresResponse>(
+        `${this.baseUrl}/pacientes/${pacienteId}/resumen/indicadores`,
+        { params },
+      )
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
+  exportPacientes(params: PacienteExportParams): Observable<Blob> {
+    return this.http
+      .get(`${this.baseUrl}/pacientes/exportar`, {
+        params: this.buildParams(params),
+        responseType: 'blob',
+      })
+      .pipe(catchError((error: unknown) => this.failBlob(error)));
   }
 
   createPaciente(payload: PacienteCreatePayload): Observable<PacienteResponse> {
@@ -220,6 +270,40 @@ export class PacientesService {
   }
 
   private fail(error: unknown): Observable<never> {
+    return throwError(() => this.normalizeError(error));
+  }
+
+  private failBlob(error: unknown): Observable<never> {
+    if (error instanceof HttpErrorResponse && error.error instanceof Blob) {
+      return from(error.error.text()).pipe(
+        map((text) => {
+          try {
+            const body = JSON.parse(text) as {
+              message?: string;
+              code?: string;
+              errors?: Record<string, string[]>;
+            };
+
+            return {
+              status: error.status,
+              message:
+                typeof body.message === 'string' && body.message.trim() !== ''
+                  ? body.message
+                  : 'No se pudo completar la operación.',
+              code: typeof body.code === 'string' ? body.code : undefined,
+              errors: body.errors,
+            } satisfies PacientesApiError;
+          } catch {
+            return {
+              status: error.status,
+              message: error.message,
+            } satisfies PacientesApiError;
+          }
+        }),
+        switchMap((apiError) => throwError(() => apiError)),
+      );
+    }
+
     return throwError(() => this.normalizeError(error));
   }
 

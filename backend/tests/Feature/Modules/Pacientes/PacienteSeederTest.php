@@ -41,6 +41,9 @@ final class PacienteSeederTest extends PacientesTestCase
         $this->assertTrue($recepcion->hasPermissionTo('ficha_ingreso.observacion_ver'));
         $this->assertTrue($recepcion->hasPermissionTo('ficha_ingreso.observacion_agregar'));
         $this->assertTrue($administracion->hasPermissionTo('ficha_ingreso.observacion_agregar'));
+        $this->assertTrue($superadmin->hasPermissionTo('paciente.exportar_listado'));
+        $this->assertTrue($administracion->hasPermissionTo('paciente.exportar_listado'));
+        $this->assertFalse($recepcion->hasPermissionTo('paciente.exportar_listado'));
     }
 
     public function test_reseeding_does_not_restore_revoked_permissions(): void

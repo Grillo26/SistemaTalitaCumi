@@ -11,15 +11,27 @@ use App\Modules\Pacientes\Contracts\EntrevistaDirectoryContract;
 use App\Modules\Pacientes\Contracts\FichaIngresoDirectoryContract;
 use App\Modules\Pacientes\Contracts\FichaIngresoExporterContract;
 use App\Modules\Pacientes\Contracts\PacienteExporterContract;
+use App\Modules\Pacientes\Contracts\PacienteListadoPdfExporterContract;
+use App\Modules\Pacientes\Contracts\PatientAttendanceSummaryContract;
 use App\Modules\Pacientes\Contracts\PatientConsentContract;
 use App\Modules\Pacientes\Contracts\PatientDirectoryContract;
 use App\Modules\Pacientes\Contracts\PatientEnrollmentDirectoryContract;
+use App\Modules\Pacientes\Contracts\PatientPaymentAlertContract;
+use App\Modules\Pacientes\Contracts\PatientPaymentStatusContract;
+use App\Modules\Pacientes\Contracts\PatientServicesSummaryContract;
 use App\Modules\Pacientes\Contracts\StubDiagnosticTypeDirectoryContract;
 use App\Modules\Pacientes\Contracts\StubEntrevistaDirectoryContract;
+use App\Modules\Pacientes\Contracts\StubPatientAttendanceSummaryContract;
 use App\Modules\Pacientes\Contracts\StubPatientEnrollmentDirectoryContract;
+use App\Modules\Pacientes\Contracts\StubPatientPaymentAlertContract;
+use App\Modules\Pacientes\Contracts\StubPatientPaymentStatusContract;
+use App\Modules\Pacientes\Contracts\StubPatientServicesSummaryContract;
+use App\Modules\Pacientes\Contracts\StubTutorContactContract;
+use App\Modules\Pacientes\Contracts\TutorContactContract;
 use App\Modules\Pacientes\Contracts\TutorDirectoryContract;
 use App\Modules\Pacientes\Contracts\UnavailableFichaIngresoExporter;
 use App\Modules\Pacientes\Contracts\UnavailablePacienteExporter;
+use App\Modules\Pacientes\Contracts\UnavailablePacienteListadoPdfExporter;
 use App\Modules\Pacientes\Events\Consentimiento\ConsentimientoRegistered;
 use App\Modules\Pacientes\Events\Consentimiento\ConsentimientoRevoked;
 use App\Modules\Pacientes\Events\Consentimiento\ConsentimientoTipoCreated;
@@ -62,11 +74,17 @@ final class PacientesServiceProvider extends ServiceProvider
         $this->app->bind(TutorDirectoryContract::class, EloquentTutorDirectory::class);
         $this->app->bind(FichaIngresoDirectoryContract::class, EloquentFichaIngresoDirectory::class);
         $this->app->bind(PatientConsentContract::class, EloquentPatientConsent::class);
+        $this->app->bind(PatientServicesSummaryContract::class, StubPatientServicesSummaryContract::class);
+        $this->app->bind(PatientPaymentStatusContract::class, StubPatientPaymentStatusContract::class);
+        $this->app->bind(PatientAttendanceSummaryContract::class, StubPatientAttendanceSummaryContract::class);
+        $this->app->bind(TutorContactContract::class, StubTutorContactContract::class);
+        $this->app->bind(PatientPaymentAlertContract::class, StubPatientPaymentAlertContract::class);
         $this->app->bind(EntrevistaDirectoryContract::class, StubEntrevistaDirectoryContract::class);
         $this->app->bind(FichaIngresoExporterContract::class, UnavailableFichaIngresoExporter::class);
         $this->app->bind(DiagnosticTypeDirectoryContract::class, StubDiagnosticTypeDirectoryContract::class);
         $this->app->bind(PatientEnrollmentDirectoryContract::class, StubPatientEnrollmentDirectoryContract::class);
         $this->app->bind(PacienteExporterContract::class, UnavailablePacienteExporter::class);
+        $this->app->bind(PacienteListadoPdfExporterContract::class, UnavailablePacienteListadoPdfExporter::class);
     }
 
     public function boot(): void
@@ -121,5 +139,10 @@ final class PacientesServiceProvider extends ServiceProvider
             ->prefix('api'.PacientesModule::MODULE_URL)
             ->name('api.pacientes.observacion.')
             ->group(__DIR__.'/../routes-observacion.php');
+
+        Route::middleware('api')
+            ->prefix('api'.PacientesModule::MODULE_URL)
+            ->name('api.pacientes.resumen.')
+            ->group(__DIR__.'/../routes-resumen.php');
     }
 }

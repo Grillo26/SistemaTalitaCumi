@@ -57,6 +57,8 @@ export class PacientesPageComponent implements OnInit {
 
   readonly rows = signal<Paciente[]>([]);
   readonly loading = signal(false);
+  readonly exporting = signal(false);
+  readonly searchHint = signal<string | null>(null);
   readonly error = signal<PacientesApiError | null>(null);
   readonly abilities = signal<PacientePageAbilities>(EMPTY_PACIENTE_ABILITIES);
   readonly options = signal<PacienteOptions | null>(null);
@@ -88,13 +90,41 @@ export class PacientesPageComponent implements OnInit {
     { value: '1', label: 'Solo sin diagnóstico' },
   ];
 
+  readonly inscripcionFilterOptions = [
+    { value: '', label: 'Disponible con Inscripciones (06)' },
+  ];
+
+  readonly servicioFilterOptions = [
+    { value: '', label: 'Disponible con Inscripciones (06)' },
+  ];
+
+  readonly pagoFilterOptions = [
+    { value: '', label: 'Disponible con Pagos y caja (08)' },
+  ];
+
   ngOnInit(): void {
     this.loadOptions();
     this.load();
 
     this.searchControl.valueChanges
       .pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.load(1));
+      .subscribe((value) => {
+        const term = value.trim();
+
+        if (term.length === 1) {
+          this.searchHint.set(this.texts.searchTooShort);
+          this.rows.set([]);
+          this.total.set(0);
+          this.page.set(1);
+          this.lastPage.set(1);
+          this.from.set(null);
+          this.to.set(null);
+          return;
+        }
+
+        this.searchHint.set(null);
+        this.load(1);
+      });
   }
 
   loadOptions(): void {
@@ -176,8 +206,47 @@ export class PacientesPageComponent implements OnInit {
     this.load(page);
   }
 
+  openResumen(paciente: Paciente): void {
+    void this.router.navigate(['/pacientes', paciente.id, 'resumen']);
+  }
+
   openFicha(paciente: Paciente): void {
     void this.router.navigate(['/pacientes', paciente.id]);
+  }
+
+  exportCsv(): void {
+    if (!this.abilities().export_listado || this.exporting()) {
+      return;
+    }
+
+    this.exporting.set(true);
+    this.error.set(null);
+
+    this.service
+      .exportPacientes({
+        search: this.searchControl.value.trim() || undefined,
+        estado: this.estadoFilter() || undefined,
+        sucursal_registro_id: this.sucursalFilter() || undefined,
+        sin_diagnostico: this.sinDiagnostico() || undefined,
+        sort: this.sort(),
+        direction: this.direction(),
+        formato: 'csv',
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (blob) => {
+          this.exporting.set(false);
+          this.downloadBlob(blob);
+          this.toast.success(
+            this.texts.exportSuccess,
+            'El archivo respeta los filtros y tu alcance.',
+          );
+        },
+        error: (apiError: PacientesApiError) => {
+          this.exporting.set(false);
+          this.error.set(apiError);
+        },
+      });
   }
 
   openCreate(): void {
@@ -191,7 +260,7 @@ export class PacientesPageComponent implements OnInit {
   onCreated(paciente: Paciente): void {
     this.createOpen.set(false);
     this.toast.success('Paciente creado', 'La ficha quedó registrada y auditada.');
-    void this.router.navigate(['/pacientes', paciente.id]);
+    void this.router.navigate(['/pacientes', paciente.id, 'resumen']);
   }
 
   sucursalName(paciente: Paciente): string {
@@ -228,6 +297,16 @@ export class PacientesPageComponent implements OnInit {
 
   estadoColor(estado: PacienteEstado): 'success' | 'warning' | 'gray' {
     return estado === 'activo' ? 'success' : estado === 'en_pausa' ? 'warning' : 'gray';
+  }
+
+  private downloadBlob(blob: Blob): void {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+
+    anchor.href = url;
+    anchor.download = `pacientes_${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
   sortIndicator(column: PacienteSort): string {

@@ -4,6 +4,7 @@ use App\Modules\Pacientes\Http\Controllers\Contactos\PacienteContactoEmergenciaC
 use App\Modules\Pacientes\Http\Controllers\Registro\PacienteController;
 use App\Modules\Pacientes\Http\Controllers\Registro\PacienteStatusController;
 use App\Modules\Pacientes\Http\Controllers\Tutores\PacienteTutorController;
+use App\Modules\Pacientes\Support\PacienteResumenPermission;
 use App\Modules\Pacientes\Support\PacientesPermission;
 use Illuminate\Support\Facades\Route;
 use Spatie\Permission\Middleware\PermissionMiddleware;
@@ -27,6 +28,10 @@ Route::middleware('auth:sanctum')->prefix('pacientes')->group(function (): void 
     Route::get('/opciones', [PacienteController::class, 'options'])
         ->middleware(PermissionMiddleware::using(PacientesPermission::PATIENT_VIEW, 'sanctum'))
         ->name('options');
+
+    Route::get('/exportar', [PacienteController::class, 'export'])
+        ->middleware(PermissionMiddleware::using(PacienteResumenPermission::EXPORT_LISTADO, 'sanctum'))
+        ->name('export');
 
     Route::post('/', [PacienteController::class, 'store'])
         ->middleware(PermissionMiddleware::using(PacientesPermission::PATIENT_CREATE, 'sanctum'))

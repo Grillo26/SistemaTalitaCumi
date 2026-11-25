@@ -6,6 +6,8 @@ use App\Models\User;
 use App\Modules\Pacientes\Actions\Registro\CreatePacienteAction;
 use App\Modules\Pacientes\Actions\Registro\RejectPacienteDeletionAction;
 use App\Modules\Pacientes\Actions\Registro\UpdatePacienteAction;
+use App\Modules\Pacientes\Exceptions\PacienteExportTooLargeException;
+use App\Modules\Pacientes\Http\Requests\Registro\ExportPacienteRequest;
 use App\Modules\Pacientes\Http\Requests\Registro\IndexPacienteRequest;
 use App\Modules\Pacientes\Http\Requests\Registro\StorePacienteRequest;
 use App\Modules\Pacientes\Http\Requests\Registro\UpdatePacienteRequest;
@@ -15,9 +17,12 @@ use App\Modules\Pacientes\Queries\Registro\GetPacienteFormOptionsQuery;
 use App\Modules\Pacientes\Queries\Registro\GetPacienteQuery;
 use App\Modules\Pacientes\Queries\Registro\ListPacientesQuery;
 use App\Modules\Pacientes\Support\PacienteAbilities;
+use App\Modules\Pacientes\Support\PacienteCsvExporter;
+use App\Modules\Pacientes\Support\PacientesPermission;
 use App\Modules\Seguridad\Contracts\AuditRecorderContract;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Registro de pacientes — módulo 04.01.
@@ -45,6 +50,7 @@ final class PacienteController
             sort: (string) ($data['sort'] ?? 'nombre_completo'),
             direction: (string) ($data['direction'] ?? 'asc'),
             actor: $actor,
+            puedeBuscarTelefonoTutor: $actor->can(PacientesPermission::TUTOR_VIEW_CONTACT),
         );
 
         $items = collect($paginator->items())
@@ -69,6 +75,75 @@ final class PacienteController
                 'to' => $paginator->lastItem(),
             ],
             'can' => PacienteAbilities::collection($actor),
+        ]);
+    }
+
+    public function export(
+        ExportPacienteRequest $request,
+        ListPacientesQuery $query,
+        PacienteCsvExporter $exporter,
+        AuditRecorderContract $audit,
+    ): StreamedResponse {
+        /** @var User $actor */
+        $actor = $request->user();
+        $data = $request->validated();
+        $sucursalRegistroId = isset($data['sucursal_registro_id'])
+            ? (int) $data['sucursal_registro_id']
+            : null;
+
+        $builder = $query->builder(
+            search: $data['search'] ?? null,
+            estado: $data['estado'] ?? null,
+            tipoDiagnosticoId: isset($data['tipo_diagnostico_id']) ? (int) $data['tipo_diagnostico_id'] : null,
+            sinDiagnostico: array_key_exists('sin_diagnostico', $data) ? (bool) $data['sin_diagnostico'] : null,
+            sucursalRegistroId: $sucursalRegistroId,
+            sort: (string) ($data['sort'] ?? 'nombre_completo'),
+            direction: (string) ($data['direction'] ?? 'asc'),
+            actor: $actor,
+            puedeBuscarTelefonoTutor: $actor->can(PacientesPermission::TUTOR_VIEW_CONTACT),
+        );
+
+        $cantidad = $exporter->count($builder);
+        $maxRows = (int) config('pacientes.export_max_rows', 10000);
+
+        if ($cantidad > $maxRows) {
+            throw new PacienteExportTooLargeException($maxRows);
+        }
+
+        $search = trim((string) ($data['search'] ?? ''));
+
+        $audit->registrarExportacion(
+            recurso: 'pacientes_listado',
+            filtros: [
+                'search_presente' => $search !== '',
+                'search_longitud' => mb_strlen($search),
+                'estado' => $data['estado'] ?? null,
+                'tipo_diagnostico_id' => $data['tipo_diagnostico_id'] ?? null,
+                'sin_diagnostico' => $data['sin_diagnostico'] ?? null,
+                'sucursal_registro_id' => $sucursalRegistroId,
+                'sort' => (string) ($data['sort'] ?? 'nombre_completo'),
+                'direction' => (string) ($data['direction'] ?? 'asc'),
+                'formato' => 'csv',
+            ],
+            cantidad: $cantidad,
+            sucursalId: $sucursalRegistroId,
+            usuarioId: $actor->id,
+            ip: $request->ip(),
+        );
+
+        $filename = 'pacientes_'.now()->format('Ymd_His').'.csv';
+
+        return response()->streamDownload(function () use ($builder, $exporter, $actor): void {
+            $handle = fopen('php://output', 'w');
+
+            if ($handle === false) {
+                return;
+            }
+
+            $exporter->write($builder, $actor, $handle);
+            fclose($handle);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
         ]);
     }
 
