@@ -17,6 +17,8 @@ final class CatalogoServiciosModule
 
     public const MODULE_URL_CATEGORIAS = self::MODULE_URL.'/categorias-tarifa';
 
+    public const MODULE_URL_TIPOS_DIAGNOSTICO = self::MODULE_URL.'/tipos-diagnostico';
+
     public const AUDIT_MODULE = 'catalogo_servicios';
 
     public const CACHE_TTL_SECONDS = 60;

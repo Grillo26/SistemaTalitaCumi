@@ -2364,6 +2364,134 @@ Seeders: `CategoriaTarifaSeeder` (General, sin tarifas), `CatalogoTarifasPermiss
 
 ---
 
+## Módulo 05 — Catálogo de servicios y tarifas (submódulo 03)
+
+Submódulo de **tipos de diagnóstico y evaluación**. Un tipo es un servicio del catálogo con atributos adicionales (RN-D08): días estimados y especialidades requeridas con cantidad mínima. El catálogo es global y no se elimina físicamente.
+
+### Estructura agregada
+
+```text
+app/Modules/CatalogoServicios/
+├── Actions/TiposDiagnostico/
+│   ├── CreateTipoDiagnosticoAction
+│   ├── UpdateTipoDiagnosticoAction
+│   ├── ChangeTipoDiagnosticoStatusAction
+│   └── RejectTipoDiagnosticoDeletionAction
+├── Contracts/       TipoDiagnosticoUsage, EloquentProfessionalDiagnosticRequirements
+├── Events/          TipoDiagnosticoCreated, Updated, StatusChanged
+├── Exceptions/      Nombre/servicio duplicado, servicio no diagnóstico,
+│                    especialidad inactiva/duplicada, cantidad y días inválidos,
+│                    sin especialidades, DELETE no permitido
+├── Http/            Controller, requests y resource de tipos de diagnóstico
+├── Listeners/       RecordCatalogoDiagnosticosAudit
+├── Models/          TipoDiagnostico
+├── Queries/         Listado, ficha, requisitos cacheados
+├── Rules/           Nombre único, servicio diagnóstico, especialidades,
+│                    días, estado y participantes requeridos
+├── Support/         Snapshot, unicidad y guard
+└── routes-tipos-diagnostico.php
+```
+
+También se agregó `codigo` a `tipo_servicio` para identificar de forma estable el tipo `diagnostico_evaluacion`, sin depender del nombre configurable.
+
+### Endpoints
+
+Prefijo: `/api/catalogo-servicios`.
+
+| Entidad | Endpoints |
+|---|---|
+| Tipos de diagnóstico | `GET/POST /tipos-diagnostico`, `GET/PATCH /tipos-diagnostico/{id}`, `POST /{id}/activar`, `POST /{id}/desactivar`, `DELETE /{id}` → `409` |
+| Requisitos | `GET /tipos-diagnostico/{id}/especialidades-requeridas` |
+
+Filtros del listado: `search` (nombre/descripción), `estado` (`activo|inactivo`), `especialidad_id`, `page`, `per_page` (máx. 50), `sort` (`nombre|activo|dias_estimados|updated_at`) y `direction`.
+
+Reglas de la API:
+
+- Alta: servicio activo de tipo `diagnostico_evaluacion`, nombre único normalizado, al menos una especialidad activa y cantidad mínima `>= 1`.
+- Edición: exige `version`; el estado no se cambia por `PATCH`. Las especialidades enviadas reemplazan el conjunto completo.
+- Activación/desactivación: exige `motivo` y `version`; el estado debe ser distinto.
+- `DELETE` responde siempre `409 TIPO_DIAGNOSTICO_DELETE_NOT_ALLOWED`.
+- `409 VERSION_CONFLICT` para concurrencia; `409 TIPO_DIAGNOSTICO_SERVICIO_DUPLICADO` si el servicio ya tiene tipo; `422` para nombre duplicado, especialidad inactiva/duplicada, cantidad o días inválidos.
+
+### Permisos y alcance
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `tipos_diagnostico.ver` | sí | sí | sí |
+| `tipos_diagnostico.editar` | sí | no | no |
+
+El catálogo es global: no hay scoping por sucursal. La API devuelve `can.tipos_diagnostico` y la UI oculta las acciones de escritura; el backend revalida con `PermissionMiddleware`. Seeder: `CatalogoDiagnosticosPermissionSeeder`, con marcador propio `catalogo.diagnosticos`.
+
+### Eventos y bitácora
+
+| Entidad (`bitacora.entidad`) | Eventos |
+|---|---|
+| `tipo_diagnostico` | `TipoDiagnosticoCreated`, `TipoDiagnosticoUpdated`, `TipoDiagnosticoStatusChanged` |
+
+`RecordCatalogoDiagnosticosAudit` escribe `CREAR`, `ACTUALIZAR`, `ACTIVAR` y `DESACTIVAR`, con snapshots antes/después que incluyen nombre, descripción, días, estado, servicio y **especialidades con cantidad mínima**. `sucursal_id` es `NULL` porque el catálogo es global. `InvalidateCatalogoServiciosCache` invalida la clave `catalogo_servicios:tipos_diagnostico`.
+
+### Contratos y caché
+
+- **`ProfessionalDiagnosticRequirementsContract`** (módulo 03) → `EloquentProfessionalDiagnosticRequirements`: implementación real que devuelve `especialidad_id` + `cantidad_minima` desde el catálogo 05. Reemplaza el stub anterior.
+- **`EspecialidadDirectoryContract`** (módulo 03) → `EloquentEspecialidadDirectory`: existencia, estado y profesionales activos por especialidad y sucursal. Es la base para RN-D05 en agenda/diagnósticos.
+- **`ParticipantesRequeridosRule`**: regla pura que compara requisitos contra participantes y devuelve faltantes por especialidad.
+- **`TipoDiagnosticoUsageContract`** + `StubTipoDiagnosticoUsageContract`: `hasDiagnosticosRegistrados`; se implementará con 06/11.
+- `GetEspecialidadesRequeridasQuery` cachea los requisitos con TTL 60 s. `CatalogoServiciosExporterContract` se extendió con `exportarTiposDiagnostico`; `Unavailable...` lanza `LogicException`. Sin ruta ni botón.
+
+### Schema, migraciones y seeders
+
+Migraciones:
+
+- `2026_11_25_000500_add_codigo_to_tipo_servicio_table.php`.
+- `2026_11_25_000600_create_tipo_diagnostico_table.php`.
+- `2026_11_25_000700_create_tipo_diagnostico_profesional_table.php`.
+
+Cambios:
+
+- `tipo_servicio.codigo` nullable y único; el seeder asigna `entrevista`, `diagnostico_evaluacion`, `terapia_individual` y `sala_grupal`.
+- `tipo_diagnostico`: `servicio_id` único con FK, nombre único exacto y funcional, `dias_estimados > 0`, `activo`, `version`.
+- `tipo_diagnostico_profesional`: PK compuesta, `cantidad_minima >= 1`, FKs con `ON DELETE CASCADE` e índice por especialidad.
+- Sin `deleted_at`; el borrado se rechaza con `409`.
+- La FK `paciente.tipo_diagnostico_id` sigue diferida y `PacientesModule::DIAGNOSTICOS_DISPONIBLES` continúa en `false`: la integración con 04 no forma parte de este submódulo.
+
+Seeders: `CatalogoDiagnosticosPermissionSeeder` y `CatalogoDiagnosticosAccionAuditadaSeeder`. No se siembran tipos de diagnóstico ni especialidades: se administran desde la UI.
+
+### Checklist RF-D / RN-D
+
+| RF | Evidencia | Estado |
+|---|---|---|
+| RF-D01 | `CreateTipoDiagnosticoAction`, `StoreTipoDiagnosticoRequest` | Completo |
+| RF-D02 | Pivot `tipo_diagnostico_profesional` + `TipoDiagnosticoEspecialidadesRule` | Completo |
+| RF-D03 | Unicidad normalizada + guard + 422 | Completo |
+| RF-D04 | `UpdateTipoDiagnosticoAction` + snapshots en bitácora | Completo |
+| RF-D05 | `ChangeTipoDiagnosticoStatusAction` con motivo; bloqueo de nuevas inscripciones en 06 | API completa; consumo 06 |
+| RF-D06 | `ListTiposDiagnosticoQuery` + filtros UI | Completo |
+| RF-D07 | `GetTipoDiagnosticoQuery` + ficha | Completo |
+| RF-D08 | Endpoint de requisitos + contrato real de 03 | Completo; consumo 07/11 |
+| RF-D09 | `DELETE` siempre `409`; `TipoDiagnosticoUsageContract` stub | Bloqueo completo; uso histórico 06/11 |
+| RF-D10 | `RecordCatalogoDiagnosticosAudit` | Completo |
+| RF-D11 | API de catálogo + `ProfessionalDiagnosticRequirementsContract` | API completa; consumo 07/11 |
+| RF-D12 | `tipos_diagnostico.ver/editar` + `PermissionMiddleware` | Completo |
+| RF-D13 | `CatalogoServiciosExporterContract::exportarTiposDiagnostico` stub | Pendiente de infraestructura |
+
+| RN | Evidencia | Estado |
+|---|---|---|
+| RN-D01 | Catálogo global sin `sucursal_id` | Completo |
+| RN-D02 | Índice único funcional + `TipoDiagnosticoNombreUnicoRule` | Completo |
+| RN-D03 | Mínimo una especialidad en request, regla y Action | Completo |
+| RN-D04 | `cantidad_minima` en pivot y validación `>= 1` | Completo |
+| RN-D05 | `EspecialidadDirectoryContract` expone cobertura por especialidad/sucursal | Contrato listo; asignación en 07 |
+| RN-D06 | `activo` en API y ficha; históricos conservan su tipo | API completa; consumo 06/11 |
+| RN-D07 | Sin `DELETE`; solo desactivación | Completo |
+| RN-D08 | `servicio_id` único + validación de `tipo_servicio.codigo` | Completo |
+| RN-D09 | `motivo` obligatorio en activar/desactivar | Completo |
+| RN-D10 | Superadmin administra; Administración/Recepción solo consultan | Completo |
+| RN-D11 | `version` y snapshots; requisitos editables sin tocar diagnósticos previos | Catálogo versionado; snapshot en 06/11 |
+
+**TODOs:** implementar `TipoDiagnosticoUsageContract` con 06/11; exportación PDF/Excel; filtrado de tipos inactivos y snapshot de requisitos en inscripciones/diagnósticos (06/07/11); integrar la FK diferida de `paciente` cuando 04 lo habilite.
+
+---
+
 ## Notas
 
 - No se agregaron librerías de PDF/Excel ni se modificó ningún otro módulo de negocio.

@@ -22,6 +22,7 @@ export interface Area {
 export interface TipoServicio {
   id: number;
   nombre: string;
+  codigo?: string | null;
   activo: boolean;
   estado: EstadoCatalogo;
   servicios_total_count: number | null;
@@ -40,6 +41,7 @@ export interface AreaSummary {
 export interface TipoServicioSummary {
   id: number;
   nombre: string;
+  codigo?: string | null;
   activo: boolean;
 }
 

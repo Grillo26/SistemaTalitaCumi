@@ -92,6 +92,7 @@ Todas las rutas están dentro del layout principal y protegidas por `authGuard`.
 | `/catalogo` | Catálogo de servicios: áreas, servicios y tipos |
 | `/catalogo-servicios/servicios` | Redirige a `/catalogo` |
 | `/catalogo-servicios/tarifas` | Tarifas y categorías: vigencias, precios y consulta aplicable |
+| `/catalogo-servicios/tipos-diagnostico` | Tipos de diagnóstico: especialidades requeridas, días estimados y estado |
 | `/profesionales` | Profesionales: directorio, especialidades y sucursales |
 | `/inventario` | Inventario |
 | `/configuracion` | Redirige a `/organizacion/configuracion` |
@@ -1179,6 +1180,46 @@ Inputs: `title`, `description`. Estado vacío de los módulos pendientes.
 
 **Estado:** submódulo 02 implementado contra API real. Pendientes: selección de categoría en inscripción (06), integración de pagos (08), exportación PDF/Excel y migración inicial de tarifas.
 
+### 29. Tipos de diagnóstico
+
+**Ruta:** `/catalogo-servicios/tipos-diagnostico`.
+**Entrada de sidebar:** `Diagnósticos` (visible con `tipos_diagnostico.ver`).
+**Guard:** `permissionGuard` con `tipos_diagnostico.ver`.
+
+**Archivos:**
+
+- `src/app/pages/catalogo-servicios/tipos-diagnostico/tipos-diagnostico.page.ts`
+- `src/app/pages/catalogo-servicios/tipos-diagnostico/tipos-diagnostico.page.html`
+- `src/app/pages/catalogo-servicios/tipos-diagnostico/tipos-diagnostico.routes.ts`
+- `src/app/pages/catalogo-servicios/tipos-diagnostico/tipos-diagnostico.service.ts`
+- `src/app/pages/catalogo-servicios/tipos-diagnostico/tipos-diagnostico.models.ts`
+
+**API consumida:**
+
+| Entidad | Endpoints |
+|---|---|
+| Tipos de diagnóstico | `GET/POST /api/catalogo-servicios/tipos-diagnostico`, `GET/PATCH /tipos-diagnostico/{id}`, `POST /{id}/activar`, `POST /{id}/desactivar`, `DELETE /{id}` → `409` |
+| Requisitos | `GET /api/catalogo-servicios/tipos-diagnostico/{id}/especialidades-requeridas` |
+| Catálogos | `GET /api/catalogo-servicios/servicios` (filtra `tipo_servicio.codigo = diagnostico_evaluacion`) y `GET /api/profesionales/especialidades` |
+
+**Funcionalidad:**
+
+- Listado con búsqueda por nombre/descripción, filtros por estado y especialidad, orden por tipo/estado/días/última modificación y paginación.
+- Tabla con tipo y descripción, servicio y área, días estimados, especialidades requeridas con cantidad, estado y última modificación.
+- Ficha del tipo en `app-modal` con servicio, área, días, versión, descripción y especialidades requeridas; permite pasar a edición.
+- Alta/edición con servicio (solo servicios activos de tipo diagnóstico/evaluación), nombre, descripción, días estimados y configurador de especialidades con cantidad mínima. El estado inicial se define con `app-switch`; en edición el estado se cambia solo con las acciones de activar/desactivar.
+- Validación en cliente de al menos una especialidad, sin duplicados y cantidad `>= 1`; los errores `422` del backend se muestran por campo, incluidos los de las filas de especialidades.
+- Activación/desactivación con motivo obligatorio y `version`; `409 VERSION_CONFLICT` muestra alerta y permite recargar.
+- Sin eliminación: el botón no existe y el `DELETE` de la API responde `409`. Sin exportación (RF-D13 pendiente, sin botón).
+- Controles de escritura ocultos según `can.tipos_diagnostico`; el backend revalida permisos.
+- Los catálogos de servicios y especialidades son reales; si fallan se muestra una alerta y no se usan datos mock.
+
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-pagination`, `app-modal`, `TABLE_IMPORTS`, `input[app-input]`, `app-select-field`, `textarea[app-textarea]`, `app-switch`, `CatalogoServiciosService`, `ProfesionalesService` y `ToastService`.
+
+**Permisos:** `tipos_diagnostico.ver` para consultar; `tipos_diagnostico.editar` para crear, editar y cambiar estado. Superadmin administra; Administración y Recepción solo consultan.
+
+**Estado:** submódulo 03 implementado contra API real. Pendientes: exportación PDF/Excel, integración del tipo en la ficha de paciente (04), bloqueo de tipos inactivos en inscripciones (06) y snapshot de requisitos en diagnósticos (11).
+
 ---
 
 ## Paleta de colores
@@ -1231,7 +1272,7 @@ No se agregaron `swiper` ni `jsvectormap` porque sus componentes no forman parte
 - 04.02 Fase C: PDF de tutores y enlace de WhatsApp consumido por el módulo 09. El CSV de tutores ya está implementado.
 - 04.03 Fase C: PDF y entrevista 06 (las observaciones fechadas ya están implementadas).
 - 04.04: PDF del listado, indicadores reales de 06/07/08/09, alternancia de sucursal y alerta de pago. La búsqueda, la ficha resumen y el CSV ya están implementados.
-- Catálogo de tipos de diagnóstico (05): el campo queda “sin diagnóstico definido” y el filtro deshabilitado.
+- Integración de tipos de diagnóstico en pacientes (04 con 05): el catálogo ya existe en `/catalogo-servicios/tipos-diagnostico`, pero en la ficha de paciente el campo queda “sin diagnóstico definido” y el filtro deshabilitado hasta habilitar `DIAGNOSTICOS_DISPONIBLES`.
 - Filtro y visibilidad por sucursal de inscripción vigente (06), y bloqueo real de inscripciones/turnos (06/07).
 - Importación CSV de pacientes: no hay planilla del cliente; técnicamente viable sin librerías.
 - Cifrado de campo de datos clínicos (`encrypted`): no implementado por defecto; se evalúa con el cliente.

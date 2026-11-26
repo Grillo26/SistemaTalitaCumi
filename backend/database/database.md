@@ -174,7 +174,7 @@ erDiagram
 
 ### Pacientes y tutores
 
-> **Implementación real 04.01 + 04.02 Fase A:** las tablas físicas son `paciente`, `tutor`, `parentesco`, `paciente_tutor` y `estado_paciente_historial`. `paciente` es global y usa `sucursal_registro_id` como ancla de visibilidad, `version` para concurrencia optimista, columnas normalizadas para búsqueda/unicidad y `tipo_diagnostico_id` con **FK diferida** hasta el módulo 05. No hay `deleted_at`: el retiro es `estado = retirado` (04.01/RF-009, 04.01/RN-006). `tutor` tampoco usa SoftDeletes; se crea activo y se desactiva con motivo. `tutor.sucursal_registro_id` es su home branch y `paciente_tutor.parentesco_id` es el parentesco autoritativo de la relación. `estado_paciente_historial.usuario_id` apunta a `users` en la implementación real.
+> **Implementación real 04.01 + 04.02 Fase A:** las tablas físicas son `paciente`, `tutor`, `parentesco`, `paciente_tutor` y `estado_paciente_historial`. `paciente` es global y usa `sucursal_registro_id` como ancla de visibilidad, `version` para concurrencia optimista, columnas normalizadas para búsqueda/unicidad y `tipo_diagnostico_id` con **FK diferida** hasta habilitar la integración con el catálogo 05. No hay `deleted_at`: el retiro es `estado = retirado` (04.01/RF-009, 04.01/RN-006). `tutor` tampoco usa SoftDeletes; se crea activo y se desactiva con motivo. `tutor.sucursal_registro_id` es su home branch y `paciente_tutor.parentesco_id` es el parentesco autoritativo de la relación. `estado_paciente_historial.usuario_id` apunta a `users` en la implementación real.
 
 ```mermaid
 erDiagram
@@ -342,6 +342,7 @@ erDiagram
     tipo_servicio {
         bigint id PK
         varchar nombre UK
+        varchar codigo UK
         boolean activo
     }
     servicio {
@@ -370,8 +371,11 @@ erDiagram
     }
     tipo_diagnostico {
         bigint id PK
+        bigint servicio_id FK
         varchar nombre UK
         int dias_estimados
+        boolean activo
+        integer version
     }
     tipo_diagnostico_profesional {
         bigint tipo_diagnostico_id FK
@@ -389,6 +393,7 @@ erDiagram
     servicio ||--o{ tarifa : "tiene"
     categoria_tarifa ||--o{ tarifa : "clasifica"
     sucursal ||--o{ tarifa : "aplica en"
+    servicio ||--o| tipo_diagnostico : "se especializa"
     tipo_diagnostico ||--o{ tipo_diagnostico_profesional : "requiere"
 ```
 
@@ -1059,7 +1064,7 @@ Timestamps: `created_at`, `updated_at`.
 
 **Decisiones de esquema:**
 
-- `tipo_diagnostico_id` queda nullable y **sin FK física** hasta que exista la migración del módulo 05. La Action rechaza valores no nulos mientras `PacientesModule::DIAGNOSTICOS_DISPONIBLES = false`.
+- `tipo_diagnostico_id` queda nullable y **sin FK física**. La tabla `tipo_diagnostico` ya existe desde 05.03, pero la constraint se agregará cuando se habilite la integración con 04. La Action rechaza valores no nulos mientras `PacientesModule::DIAGNOSTICOS_DISPONIBLES = false`.
 - `sucursal_registro_id` es `NOT NULL` y se valida contra el alcance del usuario. No cambia desde la edición.
 - `sexo` es obligatorio (`M`/`F`).
 - `codigo` se genera como `PAC-` + id con 6 dígitos.
@@ -1387,10 +1392,11 @@ Sin `updated_at`; se escribe una revisión por mutación y no se actualiza ni bo
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
 | `nombre` | `varchar(100)` |  | `UNIQUE` funcional | Único sin distinguir mayúsculas ni espacios externos |
+| `codigo` | `varchar(50)` | sí | `UNIQUE` | Identificador estable (`diagnostico_evaluacion`); el nombre sigue siendo configurable |
 | `activo` | `boolean` |  | `DEFAULT true` |  |
 | `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
 
-Índices: `UNIQUE ((lower(trim(nombre))))`. Timestamps: `created_at`, `updated_at`.
+Índices: `UNIQUE (codigo)`, `UNIQUE ((lower(trim(nombre))))`. Timestamps: `created_at`, `updated_at`. Los tipos creados desde la UI del 01 sin código no son seleccionables como diagnóstico hasta que se les asigne uno.
 
 #### `servicio` — Servicios
 
@@ -1444,23 +1450,25 @@ Sin `deleted_at`: las tarifas no se eliminan; se cierra su vigencia con motivo. 
 
 #### `tipo_diagnostico` — Tipos de diagnóstico
 
-*Configuración.* Cada tipo define los profesionales requeridos y los días estimados.
+*Configuración.* Catálogo global (RN-D01). Cada tipo es un servicio del catálogo con atributos adicionales (RN-D08): días estimados y especialidades requeridas. No se elimina: se desactiva con motivo.
 
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `nombre` | `varchar(150)` |  | `UK` |  |
+| `servicio_id` | `bigint` |  | `FK → servicio`, `UNIQUE` | Servicio de tipo diagnóstico/evaluación (RN-D08) |
+| `nombre` | `varchar(150)` |  | `UK` exacto y funcional | Único sin distinguir mayúsculas ni espacios externos |
 | `descripcion` | `text` | sí |  |  |
-| `dias_estimados` | `int` |  | `DEFAULT 1` |  |
+| `dias_estimados` | `int` |  | `DEFAULT 1`, `CHECK > 0` |  |
 | `activo` | `boolean` |  | `DEFAULT true` |  |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
 
-Timestamps: `created_at`, `updated_at`.
+Índices: `UNIQUE (servicio_id)`, `UNIQUE (nombre)`, `UNIQUE ((lower(trim(nombre))))`. Timestamps: `created_at`, `updated_at`. Sin `deleted_at`: el `DELETE` responde `409`.
 
-#### `tipo_diagnostico_profesional` — Profesionales requeridos por tipo
+#### `tipo_diagnostico_profesional` — Especialidades requeridas por tipo
 
-*Configuración.* Define los profesionales mínimos por especialidad para cada tipo de diagnóstico.
+*Configuración.* Define las especialidades y la cantidad mínima de profesionales para cada tipo de diagnóstico (RN-D03, RN-D04).
 
-`PRIMARY KEY (tipo_diagnostico_id, especialidad_id)`. `cantidad_minima int DEFAULT 1`. Sin timestamps.
+`PRIMARY KEY (tipo_diagnostico_id, especialidad_id)`. `cantidad_minima int DEFAULT 1 CHECK (cantidad_minima >= 1)`. FKs con `ON DELETE CASCADE`; el tipo no se borra por API. Índice `(especialidad_id)`. Sin timestamps. Editar los requisitos no altera diagnósticos ya realizados: 06/11 deben conservar el snapshot aplicado (RN-D11).
 
 ---
 

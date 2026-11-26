@@ -15,6 +15,7 @@ final class TipoServicioResource extends JsonResource
         return [
             'id' => $this->id,
             'nombre' => $this->nombre,
+            'codigo' => $this->codigo,
             'activo' => (bool) $this->activo,
             'estado' => $this->activo ? 'activo' : 'inactivo',
             'servicios_total_count' => isset($this->servicios_total_count)

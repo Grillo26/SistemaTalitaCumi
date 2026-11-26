@@ -60,62 +60,62 @@
               </div>
             </div>
 
-            <div class="overflow-x-auto">
-              <table app-table>
-                <thead app-table-header>
+            <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+              <table app-table class="min-w-full">
+                <thead app-table-header class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
                   <tr app-table-row>
-                    <th app-table-cell [attr.aria-sort]="ariaSort(tarifaSort(), 'servicio', tarifaDirection())">
-                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortTarifas('servicio')">Servicio <span aria-hidden="true">{{ sortIndicator(tarifaSort(), 'servicio', tarifaDirection()) }}</span></button>
+                    <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="ariaSort(tarifaSort(), 'servicio', tarifaDirection())">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortTarifas('servicio')">Servicio <span aria-hidden="true">{{ sortIndicator(tarifaSort(), 'servicio', tarifaDirection()) }}</span></button>
                     </th>
-                    <th app-table-cell [attr.aria-sort]="ariaSort(tarifaSort(), 'categoria', tarifaDirection())">
-                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortTarifas('categoria')">Categoría <span aria-hidden="true">{{ sortIndicator(tarifaSort(), 'categoria', tarifaDirection()) }}</span></button>
+                    <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="ariaSort(tarifaSort(), 'categoria', tarifaDirection())">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortTarifas('categoria')">Categoría <span aria-hidden="true">{{ sortIndicator(tarifaSort(), 'categoria', tarifaDirection()) }}</span></button>
                     </th>
-                    <th app-table-cell [attr.aria-sort]="ariaSort(tarifaSort(), 'sucursal', tarifaDirection())">
-                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortTarifas('sucursal')">Sucursal <span aria-hidden="true">{{ sortIndicator(tarifaSort(), 'sucursal', tarifaDirection()) }}</span></button>
+                    <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="ariaSort(tarifaSort(), 'sucursal', tarifaDirection())">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortTarifas('sucursal')">Sucursal <span aria-hidden="true">{{ sortIndicator(tarifaSort(), 'sucursal', tarifaDirection()) }}</span></button>
                     </th>
-                    <th app-table-cell [attr.aria-sort]="ariaSort(tarifaSort(), 'monto', tarifaDirection())">
-                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortTarifas('monto')">Monto <span aria-hidden="true">{{ sortIndicator(tarifaSort(), 'monto', tarifaDirection()) }}</span></button>
+                    <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="ariaSort(tarifaSort(), 'monto', tarifaDirection())">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortTarifas('monto')">Monto <span aria-hidden="true">{{ sortIndicator(tarifaSort(), 'monto', tarifaDirection()) }}</span></button>
                     </th>
-                    <th app-table-cell [attr.aria-sort]="ariaSort(tarifaSort(), 'vigente_desde', tarifaDirection())">
-                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortTarifas('vigente_desde')">Vigencia <span aria-hidden="true">{{ sortIndicator(tarifaSort(), 'vigente_desde', tarifaDirection()) }}</span></button>
+                    <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="ariaSort(tarifaSort(), 'vigente_desde', tarifaDirection())">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortTarifas('vigente_desde')">Vigencia <span aria-hidden="true">{{ sortIndicator(tarifaSort(), 'vigente_desde', tarifaDirection()) }}</span></button>
                     </th>
-                    <th app-table-cell>Estado</th>
-                    <th app-table-cell class="text-right">Acciones</th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Estado</th>
+                    <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
                   </tr>
                 </thead>
-                <tbody app-table-body>
+                <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
                   @if (loading()) {
-                    <tr app-table-row><td app-table-cell colspan="7" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">Cargando tarifas...</td></tr>
+                    <tr app-table-row><td app-table-cell colspan="7" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">Cargando tarifas...</td></tr>
                   } @else {
                     @for (tarifa of tarifas(); track tarifa.id) {
-                      <tr app-table-row>
-                        <td app-table-cell>
-                          <p class="font-medium text-gray-800 dark:text-white/90">{{ tarifa.servicio?.nombre || '—' }}</p>
+                      <tr app-table-row class="transition-colors hover:bg-gray-50/70 dark:hover:bg-white/[0.02]">
+                        <td app-table-cell class="px-4 py-4">
+                          <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ tarifa.servicio?.nombre || '—' }}</p>
                           @if (tarifa.servicio?.area; as area) {
                             <span class="mt-0.5 inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
                               <span class="inline-block size-2 rounded-full" [style.background]="area.color" aria-hidden="true"></span>{{ area.nombre }}
                             </span>
                           }
                         </td>
-                        <td app-table-cell>{{ tarifa.categoria?.nombre || '—' }}</td>
-                        <td app-table-cell>{{ tarifa.sucursal?.nombre || texts.global }}</td>
-                        <td app-table-cell class="font-medium">{{ formatMonto(tarifa.monto) }}</td>
-                        <td app-table-cell class="whitespace-nowrap text-sm">{{ formatDate(tarifa.vigente_desde) }} — {{ tarifa.vigente_hasta ? formatDate(tarifa.vigente_hasta) : 'abierta' }}</td>
-                        <td app-table-cell><app-badge [color]="estadoVigenciaColor(tarifa.estado_vigencia)" variant="light" size="sm">{{ estadoVigenciaLabel(tarifa.estado_vigencia) }}</app-badge></td>
-                        <td app-table-cell>
-                          <div class="flex flex-wrap justify-end gap-2">
+                        <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ tarifa.categoria?.nombre || '—' }}</td>
+                        <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ tarifa.sucursal?.nombre || texts.global }}</td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm font-medium text-gray-800 dark:text-white/90">{{ formatMonto(tarifa.monto) }}</td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ formatDate(tarifa.vigente_desde) }} — {{ tarifa.vigente_hasta ? formatDate(tarifa.vigente_hasta) : 'abierta' }}</td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4"><app-badge [color]="estadoVigenciaColor(tarifa.estado_vigencia)" variant="light" size="sm">{{ estadoVigenciaLabel(tarifa.estado_vigencia) }}</app-badge></td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-end">
+                          <div class="flex flex-wrap items-center justify-end gap-1">
                             <button app-button variant="ghost" size="sm" type="button" (click)="openTarifaDetail(tarifa)">Ver</button>
                             @if (canEditTarifa() && tarifa.can.update) {
-                              <button app-button variant="outline" size="sm" type="button" (click)="openTarifaEdit(tarifa)">Editar</button>
+                              <button app-button variant="ghost" size="sm" type="button" (click)="openTarifaEdit(tarifa)">Editar</button>
                             }
                             @if (canCloseTarifa() && tarifa.can.close) {
-                              <button app-button variant="destructive" size="sm" type="button" (click)="openClose(tarifa)">Cerrar vigencia</button>
+                              <button app-button variant="link" size="sm" type="button" className="text-error-500 hover:text-error-600" (click)="openClose(tarifa)">Cerrar vigencia</button>
                             }
                           </div>
                         </td>
                       </tr>
                     } @empty {
-                      <tr app-table-row><td app-table-cell colspan="7" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.emptyTarifas }}</td></tr>
+                      <tr app-table-row><td app-table-cell colspan="7" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.emptyTarifas }}</td></tr>
                     }
                   }
                 </tbody>
@@ -152,48 +152,54 @@
               }
             </div>
 
-            <div class="overflow-x-auto">
-              <table app-table>
-                <thead app-table-header>
+            <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+              <table app-table class="min-w-full">
+                <thead app-table-header class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
                   <tr app-table-row>
-                    <th app-table-cell [attr.aria-sort]="ariaSort(categoriaSort(), 'nombre', categoriaDirection())">
-                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortCategorias('nombre')">Categoría <span aria-hidden="true">{{ sortIndicator(categoriaSort(), 'nombre', categoriaDirection()) }}</span></button>
+                    <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="ariaSort(categoriaSort(), 'nombre', categoriaDirection())">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortCategorias('nombre')">Categoría <span aria-hidden="true">{{ sortIndicator(categoriaSort(), 'nombre', categoriaDirection()) }}</span></button>
                     </th>
-                    <th app-table-cell>Descripción</th>
-                    <th app-table-cell>Tarifas vigentes</th>
-                    <th app-table-cell>Total tarifas</th>
-                    <th app-table-cell [attr.aria-sort]="ariaSort(categoriaSort(), 'activo', categoriaDirection())">
-                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortCategorias('activo')">Estado <span aria-hidden="true">{{ sortIndicator(categoriaSort(), 'activo', categoriaDirection()) }}</span></button>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Descripción</th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Tarifas vigentes</th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Total tarifas</th>
+                    <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="ariaSort(categoriaSort(), 'activo', categoriaDirection())">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortCategorias('activo')">Estado <span aria-hidden="true">{{ sortIndicator(categoriaSort(), 'activo', categoriaDirection()) }}</span></button>
                     </th>
-                    <th app-table-cell>Última modificación</th>
-                    <th app-table-cell class="text-right">Acciones</th>
+                    <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="ariaSort(categoriaSort(), 'updated_at', categoriaDirection())">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortCategorias('updated_at')">Última modificación <span aria-hidden="true">{{ sortIndicator(categoriaSort(), 'updated_at', categoriaDirection()) }}</span></button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
                   </tr>
                 </thead>
-                <tbody app-table-body>
+                <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
                   @if (loading()) {
-                    <tr app-table-row><td app-table-cell colspan="7" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">Cargando categorías...</td></tr>
+                    <tr app-table-row><td app-table-cell colspan="7" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">Cargando categorías...</td></tr>
                   } @else {
                     @for (categoria of categorias(); track categoria.id) {
-                      <tr app-table-row>
-                        <td app-table-cell class="font-medium text-gray-800 dark:text-white/90">{{ categoria.nombre }}</td>
-                        <td app-table-cell>{{ categoria.descripcion || '—' }}</td>
-                        <td app-table-cell>{{ categoria.tarifas_vigentes_count ?? 0 }}</td>
-                        <td app-table-cell>{{ categoria.tarifas_total_count ?? 0 }}</td>
-                        <td app-table-cell><app-badge [color]="categoria.activo ? 'success' : 'gray'" variant="light" size="sm">{{ categoria.activo ? 'Activa' : 'Inactiva' }}</app-badge></td>
-                        <td app-table-cell>{{ formatDate(categoria.updated_at) }}</td>
-                        <td app-table-cell>
-                          <div class="flex flex-wrap justify-end gap-2">
+                      <tr app-table-row class="transition-colors hover:bg-gray-50/70 dark:hover:bg-white/[0.02]">
+                        <td app-table-cell class="px-4 py-4 text-sm font-medium text-gray-800 dark:text-white/90">{{ categoria.nombre }}</td>
+                        <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ categoria.descripcion || '—' }}</td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ categoria.tarifas_vigentes_count ?? 0 }}</td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ categoria.tarifas_total_count ?? 0 }}</td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4"><app-badge [color]="categoria.activo ? 'success' : 'gray'" variant="light" size="sm">{{ categoria.activo ? 'Activa' : 'Inactiva' }}</app-badge></td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ formatDate(categoria.updated_at) }}</td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-end">
+                          <div class="flex flex-wrap items-center justify-end gap-1">
                             @if (canEditCategoria()) {
-                              <button app-button variant="outline" size="sm" type="button" (click)="openCategoriaEdit(categoria)">Editar</button>
+                              <button app-button variant="ghost" size="sm" type="button" (click)="openCategoriaEdit(categoria)">Editar</button>
                             }
                             @if (canChangeCategoriaStatus()) {
-                              <button app-button [variant]="categoria.activo ? 'destructive' : 'outline'" size="sm" type="button" (click)="openStatus(categoria, categoria.activo ? 'deactivate' : 'activate')">{{ categoria.activo ? 'Desactivar' : 'Activar' }}</button>
+                              @if (categoria.activo) {
+                                <button app-button variant="link" size="sm" type="button" className="text-error-500 hover:text-error-600" (click)="openStatus(categoria, 'deactivate')">Desactivar</button>
+                              } @else {
+                                <button app-button variant="ghost" size="sm" type="button" (click)="openStatus(categoria, 'activate')">Activar</button>
+                              }
                             }
                           </div>
                         </td>
                       </tr>
                     } @empty {
-                      <tr app-table-row><td app-table-cell colspan="7" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.emptyCategorias }}</td></tr>
+                      <tr app-table-row><td app-table-cell colspan="7" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.emptyCategorias }}</td></tr>
                     }
                   }
                 </tbody>

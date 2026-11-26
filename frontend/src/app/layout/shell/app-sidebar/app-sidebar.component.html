@@ -56,31 +56,93 @@
           </h2>
 
           <ul class="flex flex-col gap-1">
-            @for (nav of navItems; track nav.path) {
+            @for (nav of navItems; track nav.name) {
               <li>
-                <a
-                  [routerLink]="nav.path"
-                  (click)="closeMobile()"
-                  class="group menu-item"
-                  [class.menu-item-active]="isActive(nav.path)"
-                  [class.menu-item-inactive]="!isActive(nav.path)"
-                  [ngClass]="{
-                    'xl:justify-center': !(isVisible$ | async),
-                    'xl:justify-start': (isVisible$ | async)
-                  }"
-                  [attr.aria-current]="isActive(nav.path) ? 'page' : null"
-                >
-                  <span
-                    class="menu-item-icon-size"
-                    [class.menu-item-icon-active]="isActive(nav.path)"
-                    [class.menu-item-icon-inactive]="!isActive(nav.path)"
-                    [innerHTML]="nav.icon | safeHtml"
-                  ></span>
+                @if (nav.children; as children) {
+                  <button
+                    type="button"
+                    class="group menu-item"
+                    [class.menu-item-active]="isGroupActive(nav)"
+                    [class.menu-item-inactive]="!isGroupActive(nav)"
+                    [ngClass]="{
+                      'xl:justify-center': !(isVisible$ | async),
+                      'xl:justify-start': (isVisible$ | async)
+                    }"
+                    [attr.aria-expanded]="isGroupOpen(nav)"
+                    (click)="toggleGroup(nav)"
+                  >
+                    <span
+                      class="menu-item-icon-size"
+                      [class.menu-item-icon-active]="isGroupActive(nav)"
+                      [class.menu-item-icon-inactive]="!isGroupActive(nav)"
+                      [innerHTML]="nav.icon | safeHtml"
+                    ></span>
+
+                    @if (isVisible$ | async) {
+                      <span class="menu-item-text">{{ nav.name }}</span>
+                      <svg
+                        class="menu-item-arrow ms-auto size-5 transition-transform duration-200"
+                        [class.menu-item-arrow-active]="isGroupOpen(nav)"
+                        [class.menu-item-arrow-inactive]="!isGroupOpen(nav)"
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.7"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="m6 8 4 4 4-4" />
+                      </svg>
+                    }
+                  </button>
 
                   @if (isVisible$ | async) {
-                    <span class="menu-item-text">{{ nav.name }}</span>
+                    @if (isGroupOpen(nav)) {
+                      <ul class="mt-1 ms-4 flex flex-col gap-1 border-s border-gray-200 ps-3 dark:border-gray-800">
+                        @for (child of children; track child.path) {
+                          <li>
+                            <a
+                              [routerLink]="child.path"
+                              (click)="closeMobile()"
+                              class="group menu-dropdown-item transition-colors"
+                              [class.menu-dropdown-item-active]="isActive(child.path)"
+                              [class.menu-dropdown-item-inactive]="!isActive(child.path)"
+                              [attr.aria-current]="isActive(child.path) ? 'page' : null"
+                            >
+                              <span class="size-1.5 shrink-0 rounded-full bg-current" aria-hidden="true"></span>
+                              <span class="menu-item-text">{{ child.name }}</span>
+                            </a>
+                          </li>
+                        }
+                      </ul>
+                    }
                   }
-                </a>
+                } @else {
+                  <a
+                    [routerLink]="nav.path"
+                    (click)="closeMobile()"
+                    class="group menu-item"
+                    [class.menu-item-active]="isActive(nav.path)"
+                    [class.menu-item-inactive]="!isActive(nav.path)"
+                    [ngClass]="{
+                      'xl:justify-center': !(isVisible$ | async),
+                      'xl:justify-start': (isVisible$ | async)
+                    }"
+                    [attr.aria-current]="isActive(nav.path) ? 'page' : null"
+                  >
+                    <span
+                      class="menu-item-icon-size"
+                      [class.menu-item-icon-active]="isActive(nav.path)"
+                      [class.menu-item-icon-inactive]="!isActive(nav.path)"
+                      [innerHTML]="nav.icon | safeHtml"
+                    ></span>
+
+                    @if (isVisible$ | async) {
+                      <span class="menu-item-text">{{ nav.name }}</span>
+                    }
+                  </a>
+                }
               </li>
             }
           </ul>

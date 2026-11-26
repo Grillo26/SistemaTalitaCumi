@@ -27,6 +27,11 @@ final class CatalogoServiciosCacheKeys
         return 'catalogo_servicios:tarifas';
     }
 
+    public static function tiposDiagnostico(): string
+    {
+        return 'catalogo_servicios:tipos_diagnostico';
+    }
+
     /**
      * @return list<string>
      */
@@ -37,6 +42,7 @@ final class CatalogoServiciosCacheKeys
             self::servicios(),
             self::tiposServicio(),
             self::tarifas(),
+            self::tiposDiagnostico(),
         ];
     }
 }

@@ -76,6 +76,16 @@ export const routes: Routes = [
         title: 'Tarifas y categorías | TalitaCumi',
       },
       {
+        path: 'catalogo-servicios/tipos-diagnostico',
+        canActivate: [permissionGuard],
+        data: { permission: 'tipos_diagnostico.ver' },
+        loadChildren: () =>
+          import('./pages/catalogo-servicios/tipos-diagnostico/tipos-diagnostico.routes').then(
+            (m) => m.TIPOS_DIAGNOSTICO_ROUTES,
+          ),
+        title: 'Tipos de diagnóstico | TalitaCumi',
+      },
+      {
         path: 'catalogo',
         canActivate: [permissionGuard],
         data: { permissions: ['areas.ver', 'servicios.ver'] },

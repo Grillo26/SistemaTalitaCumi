@@ -96,8 +96,14 @@ final class ProfesionalListTest extends ProfesionalesTestCase
         $psicologia = $this->especialidad('Psicología');
         $fisioterapia = Especialidad::factory()->create(['nombre' => 'Fisioterapia Filtro']);
 
-        $a = $this->profesional(['nombre_completo' => 'Ana Filtro'], $psicologia);
-        $b = $this->profesional(['nombre_completo' => 'Beatriz Filtro'], $fisioterapia);
+        $a = $this->profesional([
+            'nombre_completo' => 'Ana Filtro',
+            'email' => 'ana.filtro@example.test',
+        ], $psicologia);
+        $b = $this->profesional([
+            'nombre_completo' => 'Beatriz Filtro',
+            'email' => 'beatriz.filtro@example.test',
+        ], $fisioterapia);
         $this->assignBranch($a, $branch);
 
         $this->getJson('/api/profesionales/profesionales?search=Ana')

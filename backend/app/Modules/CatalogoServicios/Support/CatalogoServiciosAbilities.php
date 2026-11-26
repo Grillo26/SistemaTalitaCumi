@@ -21,6 +21,7 @@ final class CatalogoServiciosAbilities
         $servicioEdit = $user->can(CatalogoServiciosPermission::SERVICIO_EDIT);
         $tarifaEdit = $user->can(CatalogoServiciosPermission::TARIFA_EDIT);
         $categoriaEdit = $user->can(CatalogoServiciosPermission::CATEGORIA_EDIT);
+        $diagnosticoEdit = $user->can(CatalogoServiciosPermission::TIPO_DIAGNOSTICO_EDIT);
 
         return [
             'areas' => [
@@ -59,7 +60,14 @@ final class CatalogoServiciosAbilities
                 'change_status' => $categoriaEdit,
                 'delete' => false,
             ],
-            // RF-C17 y RF-T18 pendientes de infraestructura.
+            'tipos_diagnostico' => [
+                'view' => $user->can(CatalogoServiciosPermission::TIPO_DIAGNOSTICO_VIEW),
+                'create' => $diagnosticoEdit,
+                'update' => $diagnosticoEdit,
+                'change_status' => $diagnosticoEdit,
+                'delete' => false,
+            ],
+            // RF-C17, RF-T18 y RF-D13 pendientes de infraestructura.
             'export' => false,
         ];
     }

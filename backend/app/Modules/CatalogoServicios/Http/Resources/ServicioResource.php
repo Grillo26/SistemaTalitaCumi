@@ -23,6 +23,7 @@ final class ServicioResource extends JsonResource
             'tipo_servicio' => $this->tipoServicio === null ? null : [
                 'id' => $this->tipoServicio->id,
                 'nombre' => $this->tipoServicio->nombre,
+                'codigo' => $this->tipoServicio->codigo,
                 'activo' => (bool) $this->tipoServicio->activo,
             ],
             'nombre' => $this->nombre,

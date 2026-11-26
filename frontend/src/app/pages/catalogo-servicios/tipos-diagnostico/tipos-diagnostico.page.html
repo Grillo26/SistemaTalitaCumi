@@ -1,0 +1,300 @@
+<div>
+  <app-page-breadcrumb pageTitle="Tipos de diagnóstico" />
+
+  <div class="space-y-5 sm:space-y-6">
+    @if (error(); as apiError) {
+      <app-alert variant="error" title="No se pudo completar la operación" [message]="apiError.message" />
+    }
+    @if (catalogError(); as message) {
+      <app-alert variant="warning" title="Catálogo incompleto" [message]="message" />
+    }
+
+    <app-component-card [title]="texts.title" [desc]="texts.subtitle">
+      <div class="space-y-4">
+        <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <div class="relative w-full sm:w-64">
+              <span class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-gray-400" aria-hidden="true">
+                <svg class="size-5" viewBox="0 0 20 20" fill="none">
+                  <path d="M14.382 14.383l3.325 3.326m-1.249-8.334a7.082 7.082 0 01-7.083 7.081 7.082 7.082 0 110-14.163 7.082 7.082 0 017.083 7.082z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <input app-input type="text" [formControl]="search" class="ps-10" placeholder="Buscar tipo..." aria-label="Buscar tipos de diagnóstico" />
+            </div>
+
+            <div class="w-full sm:w-40">
+              <app-select-field [options]="estadoOptions" [value]="estadoFilter()" placeholder="Todos los estados" ariaLabel="Filtrar por estado" (valueChange)="onEstadoFilter($event)" />
+            </div>
+
+            <div class="w-full sm:w-52">
+              <app-select-field [options]="especialidadFilterOptions()" [value]="especialidadFilter()" placeholder="Todas las especialidades" ariaLabel="Filtrar por especialidad" (valueChange)="onEspecialidadFilter($event)" />
+            </div>
+          </div>
+
+          @if (canCreate()) {
+            <button app-button type="button" (click)="openCreate()">Nuevo tipo de diagnóstico</button>
+          }
+        </div>
+
+        <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+          <table app-table class="min-w-full">
+            <thead app-table-header class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
+              <tr app-table-row>
+                <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="ariaSort('nombre')">
+                  <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortBy('nombre')">Tipo <span aria-hidden="true">{{ sortIndicator('nombre') }}</span></button>
+                </th>
+                <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Servicio</th>
+                <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="ariaSort('dias_estimados')">
+                  <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortBy('dias_estimados')">Días estimados <span aria-hidden="true">{{ sortIndicator('dias_estimados') }}</span></button>
+                </th>
+                <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Especialidades requeridas</th>
+                <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="ariaSort('activo')">
+                  <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortBy('activo')">Estado <span aria-hidden="true">{{ sortIndicator('activo') }}</span></button>
+                </th>
+                <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="ariaSort('updated_at')">
+                  <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortBy('updated_at')">Última modificación <span aria-hidden="true">{{ sortIndicator('updated_at') }}</span></button>
+                </th>
+                <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
+              </tr>
+            </thead>
+            <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+              @if (loading()) {
+                <tr app-table-row><td app-table-cell colspan="7" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">Cargando tipos de diagnóstico...</td></tr>
+              } @else {
+                @for (tipo of tipos(); track tipo.id) {
+                  <tr app-table-row class="transition-colors hover:bg-gray-50/70 dark:hover:bg-white/[0.02]">
+                    <td app-table-cell class="px-4 py-4">
+                      <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ tipo.nombre }}</p>
+                      @if (tipo.descripcion) {
+                        <p class="mt-0.5 line-clamp-1 text-xs text-gray-500 dark:text-gray-400">{{ tipo.descripcion }}</p>
+                      }
+                    </td>
+                    <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                      <span class="inline-flex items-center gap-2">
+                        @if (tipo.servicio?.area) {
+                          <span class="inline-block size-2.5 rounded-full" [style.background]="tipo.servicio?.area?.color || '#6B7280'" aria-hidden="true"></span>
+                        }
+                        {{ tipo.servicio?.nombre || '—' }}
+                      </span>
+                    </td>
+                    <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ tipo.dias_estimados }}</td>
+                    <td app-table-cell class="px-4 py-4">
+                      @if (tipo.especialidades.length > 0) {
+                        <div class="flex max-w-xs flex-wrap gap-1">
+                          @for (especialidad of tipo.especialidades; track especialidad.especialidad_id) {
+                            <app-badge color="gray" variant="light" size="sm">
+                              {{ especialidad.nombre }} × {{ especialidad.cantidad_minima }}
+                            </app-badge>
+                          }
+                        </div>
+                      } @else {
+                        <span class="text-sm text-gray-500 dark:text-gray-400">{{ texts.noEspecialidadesSelected }}</span>
+                      }
+                    </td>
+                    <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                      <app-badge [color]="estadoColor(tipo.activo)" variant="light" size="sm">
+                        {{ tipo.activo ? 'Activo' : 'Inactivo' }}
+                      </app-badge>
+                    </td>
+                    <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ formatDate(tipo.updated_at) }}</td>
+                    <td app-table-cell class="whitespace-nowrap px-4 py-4 text-end">
+                      <div class="flex flex-wrap items-center justify-end gap-1">
+                        <button app-button variant="ghost" size="sm" type="button" (click)="openDetail(tipo)">Ver</button>
+                        @if (canEdit()) {
+                          <button app-button variant="ghost" size="sm" type="button" (click)="openEdit(tipo)">Editar</button>
+                        }
+                        @if (canChangeStatus()) {
+                          @if (tipo.activo) {
+                            <button app-button variant="link" size="sm" type="button" className="text-error-500 hover:text-error-600" (click)="openStatus(tipo, 'deactivate')">Desactivar</button>
+                          } @else {
+                            <button app-button variant="ghost" size="sm" type="button" (click)="openStatus(tipo, 'activate')">Activar</button>
+                          }
+                        }
+                      </div>
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr app-table-row><td app-table-cell colspan="7" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.empty }}</td></tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+
+        @if (total() > 0) {
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p class="text-sm text-gray-500 dark:text-gray-400">Mostrando {{ from() ?? 0 }}–{{ to() ?? 0 }} de {{ total() }}</p>
+            <app-pagination [currentPage]="page()" [totalPages]="lastPage()" variant="text-icon" (pageChange)="goToPage($event)" />
+          </div>
+        }
+
+        <p class="text-xs text-gray-500 dark:text-gray-400">Los tipos de diagnóstico no se eliminan: se desactivan con motivo.</p>
+      </div>
+    </app-component-card>
+  </div>
+
+  <app-modal [open]="formOpen()" [title]="formMode() === 'create' ? 'Nuevo tipo de diagnóstico' : 'Editar tipo de diagnóstico'" subtitle="Los campos marcados con * son obligatorios." size="lg" (closed)="closeForm()">
+    <form class="space-y-4" [formGroup]="tipoForm" (ngSubmit)="saveTipo()">
+      @if (formError(); as message) { <app-alert variant="error" [message]="message" /> }
+      @if (concurrency()) { <app-alert variant="warning" title="Conflicto de edición" message="Otra persona modificó este tipo. Cerrá el formulario y volvé a abrirlo para cargar la última versión." /> }
+
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Servicio diagnóstico *</label>
+        <app-select-field [options]="servicioOptions()" [value]="tipoForm.controls.servicio_id.value" placeholder="Seleccioná un servicio" ariaLabel="Servicio del tipo de diagnóstico" (valueChange)="tipoForm.controls.servicio_id.setValue($event)" />
+        @if (servicioOptions().length === 0) {
+          <p class="mt-1 text-xs text-warning-600 dark:text-warning-400">No hay servicios activos de tipo diagnóstico/evaluación. Verificá el catálogo de servicios.</p>
+        }
+        @if (fieldError('servicio_id'); as message) { <p class="mt-1 text-xs text-error-500">{{ message }}</p> }
+      </div>
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tipo-nombre">Nombre *</label>
+          <input id="tipo-nombre" app-input type="text" formControlName="nombre" placeholder="Ej. Evaluación integral" />
+          @if (fieldError('nombre'); as message) { <p class="mt-1 text-xs text-error-500">{{ message }}</p> }
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tipo-dias">Días estimados *</label>
+          <input id="tipo-dias" app-input type="number" min="1" formControlName="dias_estimados" />
+          @if (fieldError('dias_estimados'); as message) { <p class="mt-1 text-xs text-error-500">{{ message }}</p> }
+        </div>
+      </div>
+
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tipo-descripcion">Descripción</label>
+        <textarea id="tipo-descripcion" app-textarea rows="3" formControlName="descripcion" placeholder="Descripción del tipo de diagnóstico"></textarea>
+        @if (fieldError('descripcion'); as message) { <p class="mt-1 text-xs text-error-500">{{ message }}</p> }
+      </div>
+
+      <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p class="text-sm font-semibold text-gray-800 dark:text-white/90">Especialidades requeridas *</p>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Indicá cuántos profesionales de cada especialidad se requieren.</p>
+          </div>
+          <button app-button variant="outline" size="sm" type="button" (click)="addEspecialidad()" [disabled]="especialidades().length === 0">Agregar especialidad</button>
+        </div>
+
+        @if (especialidades().length === 0) {
+          <p class="mt-3 text-xs text-warning-600 dark:text-warning-400">{{ texts.especialidadesUnavailable }}</p>
+        }
+
+        <div class="mt-3 space-y-3" formArrayName="especialidades">
+          @for (row of especialidadesArray.controls; track row; let i = $index) {
+            <div class="grid gap-3 sm:grid-cols-[1fr_120px_40px]" [formGroupName]="i">
+              <div>
+                <app-select-field [options]="especialidadOptionsFor(i)" [value]="row.get('especialidad_id')?.value" placeholder="Especialidad" ariaLabel="Especialidad requerida" (valueChange)="row.get('especialidad_id')?.setValue($event)" />
+                @if (especialidadRowError(i, 'especialidad_id'); as message) { <p class="mt-1 text-xs text-error-500">{{ message }}</p> }
+              </div>
+              <div>
+                <input app-input type="number" min="1" formControlName="cantidad_minima" aria-label="Cantidad mínima de profesionales" />
+                @if (especialidadRowError(i, 'cantidad_minima'); as message) { <p class="mt-1 text-xs text-error-500">{{ message }}</p> }
+              </div>
+              <button app-button variant="ghost" size="icon-sm" type="button" ariaLabel="Quitar especialidad" (click)="removeEspecialidad(i)">✕</button>
+            </div>
+          }
+        </div>
+
+        @if (especialidadesError(); as message) {
+          <p class="mt-2 text-xs text-error-500">{{ message }}</p>
+        }
+      </div>
+
+      @if (formMode() === 'create') {
+        <div class="flex items-center justify-between gap-4 rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+          <p class="text-sm font-medium text-gray-800 dark:text-white/90">Estado inicial activo</p>
+          <app-switch [checked]="tipoForm.controls.activo.value" (checkedChange)="tipoForm.controls.activo.setValue($event)" ariaLabel="Estado inicial del tipo de diagnóstico" />
+        </div>
+      } @else {
+        <p class="text-sm text-gray-500 dark:text-gray-400">El estado se cambia con las acciones Activar o Desactivar.</p>
+      }
+
+      <div class="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+        <button app-button variant="outline" type="button" [disabled]="saving()" (click)="closeForm()">Cancelar</button>
+        <button app-button type="submit" [disabled]="saving()">{{ saving() ? 'Guardando...' : 'Guardar tipo' }}</button>
+      </div>
+    </form>
+  </app-modal>
+
+  @if (detailOpen()) {
+    @if (selectedTipo(); as tipo) {
+      <app-modal [customHeader]="true" [showClose]="false" [ariaLabel]="'Ficha de ' + tipo.nombre" size="lg" (closed)="closeDetail()">
+        <div modal-header class="flex items-start justify-between gap-4 border-b border-gray-100 p-6 pb-4 dark:border-gray-800">
+          <div>
+            <p class="text-xs font-medium uppercase tracking-wide text-gray-400">Tipo de diagnóstico</p>
+            <h3 class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ tipo.nombre }}</h3>
+            <div class="mt-3">
+              <app-badge [color]="estadoColor(tipo.activo)" variant="light" size="sm">{{ tipo.activo ? 'Activo' : 'Inactivo' }}</app-badge>
+            </div>
+          </div>
+          <button app-button variant="ghost" size="icon-sm" type="button" ariaLabel="Cerrar ficha" (click)="closeDetail()">✕</button>
+        </div>
+
+        <div class="space-y-4">
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+              <p class="text-xs uppercase tracking-wide text-gray-400">Servicio</p>
+              <p class="mt-1 font-medium text-gray-800 dark:text-white/90">{{ tipo.servicio?.nombre || '—' }}</p>
+              @if (tipo.servicio?.area; as area) {
+                <p class="mt-1 inline-flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400"><span class="inline-block size-2.5 rounded-full" [style.background]="area.color" aria-hidden="true"></span>{{ area.nombre }}</p>
+              }
+            </div>
+            <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+              <p class="text-xs uppercase tracking-wide text-gray-400">Días estimados</p>
+              <p class="mt-1 font-medium text-gray-800 dark:text-white/90">{{ tipo.dias_estimados }}</p>
+            </div>
+            <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+              <p class="text-xs uppercase tracking-wide text-gray-400">Última modificación</p>
+              <p class="mt-1 font-medium text-gray-800 dark:text-white/90">{{ formatDate(tipo.updated_at) }}</p>
+            </div>
+            <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+              <p class="text-xs uppercase tracking-wide text-gray-400">Versión</p>
+              <p class="mt-1 font-medium text-gray-800 dark:text-white/90">{{ tipo.version }}</p>
+            </div>
+          </div>
+
+          <div>
+            <p class="text-xs uppercase tracking-wide text-gray-400">Descripción</p>
+            <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ tipo.descripcion || 'Sin descripción.' }}</p>
+          </div>
+
+          <div>
+            <p class="text-xs uppercase tracking-wide text-gray-400">Especialidades requeridas</p>
+            <div class="mt-2 space-y-2">
+              @for (especialidad of tipo.especialidades; track especialidad.especialidad_id) {
+                <div class="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-gray-800">
+                  <span class="text-gray-700 dark:text-gray-300">{{ especialidad.nombre }}</span>
+                  <span class="font-medium text-gray-800 dark:text-white/90">{{ especialidad.cantidad_minima }} profesional(es)</span>
+                </div>
+              } @empty {
+                <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.noEspecialidadesSelected }}</p>
+              }
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-5 flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+          <button app-button variant="outline" type="button" (click)="closeDetail()">Cerrar</button>
+          @if (canEdit()) { <button app-button type="button" (click)="openEdit(tipo)">Editar tipo</button> }
+        </div>
+      </app-modal>
+    }
+  }
+
+  <app-modal [open]="statusOpen()" [title]="statusMode() === 'activate' ? 'Activar tipo de diagnóstico' : 'Desactivar tipo de diagnóstico'" [subtitle]="statusTipo()?.nombre || ''" size="md" (closed)="closeStatus()">
+    <form class="space-y-4" [formGroup]="statusForm" (ngSubmit)="confirmStatus()">
+      <p class="text-sm text-gray-600 dark:text-gray-300">El motivo es obligatorio y quedará registrado en la bitácora.</p>
+      @if (statusError(); as message) { <app-alert variant="error" [message]="message" /> }
+      @if (statusConcurrency()) { <app-alert variant="warning" title="Conflicto de edición" message="El tipo cambió. Cerrá el diálogo y volvé a intentar." /> }
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="status-motivo">Motivo *</label>
+        <textarea id="status-motivo" app-textarea rows="3" formControlName="motivo" placeholder="Ej. Cierre del tipo de evaluación"></textarea>
+        @if (statusFieldError(); as message) { <p class="mt-1 text-xs text-error-500">{{ message }}</p> }
+      </div>
+      <div class="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+        <button app-button variant="outline" type="button" [disabled]="saving()" (click)="closeStatus()">Cancelar</button>
+        <button app-button type="submit" [disabled]="saving()">{{ saving() ? 'Guardando...' : 'Confirmar' }}</button>
+      </div>
+    </form>
+  </app-modal>
+</div>

@@ -64,5 +64,7 @@ class DatabaseSeeder extends Seeder
         $this->call(CatalogoTarifasPermissionSeeder::class);
         $this->call(CatalogoTarifasAccionAuditadaSeeder::class);
         $this->call(CategoriaTarifaSeeder::class);
+        $this->call(CatalogoDiagnosticosPermissionSeeder::class);
+        $this->call(CatalogoDiagnosticosAccionAuditadaSeeder::class);
     }
 }

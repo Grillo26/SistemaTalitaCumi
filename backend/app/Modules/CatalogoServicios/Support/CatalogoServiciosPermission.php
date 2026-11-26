@@ -25,6 +25,10 @@ final class CatalogoServiciosPermission
 
     public const CATEGORIA_EDIT = 'categorias.editar';
 
+    public const TIPO_DIAGNOSTICO_VIEW = 'tipos_diagnostico.ver';
+
+    public const TIPO_DIAGNOSTICO_EDIT = 'tipos_diagnostico.editar';
+
     /**
      * Permisos del submódulo 01.
      *
@@ -52,6 +56,19 @@ final class CatalogoServiciosPermission
             self::TARIFA_EDIT,
             self::CATEGORIA_VIEW,
             self::CATEGORIA_EDIT,
+        ];
+    }
+
+    /**
+     * Permisos del submódulo 03 (tipos de diagnóstico).
+     *
+     * @return list<string>
+     */
+    public static function diagnosticos(): array
+    {
+        return [
+            self::TIPO_DIAGNOSTICO_VIEW,
+            self::TIPO_DIAGNOSTICO_EDIT,
         ];
     }
 }

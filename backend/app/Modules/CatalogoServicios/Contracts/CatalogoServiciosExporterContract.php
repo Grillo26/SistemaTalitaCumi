@@ -28,4 +28,9 @@ interface CatalogoServiciosExporterContract
      * @param  array<string, mixed>  $filtros
      */
     public function exportarCategorias(array $filtros): string;
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function exportarTiposDiagnostico(array $filtros): string;
 }

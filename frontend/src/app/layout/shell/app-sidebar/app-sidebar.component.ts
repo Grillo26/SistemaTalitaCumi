@@ -1,17 +1,25 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject } from '@angular/core';
-import { Router, RouterModule } from '@angular/router';
-import { combineLatest, map, take } from 'rxjs';
+import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterModule } from '@angular/router';
+import { combineLatest, filter, map, take } from 'rxjs';
 import { SidebarService } from '../../../core/services/sidebar.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { SafeHtmlPipe } from '../../../shared/pipe/safe-html.pipe';
 import { BrandLogoComponent } from '../../../shared/components/common/brand-logo/brand-logo.component';
+
+interface NavChild {
+  name: string;
+  path: string;
+  permission?: string;
+}
 
 interface NavItem {
   name: string;
   path: string;
   icon: string;
   permission?: string;
+  children?: NavChild[];
 }
 
 // TEMPORAL: icono usado por el grupo de referencia. Eliminar junto con referenceNavItems.
@@ -27,6 +35,7 @@ export class AppSidebarComponent {
   readonly sidebarService = inject(SidebarService);
   private readonly router = inject(Router);
   private readonly auth = inject(AuthService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly isExpanded$ = this.sidebarService.isExpanded$;
   readonly isMobileOpen$ = this.sidebarService.isMobileOpen$;
@@ -37,6 +46,19 @@ export class AppSidebarComponent {
     this.isMobileOpen$,
   ]).pipe(map(([expanded, hovered, mobileOpen]) => expanded || hovered || mobileOpen));
 
+  readonly expandedGroups = signal<ReadonlySet<string>>(new Set());
+
+  constructor() {
+    this.openActiveGroups();
+
+    this.router.events
+      .pipe(
+        filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() => this.openActiveGroups());
+  }
+
   readonly allNavItems: NavItem[] = [
     {
       name: 'Inicio',
@@ -45,13 +67,22 @@ export class AppSidebarComponent {
     },
     {
       name: 'Organización',
-      path: '/organizacion/sucursales',
+      path: '',
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V8l8-5 8 5v13"/><path d="M9 21v-6h6v6"/><path d="M4 8h16"/></svg>',
-    },
-    {
-      name: 'Salas y ambientes',
-      path: '/organizacion/salas-ambientes',
-      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.25" y="3.25" width="17.5" height="17.5" rx="2"/><path d="M8.5 3.25v17.5M13 8h4M13 12h4M13 16h4"/></svg>',
+      children: [
+        {
+          name: 'Sucursales',
+          path: '/organizacion/sucursales',
+        },
+        {
+          name: 'Salas y ambientes',
+          path: '/organizacion/salas-ambientes',
+        },
+        {
+          name: 'Configuración',
+          path: '/organizacion/configuracion',
+        },
+      ],
     },
     {
       name: 'Agenda',
@@ -87,15 +118,25 @@ export class AppSidebarComponent {
     },
     {
       name: 'Catálogo',
-      path: '/catalogo',
+      path: '',
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.25" y="3.25" width="7" height="7" rx="1.5"/><rect x="13.75" y="3.25" width="7" height="7" rx="1.5"/><rect x="3.25" y="13.75" width="7" height="7" rx="1.5"/><rect x="13.75" y="13.75" width="7" height="7" rx="1.5"/></svg>',
-      permission: 'servicios.ver',
-    },
-    {
-      name: 'Tarifas',
-      path: '/catalogo-servicios/tarifas',
-      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.25 13.25 12 21.5 2.5 12V2.5H12l8.25 8.25a2.12 2.12 0 0 1 0 3Z"/><circle cx="7" cy="7" r="1.25"/></svg>',
-      permission: 'tarifas.ver',
+      children: [
+        {
+          name: 'Áreas y servicios',
+          path: '/catalogo',
+          permission: 'servicios.ver',
+        },
+        {
+          name: 'Tarifas y categorías',
+          path: '/catalogo-servicios/tarifas',
+          permission: 'tarifas.ver',
+        },
+        {
+          name: 'Tipos de diagnóstico',
+          path: '/catalogo-servicios/tipos-diagnostico',
+          permission: 'tipos_diagnostico.ver',
+        },
+      ],
     },
     {
       name: 'Profesionales',
@@ -108,19 +149,20 @@ export class AppSidebarComponent {
       path: '/inventario',
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2.75 8.25 4.5v9.5L12 21.25l-8.25-4.5v-9.5L12 2.75Z"/><path d="m3.75 7.25 8.25 4.5 8.25-4.5M12 11.75v9.5M7.5 4.75l8.25 4.5"/></svg>',
     },
-    {
-      name: 'Configuración',
-      path: '/organizacion/configuracion',
-      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.25"/><path d="M19.5 13.5a7.8 7.8 0 0 0 0-3l2-1.5-2-3.5-2.35.95a7.6 7.6 0 0 0-2.6-1.5L14.25 2h-4.5l-.3 2.45a7.6 7.6 0 0 0-2.6 1.5L4.5 5 2.5 8.5l2 1.5a7.8 7.8 0 0 0 0 3l-2 1.5 2 3.5 2.35-.95a7.6 7.6 0 0 0 2.6 1.5l.3 2.45h4.5l.3-2.45a7.6 7.6 0 0 0 2.6-1.5l2.35.95 2-3.5-2-1.5Z"/></svg>',
-    },
   ];
 
   get navItems(): NavItem[] {
-    return this.allNavItems.filter(
-      (item) =>
-        item.permission === undefined ||
-        this.auth.hasPermission(item.permission),
-    );
+    return this.allNavItems
+      .map((item) => {
+        if (item.children?.length) {
+          const children = item.children.filter((child) => this.canAccess(child));
+
+          return children.length > 0 ? { ...item, children } : null;
+        }
+
+        return this.canAccess(item) ? item : null;
+      })
+      .filter((item): item is NavItem => item !== null);
   }
 
   readonly allSecurityNavItems: NavItem[] = [
@@ -145,11 +187,7 @@ export class AppSidebarComponent {
   ];
 
   get securityNavItems(): NavItem[] {
-    return this.allSecurityNavItems.filter(
-      (item) =>
-        item.permission === undefined ||
-        this.auth.hasPermission(item.permission),
-    );
+    return this.allSecurityNavItems.filter((item) => this.canAccess(item));
   }
 
   // TEMPORAL: referencia de componentes compartidos. Eliminar este bloque al terminar.
@@ -174,7 +212,7 @@ export class AppSidebarComponent {
   ];
 
   isActive(path: string): boolean {
-    const url = this.router.url;
+    const url = this.router.url.split('?')[0].split('#')[0];
 
     if (path === '/') {
       return url === '/';
@@ -189,7 +227,27 @@ export class AppSidebarComponent {
       return url === '/pacientes/tutores' || url.startsWith('/pacientes/tutores/');
     }
 
-    return url.startsWith(path);
+    return url === path || url.startsWith(`${path}/`);
+  }
+
+  isGroupActive(item: NavItem): boolean {
+    return item.children?.some((child) => this.isActive(child.path)) ?? false;
+  }
+
+  isGroupOpen(item: NavItem): boolean {
+    return this.expandedGroups().has(item.name);
+  }
+
+  toggleGroup(item: NavItem): void {
+    const next = new Set(this.expandedGroups());
+
+    if (next.has(item.name)) {
+      next.delete(item.name);
+    } else {
+      next.add(item.name);
+    }
+
+    this.expandedGroups.set(next);
   }
 
   onSidebarMouseEnter(): void {
@@ -202,5 +260,33 @@ export class AppSidebarComponent {
     if (typeof window !== 'undefined' && window.innerWidth < 1280) {
       this.sidebarService.setMobileOpen(false);
     }
+  }
+
+  private openActiveGroups(): void {
+    const activeGroups = this.allNavItems.filter(
+      (item) => item.children?.length && this.isGroupActive(item),
+    );
+
+    if (activeGroups.length === 0) {
+      return;
+    }
+
+    this.expandedGroups.update((groups) => {
+      if (activeGroups.every((group) => groups.has(group.name))) {
+        return groups;
+      }
+
+      const next = new Set(groups);
+
+      for (const group of activeGroups) {
+        next.add(group.name);
+      }
+
+      return next;
+    });
+  }
+
+  private canAccess(item: { permission?: string }): boolean {
+    return item.permission === undefined || this.auth.hasPermission(item.permission);
   }
 }

@@ -29,6 +29,11 @@ final class UnavailableCatalogoServiciosExporter implements CatalogoServiciosExp
         throw $this->notImplemented();
     }
 
+    public function exportarTiposDiagnostico(array $filtros): string
+    {
+        throw $this->notImplemented();
+    }
+
     private function notImplemented(): LogicException
     {
         return new LogicException(

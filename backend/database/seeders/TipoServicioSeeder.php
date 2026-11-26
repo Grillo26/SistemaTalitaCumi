@@ -16,15 +16,29 @@ final class TipoServicioSeeder extends Seeder
     public function run(): void
     {
         foreach ([
-            'Entrevista',
-            'Diagnóstico / Evaluación',
-            'Terapia individual',
-            'Sala grupal',
-        ] as $nombre) {
-            TipoServicio::query()->firstOrCreate(
-                ['nombre' => $nombre],
-                ['activo' => true, 'version' => 1],
-            );
+            ['nombre' => 'Entrevista', 'codigo' => 'entrevista'],
+            ['nombre' => 'Diagnóstico / Evaluación', 'codigo' => 'diagnostico_evaluacion'],
+            ['nombre' => 'Terapia individual', 'codigo' => 'terapia_individual'],
+            ['nombre' => 'Sala grupal', 'codigo' => 'sala_grupal'],
+        ] as $tipo) {
+            $existing = TipoServicio::query()
+                ->whereRaw('lower(trim(nombre)) = ?', [mb_strtolower($tipo['nombre'])])
+                ->first();
+
+            if ($existing !== null) {
+                if ($existing->codigo !== $tipo['codigo']) {
+                    $existing->forceFill(['codigo' => $tipo['codigo']])->save();
+                }
+
+                continue;
+            }
+
+            TipoServicio::query()->create([
+                'nombre' => $tipo['nombre'],
+                'codigo' => $tipo['codigo'],
+                'activo' => true,
+                'version' => 1,
+            ]);
         }
     }
 }

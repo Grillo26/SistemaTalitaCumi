@@ -84,92 +84,92 @@
               }
             </div>
 
-            <div class="overflow-x-auto">
-              <table app-table>
-                <thead app-table-header>
+            <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+              <table app-table class="min-w-full">
+                <thead app-table-header class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
                   <tr app-table-row>
-                    <th app-table-cell [attr.aria-sort]="servicioSort() === 'nombre' ? (servicioDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
-                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortServicios('nombre')">
+                    <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="servicioSort() === 'nombre' ? (servicioDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortServicios('nombre')">
                         Servicio <span aria-hidden="true">{{ sortIndicator(servicioSort(), 'nombre', servicioDirection()) }}</span>
                       </button>
                     </th>
-                    <th app-table-cell [attr.aria-sort]="servicioSort() === 'area' ? (servicioDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
-                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortServicios('area')">
+                    <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="servicioSort() === 'area' ? (servicioDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortServicios('area')">
                         Área <span aria-hidden="true">{{ sortIndicator(servicioSort(), 'area', servicioDirection()) }}</span>
                       </button>
                     </th>
-                    <th app-table-cell [attr.aria-sort]="servicioSort() === 'tipo' ? (servicioDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
-                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortServicios('tipo')">
+                    <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="servicioSort() === 'tipo' ? (servicioDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortServicios('tipo')">
                         Tipo <span aria-hidden="true">{{ sortIndicator(servicioSort(), 'tipo', servicioDirection()) }}</span>
                       </button>
                     </th>
-                    <th app-table-cell [attr.aria-sort]="servicioSort() === 'duracion_minutos' ? (servicioDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
-                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortServicios('duracion_minutos')">
+                    <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="servicioSort() === 'duracion_minutos' ? (servicioDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortServicios('duracion_minutos')">
                         Duración <span aria-hidden="true">{{ sortIndicator(servicioSort(), 'duracion_minutos', servicioDirection()) }}</span>
                       </button>
                     </th>
-                    <th app-table-cell [attr.aria-sort]="servicioSort() === 'activo' ? (servicioDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
-                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortServicios('activo')">
+                    <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="servicioSort() === 'activo' ? (servicioDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortServicios('activo')">
                         Estado <span aria-hidden="true">{{ sortIndicator(servicioSort(), 'activo', servicioDirection()) }}</span>
                       </button>
                     </th>
-                    <th app-table-cell>Última modificación</th>
-                    <th app-table-cell class="text-right">Acciones</th>
+                    <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="servicioSort() === 'updated_at' ? (servicioDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortServicios('updated_at')">
+                        Última modificación <span aria-hidden="true">{{ sortIndicator(servicioSort(), 'updated_at', servicioDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
                   </tr>
                 </thead>
-                <tbody app-table-body>
+                <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
                   @if (loading()) {
                     <tr app-table-row>
-                      <td app-table-cell colspan="7" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">Cargando servicios...</td>
+                      <td app-table-cell colspan="7" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">Cargando servicios...</td>
                     </tr>
                   } @else {
                     @for (servicio of servicios(); track servicio.id) {
-                      <tr app-table-row>
-                        <td app-table-cell>
+                      <tr app-table-row class="transition-colors hover:bg-gray-50/70 dark:hover:bg-white/[0.02]">
+                        <td app-table-cell class="px-4 py-4">
                           <div class="min-w-44">
-                            <p class="font-medium text-gray-800 dark:text-white/90">{{ servicio.nombre }}</p>
+                            <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ servicio.nombre }}</p>
                             @if (servicio.descripcion) {
                               <p class="mt-0.5 line-clamp-1 text-xs text-gray-500 dark:text-gray-400">{{ servicio.descripcion }}</p>
                             }
                           </div>
                         </td>
-                        <td app-table-cell>
-                          <span class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                          <span class="inline-flex items-center gap-2">
                             <span class="inline-block size-2.5 rounded-full" [style.background]="servicio.area?.color || '#6B7280'" aria-hidden="true"></span>
                             {{ servicio.area?.nombre || '—' }}
                           </span>
                         </td>
-                        <td app-table-cell>{{ servicio.tipo_servicio?.nombre || '—' }}</td>
-                        <td app-table-cell>{{ servicio.duracion_minutos }} min</td>
-                        <td app-table-cell>
+                        <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ servicio.tipo_servicio?.nombre || '—' }}</td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ servicio.duracion_minutos }} min</td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4">
                           <app-badge [color]="servicio.activo ? 'success' : 'gray'" variant="light" size="sm">
                             {{ servicio.activo ? 'Activo' : 'Inactivo' }}
                           </app-badge>
                         </td>
-                        <td app-table-cell>{{ formatDate(servicio.updated_at) }}</td>
-                        <td app-table-cell>
-                          <div class="flex flex-wrap justify-end gap-2">
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ formatDate(servicio.updated_at) }}</td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-end">
+                          <div class="flex flex-wrap items-center justify-end gap-1">
                             <button app-button type="button" variant="ghost" size="sm" (click)="openServicioDetail(servicio)">Ver</button>
                             @if (canEditServicio()) {
-                              <button app-button type="button" variant="outline" size="sm" (click)="openServicioEdit(servicio)">Editar</button>
+                              <button app-button type="button" variant="ghost" size="sm" (click)="openServicioEdit(servicio)">Editar</button>
                             }
                             @if (canChangeServicioStatus()) {
-                              <button
-                                app-button
-                                type="button"
-                                [variant]="servicio.activo ? 'destructive' : 'outline'"
-                                size="sm"
-                                (click)="openStatus('servicio', servicio, servicio.activo ? 'deactivate' : 'activate')"
-                              >
-                                {{ servicio.activo ? 'Desactivar' : 'Activar' }}
-                              </button>
+                              @if (servicio.activo) {
+                                <button app-button type="button" variant="link" size="sm" className="text-error-500 hover:text-error-600" (click)="openStatus('servicio', servicio, 'deactivate')">Desactivar</button>
+                              } @else {
+                                <button app-button type="button" variant="ghost" size="sm" (click)="openStatus('servicio', servicio, 'activate')">Activar</button>
+                              }
                             }
                           </div>
                         </td>
                       </tr>
                     } @empty {
                       <tr app-table-row>
-                        <td app-table-cell colspan="7" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.emptyServicios }}</td>
+                        <td app-table-cell colspan="7" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.emptyServicios }}</td>
                       </tr>
                     }
                   }
@@ -229,70 +229,70 @@
               }
             </div>
 
-            <div class="overflow-x-auto">
-              <table app-table>
-                <thead app-table-header>
+            <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+              <table app-table class="min-w-full">
+                <thead app-table-header class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
                   <tr app-table-row>
-                    <th app-table-cell [attr.aria-sort]="areaSort() === 'nombre' ? (areaDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
-                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortAreas('nombre')">
+                    <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="areaSort() === 'nombre' ? (areaDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortAreas('nombre')">
                         Área <span aria-hidden="true">{{ sortIndicator(areaSort(), 'nombre', areaDirection()) }}</span>
                       </button>
                     </th>
-                    <th app-table-cell>Descripción</th>
-                    <th app-table-cell>Servicios activos</th>
-                    <th app-table-cell [attr.aria-sort]="areaSort() === 'activo' ? (areaDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
-                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortAreas('activo')">
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Descripción</th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Servicios activos</th>
+                    <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="areaSort() === 'activo' ? (areaDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortAreas('activo')">
                         Estado <span aria-hidden="true">{{ sortIndicator(areaSort(), 'activo', areaDirection()) }}</span>
                       </button>
                     </th>
-                    <th app-table-cell>Última modificación</th>
-                    <th app-table-cell class="text-right">Acciones</th>
+                    <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="areaSort() === 'updated_at' ? (areaDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortAreas('updated_at')">
+                        Última modificación <span aria-hidden="true">{{ sortIndicator(areaSort(), 'updated_at', areaDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
                   </tr>
                 </thead>
-                <tbody app-table-body>
+                <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
                   @if (loading()) {
                     <tr app-table-row>
-                      <td app-table-cell colspan="6" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">Cargando áreas...</td>
+                      <td app-table-cell colspan="6" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">Cargando áreas...</td>
                     </tr>
                   } @else {
                     @for (area of areas(); track area.id) {
-                      <tr app-table-row>
-                        <td app-table-cell>
-                          <span class="inline-flex items-center gap-2 font-medium text-gray-800 dark:text-white/90">
+                      <tr app-table-row class="transition-colors hover:bg-gray-50/70 dark:hover:bg-white/[0.02]">
+                        <td app-table-cell class="px-4 py-4">
+                          <span class="inline-flex items-center gap-2 text-sm font-medium text-gray-800 dark:text-white/90">
                             <span class="inline-block size-3 rounded-full ring-1 ring-black/10" [style.background]="area.color" aria-hidden="true"></span>
                             {{ area.nombre }}
                           </span>
                         </td>
-                        <td app-table-cell>{{ area.descripcion || '—' }}</td>
-                        <td app-table-cell>{{ area.servicios_activos_count ?? 0 }}</td>
-                        <td app-table-cell>
+                        <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ area.descripcion || '—' }}</td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ area.servicios_activos_count ?? 0 }}</td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4">
                           <app-badge [color]="area.activo ? 'success' : 'gray'" variant="light" size="sm">
                             {{ area.activo ? 'Activo' : 'Inactivo' }}
                           </app-badge>
                         </td>
-                        <td app-table-cell>{{ formatDate(area.updated_at) }}</td>
-                        <td app-table-cell>
-                          <div class="flex flex-wrap justify-end gap-2">
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ formatDate(area.updated_at) }}</td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-end">
+                          <div class="flex flex-wrap items-center justify-end gap-1">
                             @if (canEditArea()) {
-                              <button app-button type="button" variant="outline" size="sm" (click)="openAreaEdit(area)">Editar</button>
+                              <button app-button type="button" variant="ghost" size="sm" (click)="openAreaEdit(area)">Editar</button>
                             }
                             @if (canChangeAreaStatus()) {
-                              <button
-                                app-button
-                                type="button"
-                                [variant]="area.activo ? 'destructive' : 'outline'"
-                                size="sm"
-                                (click)="openStatus('area', area, area.activo ? 'deactivate' : 'activate')"
-                              >
-                                {{ area.activo ? 'Desactivar' : 'Activar' }}
-                              </button>
+                              @if (area.activo) {
+                                <button app-button type="button" variant="link" size="sm" className="text-error-500 hover:text-error-600" (click)="openStatus('area', area, 'deactivate')">Desactivar</button>
+                              } @else {
+                                <button app-button type="button" variant="ghost" size="sm" (click)="openStatus('area', area, 'activate')">Activar</button>
+                              }
                             }
                           </div>
                         </td>
                       </tr>
                     } @empty {
                       <tr app-table-row>
-                        <td app-table-cell colspan="6" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.emptyAreas }}</td>
+                        <td app-table-cell colspan="6" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.emptyAreas }}</td>
                       </tr>
                     }
                   }
@@ -339,55 +339,63 @@
               }
             </div>
 
-            <div class="overflow-x-auto">
-              <table app-table>
-                <thead app-table-header>
+            <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+              <table app-table class="min-w-full">
+                <thead app-table-header class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
                   <tr app-table-row>
-                    <th app-table-cell>Tipo de servicio</th>
-                    <th app-table-cell>Servicios asociados</th>
-                    <th app-table-cell>Estado</th>
-                    <th app-table-cell>Última modificación</th>
-                    <th app-table-cell class="text-right">Acciones</th>
+                    <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="tipoSort() === 'nombre' ? (tipoDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortTipos('nombre')">
+                        Tipo de servicio <span aria-hidden="true">{{ sortIndicator(tipoSort(), 'nombre', tipoDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Servicios asociados</th>
+                    <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="tipoSort() === 'activo' ? (tipoDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortTipos('activo')">
+                        Estado <span aria-hidden="true">{{ sortIndicator(tipoSort(), 'activo', tipoDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="tipoSort() === 'updated_at' ? (tipoDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="sortTipos('updated_at')">
+                        Última modificación <span aria-hidden="true">{{ sortIndicator(tipoSort(), 'updated_at', tipoDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
                   </tr>
                 </thead>
-                <tbody app-table-body>
+                <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
                   @if (loading()) {
                     <tr app-table-row>
-                      <td app-table-cell colspan="5" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">Cargando tipos...</td>
+                      <td app-table-cell colspan="5" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">Cargando tipos...</td>
                     </tr>
                   } @else {
                     @for (tipo of tipos(); track tipo.id) {
-                      <tr app-table-row>
-                        <td app-table-cell class="font-medium text-gray-800 dark:text-white/90">{{ tipo.nombre }}</td>
-                        <td app-table-cell>{{ tipo.servicios_total_count ?? 0 }}</td>
-                        <td app-table-cell>
+                      <tr app-table-row class="transition-colors hover:bg-gray-50/70 dark:hover:bg-white/[0.02]">
+                        <td app-table-cell class="px-4 py-4 text-sm font-medium text-gray-800 dark:text-white/90">{{ tipo.nombre }}</td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ tipo.servicios_total_count ?? 0 }}</td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4">
                           <app-badge [color]="tipo.activo ? 'success' : 'gray'" variant="light" size="sm">
                             {{ tipo.activo ? 'Activo' : 'Inactivo' }}
                           </app-badge>
                         </td>
-                        <td app-table-cell>{{ formatDate(tipo.updated_at) }}</td>
-                        <td app-table-cell>
-                          <div class="flex flex-wrap justify-end gap-2">
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ formatDate(tipo.updated_at) }}</td>
+                        <td app-table-cell class="whitespace-nowrap px-4 py-4 text-end">
+                          <div class="flex flex-wrap items-center justify-end gap-1">
                             @if (canEditTipo()) {
-                              <button app-button type="button" variant="outline" size="sm" (click)="openTipoEdit(tipo)">Editar</button>
+                              <button app-button type="button" variant="ghost" size="sm" (click)="openTipoEdit(tipo)">Editar</button>
                             }
                             @if (canChangeTipoStatus()) {
-                              <button
-                                app-button
-                                type="button"
-                                [variant]="tipo.activo ? 'destructive' : 'outline'"
-                                size="sm"
-                                (click)="openStatus('tipo-servicio', tipo, tipo.activo ? 'deactivate' : 'activate')"
-                              >
-                                {{ tipo.activo ? 'Desactivar' : 'Activar' }}
-                              </button>
+                              @if (tipo.activo) {
+                                <button app-button type="button" variant="link" size="sm" className="text-error-500 hover:text-error-600" (click)="openStatus('tipo-servicio', tipo, 'deactivate')">Desactivar</button>
+                              } @else {
+                                <button app-button type="button" variant="ghost" size="sm" (click)="openStatus('tipo-servicio', tipo, 'activate')">Activar</button>
+                              }
                             }
                           </div>
                         </td>
                       </tr>
                     } @empty {
                       <tr app-table-row>
-                        <td app-table-cell colspan="5" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.emptyTipos }}</td>
+                        <td app-table-cell colspan="5" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.emptyTipos }}</td>
                       </tr>
                     }
                   }
