@@ -88,6 +88,8 @@ Todas las rutas están dentro del layout principal y protegidas por `authGuard`.
 | `/pacientes/tutores/:id` | Ficha del tutor, contacto, estado y pacientes asociados |
 | `/inscripciones` | Redirige a `/inscripciones-atenciones/salas-grupales` |
 | `/inscripciones-atenciones/salas-grupales` | Inscripciones a salas grupales: listado, ficha, alta, renovación y baja |
+| `/inscripciones-atenciones/paquetes-sesiones` | Paquetes de sesiones individuales: listado, ficha, alta, edición, renovación, baja y comprobante |
+| `/inscripciones-atenciones/entrevista-diagnostico` | Entrevistas y diagnósticos: listado, ficha, alta, edición, baja, vinculación de entrevista y comprobante |
 | `/pagos` | Pagos y caja |
 | `/reportes` | Reportes |
 | `/catalogo` | Catálogo de servicios: áreas, servicios y tipos |
@@ -1316,7 +1318,7 @@ No se ejecutó `ng serve` ni se levantó el servidor.
 ### 30. Inscripciones a salas grupales
 
 **Ruta:** `/inscripciones-atenciones/salas-grupales` (la ruta heredada `/inscripciones` redirige).
-**Entrada de sidebar:** `Inscripciones` (visible con `inscripcion.ver`).
+**Entrada de sidebar:** grupo `Inscripciones` → `Salas grupales` (visible con `inscripcion.ver`).
 **Guard:** `permissionGuard` con `inscripcion.ver`.
 
 **Archivos:**
@@ -1371,3 +1373,119 @@ No se ejecutó `ng serve` ni se levantó el servidor.
 **Permisos:** `inscripcion.ver` para acceder; `inscripcion.crear` para alta; `inscripcion.editar` para modificar; `inscripcion.renovar` para renovar; `inscripcion.retirar` para baja. Recepción crea/consulta/renueva; Administración además edita y da de baja. El backend revalida permisos y alcance por sucursal.
 
 **Estado:** submódulo implementado contra API real. Pendientes: Pagos (08), Asistencia/Agenda (07), PDF real y exportación PDF/Excel, y el flujo de ajuste de RF-009 cuando existan pagos.
+
+### 31. Paquetes de sesiones individuales
+
+**Ruta:** `/inscripciones-atenciones/paquetes-sesiones`.
+**Entrada de sidebar:** grupo `Inscripciones` → `Paquetes de sesiones` (visible con `paquete.ver`).
+**Guard:** `permissionGuard` con `paquete.ver`.
+
+**Archivos:**
+
+- `src/app/pages/inscripciones-atenciones/paquetes-sesiones/paquetes-sesiones.page.ts`
+- `src/app/pages/inscripciones-atenciones/paquetes-sesiones/paquetes-sesiones.page.html`
+- `src/app/pages/inscripciones-atenciones/paquetes-sesiones/paquetes-sesiones.routes.ts`
+- `src/app/pages/inscripciones-atenciones/paquetes-sesiones/paquetes-sesiones.service.ts`
+- `src/app/pages/inscripciones-atenciones/paquetes-sesiones/paquetes-sesiones.models.ts`
+- `src/app/pages/inscripciones-atenciones/paquetes-sesiones/paquete-comprobante.component.ts`
+
+Reutiliza `InscripcionPacienteSearchComponent` y `InscripcionDateInputComponent` del submódulo de Salas Grupales sin modificarlos.
+
+**API consumida:**
+
+| Método | Endpoint | Acción |
+|---|---|---|
+| GET | `/api/inscripciones-atenciones/paquetes-sesiones` | Listado paginado con filtros |
+| GET | `/api/inscripciones-atenciones/paquetes-sesiones/opciones` | Defaults de cantidad y duración |
+| GET | `/api/inscripciones-atenciones/paquetes-sesiones/monto-esperado` | Vista previa del monto total |
+| GET | `/api/inscripciones-atenciones/paquetes-sesiones/{id}` | Ficha |
+| GET | `/api/inscripciones-atenciones/paquetes-sesiones/{id}/renovacion` | Fechas, tarifa y configuración propuestas |
+| GET | `/api/inscripciones-atenciones/paquetes-sesiones/{id}/consumo` | Consumo/saldo (stub 503) |
+| GET | `/api/inscripciones-atenciones/paquetes-sesiones/{id}/turnos-futuros` | Pre-chequeo de turnos (stub 503) |
+| GET | `/api/inscripciones-atenciones/paquetes-sesiones/{id}/pago` | Estado de pago (stub 503) |
+| POST | `/api/inscripciones-atenciones/paquetes-sesiones/{id}/pago` | Inicio de pago (stub 503) |
+| GET | `/api/inscripciones-atenciones/paquetes-sesiones/{id}/comprobante` | Datos del comprobante |
+| GET | `/api/inscripciones-atenciones/paquetes-sesiones/{id}/comprobante/pdf` | PDF pendiente (503) |
+| GET | `/api/inscripciones-atenciones/paquetes-sesiones/exportar` | Exportación pendiente (503) |
+| POST | `/api/inscripciones-atenciones/paquetes-sesiones` | Alta |
+| PATCH | `/api/inscripciones-atenciones/paquetes-sesiones/{id}` | Edición limitada |
+| POST | `/api/inscripciones-atenciones/paquetes-sesiones/{id}/renovar` | Renovación |
+| POST | `/api/inscripciones-atenciones/paquetes-sesiones/{id}/retirar` | Baja con motivo |
+
+**Funcionalidad:**
+
+- Listado paginado con filtros por sucursal, servicio, profesional, paciente (autocompletado) y rango de fechas; orden por período, cantidad, monto o estado.
+- Alta en modal con paciente, tutor, sucursal, servicio de terapia individual, profesional opcional, categoría, cantidad de sesiones, días (lunes a sábado), hora, duración, fechas y observaciones.
+- Vista previa del monto total calculada por el backend, monto por sesión, sesiones estimadas y advertencia cuando el período no alcanza.
+- Confirmación explícita si la tarifa cambió (`409 TARIFA_CAMBIO`).
+- Edición limitada a profesional, días, hora y observaciones; se informa que fechas/cantidad/servicio/categoría se cambian por renovación.
+- Ficha con pestañas Resumen, Consumo, Pago y Comprobante; el consumo y el pago muestran “No disponible” mientras existan los stubs, sin inventar valores.
+- Renovación con fechas propuestas por el backend (día siguiente y misma duración), configuración editable, detección de cambio de tarifa y vínculo con el origen.
+- Baja con motivo cerrado, detalle obligatorio para “Otro”, fecha no futura y pre-chequeo de turnos separado.
+- Comprobante imprimible con datos reales del centro, paciente, tutor, servicio, profesional, días/horario, período, sesiones y leyenda “No es factura”.
+- Enlaces `wa.me` solo si el tutor tiene contacto visible.
+- Sin eliminación física; la baja conserva el historial.
+
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-pagination`, `app-modal`, `TABLE_IMPORTS`, `input[app-input]`, `app-select-field`, `textarea[app-textarea]`, `InscripcionPacienteSearchComponent`, `InscripcionDateInputComponent`, `ToastService`, `SucursalesService`, `CatalogoServiciosService`, `TarifasService`, `ProfesionalesService` y `PacientesService`.
+
+**Permisos:** `paquete.ver` para acceder y consultar; `paquete.crear` para alta; `paquete.editar` para modificar; `paquete.renovar` para renovar; `paquete.retirar` para baja. Recepción crea/consulta/renueva; Administración además edita y da de baja. El backend revalida permisos y alcance por sucursal.
+
+**Estado:** submódulo implementado contra API real. Pendientes: Agenda/Turnos (07) para consumo y turnos futuros, Pagos (08) para estado/registro de pago, PDF real y exportación PDF/Excel.
+
+### 32. Entrevistas y diagnósticos como atenciones
+
+**Ruta:** `/inscripciones-atenciones/entrevista-diagnostico`.
+**Entrada de sidebar:** grupo `Inscripciones` → `Entrevistas y diagnósticos` (visible con `atencion.ver`).
+**Guard:** `permissionGuard` con `atencion.ver`.
+
+**Archivos:**
+
+- `src/app/pages/inscripciones-atenciones/entrevista-diagnostico/entrevista-diagnostico.page.ts`
+- `src/app/pages/inscripciones-atenciones/entrevista-diagnostico/entrevista-diagnostico.page.html`
+- `src/app/pages/inscripciones-atenciones/entrevista-diagnostico/entrevista-diagnostico.routes.ts`
+- `src/app/pages/inscripciones-atenciones/entrevista-diagnostico/entrevista-diagnostico.service.ts`
+- `src/app/pages/inscripciones-atenciones/entrevista-diagnostico/entrevista-diagnostico.models.ts`
+- `src/app/pages/inscripciones-atenciones/entrevista-diagnostico/atencion-comprobante.component.ts`
+
+**API consumida:**
+
+| Método | Endpoint | Acción |
+|---|---|---|
+| GET | `/api/inscripciones-atenciones/entrevista-diagnostico/entrevistas` | Listado de entrevistas |
+| GET | `/api/inscripciones-atenciones/entrevista-diagnostico/entrevistas/monto-esperado` | Preview de monto |
+| GET | `/api/inscripciones-atenciones/entrevista-diagnostico/entrevistas/exportar` | Exportación pendiente (503) |
+| POST | `/api/inscripciones-atenciones/entrevista-diagnostico/entrevistas` | Alta |
+| GET/PATCH | `/api/inscripciones-atenciones/entrevista-diagnostico/entrevistas/{id}` | Ficha / edición |
+| POST | `/api/inscripciones-atenciones/entrevista-diagnostico/entrevistas/{id}/retirar` | Baja |
+| GET | `/api/inscripciones-atenciones/entrevista-diagnostico/entrevistas/{id}/pago` | Pago (stub 503) |
+| GET | `/api/inscripciones-atenciones/entrevista-diagnostico/entrevistas/{id}/comprobante` | Comprobante |
+| GET | `/api/inscripciones-atenciones/entrevista-diagnostico/diagnosticos` | Listado de diagnósticos |
+| GET | `/api/inscripciones-atenciones/entrevista-diagnostico/diagnosticos/monto-esperado` | Preview de monto |
+| GET | `/api/inscripciones-atenciones/entrevista-diagnostico/diagnosticos/requisitos` | Especialidades requeridas |
+| GET | `/api/inscripciones-atenciones/entrevista-diagnostico/diagnosticos/exportar` | Exportación pendiente (503) |
+| GET | `/api/inscripciones-atenciones/entrevista-diagnostico/entrevistas-previas` | Aviso de entrevista previa |
+| POST | `/api/inscripciones-atenciones/entrevista-diagnostico/diagnosticos` | Alta |
+| GET/PATCH | `/api/inscripciones-atenciones/entrevista-diagnostico/diagnosticos/{id}` | Ficha / edición |
+| POST | `/api/inscripciones-atenciones/entrevista-diagnostico/diagnosticos/{id}/retirar` | Baja |
+| POST | `/api/inscripciones-atenciones/entrevista-diagnostico/diagnosticos/{id}/vincular-entrevista` | Vincular entrevista |
+| GET | `/api/inscripciones-atenciones/entrevista-diagnostico/diagnosticos/{id}/pago` | Pago (stub 503) |
+| GET | `/api/inscripciones-atenciones/entrevista-diagnostico/diagnosticos/{id}/comprobante` | Comprobante |
+
+**Funcionalidad:**
+
+- Página con tabs Entrevistas y Diagnósticos.
+- Tablas con filtros por sucursal, paciente, rango de fechas, estado; diagnósticos agregan tipo y profesional; orden y paginación.
+- Entrevista: paciente, tutor, sucursal, servicio, categoría, fecha, notas y monto calculado por backend.
+- Diagnóstico: paciente, sucursal, tipo, categoría, fechas, profesionales por especialidad, requisitos con cantidades, aviso de entrevista previa y monto calculado.
+- Diagnóstico sin profesionales (“Sin asignar”) permitido; cobertura parcial bloqueada con el mensaje “Faltan profesionales requeridos por el tipo”.
+- Omitir entrevista con motivo opcional; vinculación posterior de una entrevista existente.
+- Confirmación de cambio de tarifa (`409 TARIFA_CAMBIO`).
+- Ficha con tabs Resumen, Pago y Comprobante; baja con motivo/fecha y bloqueo de edición posterior.
+- Pago, PDF y exportación muestran “No disponible” o responden 503 mientras los módulos/infraestructura no existan.
+- Tablas, modales, badges, alertas, paginación y comprobante reutilizan los componentes y estilos del proyecto.
+
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-pagination`, `app-modal`, `TABLE_IMPORTS`, `input[app-input]`, `app-select-field`, `textarea[app-textarea]`, `InscripcionPacienteSearchComponent`, `InscripcionDateInputComponent`, `ToastService`, `SucursalesService`, `CatalogoServiciosService`, `TiposDiagnosticoService`, `TarifasService`, `ProfesionalesService` y `PacientesService`.
+
+**Permisos:** `atencion.ver` para consultar; `atencion.crear` para alta; `atencion.editar` para modificar/vincular; `atencion.retirar` para baja; `atencion.exportar` reservado para cuando exista la infraestructura de exportación. Recepción consulta y crea; Administración además edita y da de baja; Superadmin todo. El backend revalida permisos y alcance por sucursal.
+
+**Estado:** submódulo implementado contra API real. Pendientes: Pagos (08), Agenda/Turnos (07), Reportes (09), PDF/Excel y vínculo real con `EntrevistaDirectoryContract` de Pacientes.

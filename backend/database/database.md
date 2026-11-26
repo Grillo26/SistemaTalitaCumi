@@ -452,6 +452,12 @@ erDiagram
         bigint atencion_diagnostico_id FK
         bigint profesional_id FK
     }
+    atencion_diagnostico_requisito {
+        bigint atencion_diagnostico_id FK
+        bigint especialidad_id FK
+        varchar especialidad_nombre
+        smallint cantidad_minima
+    }
     estado_inscripcion_historial {
         bigint id PK
         varchar tipo_entidad
@@ -472,6 +478,8 @@ erDiagram
     tipo_diagnostico ||--o{ atencion_diagnostico : "es"
     atencion_diagnostico ||--o{ atencion_diagnostico_profesional : "participan"
     profesional ||--o{ atencion_diagnostico_profesional : "participa"
+    atencion_diagnostico ||--o{ atencion_diagnostico_requisito : "exige"
+    especialidad ||--o{ atencion_diagnostico_requisito : "requiere"
 ```
 
 ### Agenda y turnos
@@ -1514,20 +1522,20 @@ Concurrencia: en PostgreSQL, `btree_gist` + constraint `EXCLUDE` sobre `(pacient
 | `tarifa_id` | `bigint` |  | `FK → tarifa` |  |
 | `categoria_tarifa_id` | `bigint` |  | `FK → categoria_tarifa` |  |
 | `cantidad_sesiones` | `int` |  | `CHECK > 0` |  |
-| `dias_semana` | `varchar(50)` |  |  | `"lunes,miercoles,viernes"` |
+| `dias_semana` | `varchar(50)` |  | `CHECK ~ '^[1-6](,[1-6])*$'` | CSV numérico `"1,3,5"` (lunes a sábado) |
 | `hora` | `time` |  |  |  |
-| `duracion_minutos` | `int` |  | `DEFAULT 50` |  |
+| `duracion_minutos` | `int` |  | `DEFAULT 50`, `CHECK > 0` |  |
 | `fecha_inicio` | `date` |  |  |  |
 | `fecha_fin` | `date` |  | `CHECK >= fecha_inicio` |  |
 | `monto_esperado` | `numeric(12,2)` |  | `CHECK >= 0` |  |
 | `estado` | `varchar(20)` |  | `DEFAULT 'activo'`, `CHECK IN ('activo','en_pausa','vencido','renovado','retirado')` |  |
 | `paquete_origen_id` | `bigint` | sí | `FK → paquete_sesiones` | Renovación |
 
-Índices: `(estado)`, `(fecha_inicio, fecha_fin)`, `(paciente_id)`, `(profesional_id)`. Timestamps: `created_at`, `updated_at`.
+Concurrencia: en PostgreSQL, `btree_gist` + constraint `EXCLUDE` sobre `(paciente_id, servicio_id, daterange(fecha_inicio, fecha_fin, '[]'))` para estados `activo` y `en_pausa`. La migración `2026_11_26_000000_create_paquete_sesiones_table` crea la tabla y la restricción. Índices: `(estado)`, `(fecha_inicio, fecha_fin)`, `(sucursal_id, fecha_inicio, fecha_fin)`, `(paciente_id, estado)`, `(servicio_id, fecha_inicio)`, `(profesional_id, fecha_inicio)` y `(paquete_origen_id)`. Timestamps: `created_at`, `updated_at`. El parámetro `paquete.cantidad_sesiones_default` (10) se crea con seeder; la duración reutiliza `duracion_sesion_minutos` (50). En el submódulo 02 solo se escriben los estados `activo` y `retirado`; `vencido` se deriva de `fecha_fin` y no se persiste.
 
 #### `atencion_entrevista` — Entrevista con los padres
 
-*Documento.* Atención con costo menor. Una sola entrevista por paciente.
+*Documento.* Atención con costo menor. No se impone unicidad por paciente; el sistema avisa si ya existe una entrevista previa y permite decidir.
 
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
@@ -1539,7 +1547,7 @@ Concurrencia: en PostgreSQL, `btree_gist` + constraint `EXCLUDE` sobre `(pacient
 | `tarifa_id` | `bigint` |  | `FK → tarifa` |  |
 | `categoria_tarifa_id` | `bigint` |  | `FK → categoria_tarifa` |  |
 | `fecha` | `date` |  |  |  |
-| `monto_esperado` | `numeric(12,2)` |  |  |  |
+| `monto_esperado` | `numeric(12,2)` |  | `CHECK >= 0` |  |
 | `estado` | `varchar(20)` |  | `DEFAULT 'activa'`, `CHECK IN ('activa','retirada')` |  |
 | `notas_admin` | `text` | sí |  |  |
 
@@ -1560,9 +1568,10 @@ Timestamps: `created_at`, `updated_at`.
 | `categoria_tarifa_id` | `bigint` |  | `FK → categoria_tarifa` |  |
 | `fecha_inicio` | `date` |  |  |  |
 | `fecha_fin` | `date` |  | `CHECK >= fecha_inicio` |  |
-| `monto_esperado` | `numeric(12,2)` |  |  |  |
+| `monto_esperado` | `numeric(12,2)` |  | `CHECK >= 0` |  |
 | `entrevista_previa_id` | `bigint` | sí | `FK → atencion_entrevista` |  |
 | `omitio_entrevista` | `boolean` |  | `DEFAULT false` |  |
+| `motivo_omision_entrevista` | `text` | sí |  | Máximo 500 en aplicación |
 | `estado_general` | `varchar(20)` |  | `DEFAULT 'incompleto'`, `CHECK IN ('incompleto','en_proceso','completo','cancelado')` |  |
 | `estado` | `varchar(20)` |  | `DEFAULT 'activa'`, `CHECK IN ('activa','retirada')` |  |
 | `notas_admin` | `text` | sí |  |  |
@@ -1574,6 +1583,20 @@ Timestamps: `created_at`, `updated_at`.
 *Pivot.* Profesionales asignados al diagnóstico.
 
 `PRIMARY KEY (atencion_diagnostico_id, profesional_id)`. Sin timestamps.
+
+#### `atencion_diagnostico_requisito` — Snapshot de especialidades requeridas
+
+*Snapshot.* Copia de las especialidades y cantidades exigidas por el tipo al crear el diagnóstico (RN-D11). Los cambios posteriores del Catálogo no alteran diagnósticos ya realizados.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `atencion_diagnostico_id` | `bigint` |  | `FK → atencion_diagnostico`, `ON DELETE CASCADE` |  |
+| `especialidad_id` | `bigint` |  | `FK → especialidad` |  |
+| `especialidad_nombre` | `varchar(150)` |  |  | Nombre conservado como snapshot |
+| `cantidad_minima` | `smallint` |  | `DEFAULT 1`, `CHECK > 0` |  |
+| `created_at` | `timestamptz` |  | `DEFAULT now()` |  |
+
+`PRIMARY KEY (atencion_diagnostico_id, especialidad_id)`. Índice `(especialidad_id)`.
 
 #### `estado_inscripcion_historial` — Historial del estado de inscripción/paquete
 
@@ -1613,7 +1636,7 @@ Sin `updated_at`.
 | `fecha` | `date` |  |  |  |
 | `hora_inicio` | `time` |  |  |  |
 | `hora_fin` | `time` |  | `CHECK > hora_inicio` |  |
-| `duracion_minutos` | `int` |  | `DEFAULT 50` |  |
+| `duracion_minutos` | `int` |  | `DEFAULT 50`, `CHECK > 0` |  |
 | `estado` | `varchar(20)` |  | `DEFAULT 'programado'`, `CHECK IN ('programado','asistio','falto','cancelado','reprogramado')` |  |
 | `motivo_cancelacion` | `text` | sí |  |  |
 | `turno_origen_id` | `bigint` | sí | `FK → turno` |  |

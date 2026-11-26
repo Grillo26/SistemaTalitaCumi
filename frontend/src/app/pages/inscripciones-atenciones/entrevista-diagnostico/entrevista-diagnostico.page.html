@@ -1,0 +1,814 @@
+<div class="space-y-5 sm:space-y-6">
+  <app-page-breadcrumb [pageTitle]="texts.title" />
+
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+      <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">{{ texts.title }}</h1>
+      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ texts.subtitle }}</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      @if (canCreate()) {
+        <button app-button type="button" (click)="openCreateInterview()">
+          {{ texts.newInterview }}
+        </button>
+        <button app-button type="button" variant="outline" (click)="openCreateDiagnosis()">
+          {{ texts.newDiagnosis }}
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (error(); as apiError) {
+    <app-alert variant="error" title="No se pudo cargar el listado" [message]="apiError.message" />
+  }
+
+  <app-component-card [title]="texts.filters">
+    <div class="grid gap-4 lg:grid-cols-3 xl:grid-cols-6" [formGroup]="filters">
+      <div class="lg:col-span-2">
+        <div class="relative">
+          <span class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-gray-400" aria-hidden="true">
+            <svg class="size-5" viewBox="0 0 20 20" fill="none">
+              <path d="M14.382 14.383l3.325 3.326m-1.249-8.334a7.082 7.082 0 01-7.083 7.081 7.082 7.082 0 110-14.163 7.082 7.082 0 017.083 7.082z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </span>
+          <input
+            app-input
+            type="text"
+            [formControl]="search"
+            class="ps-10"
+            [placeholder]="texts.searchPatient"
+            aria-label="Buscar atenciones por paciente"
+          />
+        </div>
+      </div>
+
+      <div>
+        <app-select-field
+          [options]="branchOptions()"
+          [value]="filters.controls.sucursal_id.value"
+          [placeholder]="texts.allBranches"
+          ariaLabel="Filtrar por sucursal"
+          (valueChange)="filters.controls.sucursal_id.setValue($event)"
+        />
+      </div>
+
+      @if (activeTab() === 'diagnosticos') {
+        <div>
+          <app-select-field
+            [options]="typeFilterOptions()"
+            [value]="filters.controls.tipo_diagnostico_id.value"
+            [placeholder]="texts.allTypes"
+            ariaLabel="Filtrar por tipo de diagnóstico"
+            (valueChange)="filters.controls.tipo_diagnostico_id.setValue($event)"
+          />
+        </div>
+        <div>
+          <app-select-field
+            [options]="professionalFilterOptions()"
+            [value]="filters.controls.profesional_id.value"
+            [placeholder]="texts.allProfessionals"
+            ariaLabel="Filtrar por profesional"
+            (valueChange)="filters.controls.profesional_id.setValue($event)"
+          />
+        </div>
+      }
+
+      <div>
+        <app-select-field
+          [options]="estadoOptions"
+          [value]="filters.controls.estado.value"
+          [placeholder]="texts.allStates"
+          ariaLabel="Filtrar por estado"
+          (valueChange)="filters.controls.estado.setValue($event)"
+        />
+      </div>
+
+      <div>
+        <app-inscripcion-date-input
+          formControlName="periodo_desde"
+          [ariaLabel]="texts.periodFrom"
+        />
+      </div>
+      <div>
+        <app-inscripcion-date-input
+          formControlName="periodo_hasta"
+          [ariaLabel]="texts.periodTo"
+        />
+      </div>
+
+      <div class="flex items-end gap-2">
+        <button app-button type="button" (click)="applyFilters()">Filtrar</button>
+        <button app-button variant="outline" type="button" (click)="clearFilters()">
+          {{ texts.clearFilters }}
+        </button>
+      </div>
+    </div>
+  </app-component-card>
+
+  <app-component-card [title]="activeTab() === 'entrevistas' ? texts.listTitleInterviews : texts.listTitleDiagnoses">
+    <div class="flex flex-wrap gap-2" role="tablist" aria-label="Tipos de atención">
+      <button
+        app-button
+        type="button"
+        [variant]="activeTab() === 'entrevistas' ? 'default' : 'outline'"
+        [attr.aria-pressed]="activeTab() === 'entrevistas'"
+        (click)="setTab('entrevistas')"
+      >
+        {{ texts.interviews }}
+      </button>
+      <button
+        app-button
+        type="button"
+        [variant]="activeTab() === 'diagnosticos' ? 'default' : 'outline'"
+        [attr.aria-pressed]="activeTab() === 'diagnosticos'"
+        (click)="setTab('diagnosticos')"
+      >
+        {{ texts.diagnoses }}
+      </button>
+    </div>
+
+    @if (activeTab() === 'entrevistas') {
+      <div class="mt-5 overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+        <table app-table class="min-w-full">
+          <thead app-table-header class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
+            <tr app-table-row>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Paciente</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Tutor</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Sucursal</th>
+              <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="ariaSort('fecha')">
+                <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="setSort('fecha')">
+                  Fecha <span aria-hidden="true">{{ sortIndicator('fecha') }}</span>
+                </button>
+              </th>
+              <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="ariaSort('monto_esperado')">
+                <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="setSort('monto_esperado')">
+                  {{ texts.amount }} <span aria-hidden="true">{{ sortIndicator('monto_esperado') }}</span>
+                </button>
+              </th>
+              <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="ariaSort('estado')">
+                <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="setSort('estado')">
+                  Estado <span aria-hidden="true">{{ sortIndicator('estado') }}</span>
+                </button>
+              </th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">{{ texts.payment }}</th>
+              <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400">{{ texts.actions }}</th>
+            </tr>
+          </thead>
+          <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+            @if (loading()) {
+              <tr app-table-row>
+                <td app-table-cell colspan="8" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.loading }}</td>
+              </tr>
+            } @else {
+              @for (row of entrevistaRows(); track row.id) {
+                <tr app-table-row class="transition-colors hover:bg-gray-50/70 dark:hover:bg-white/[0.02]">
+                  <td app-table-cell class="px-4 py-4">
+                    <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ row.paciente.nombre_completo }}</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">{{ row.paciente.codigo || 'Sin código' }}</p>
+                  </td>
+                  <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ row.tutor.nombre_completo }}</td>
+                  <td app-table-cell class="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">{{ row.sucursal.nombre }}</td>
+                  <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-600 dark:text-gray-300">{{ formatDate(row.fecha) }}</td>
+                  <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm font-medium text-gray-800 dark:text-white/90">{{ formatBs(row.monto_esperado) }}</td>
+                  <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                    <app-badge [color]="statusColor(row.estado)" variant="light" size="sm">{{ row.estado_label }}</app-badge>
+                  </td>
+                  <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                    @if (abilities().pago_disponible) {
+                      <span class="text-sm text-gray-400">—</span>
+                    } @else {
+                      <app-badge color="gray" variant="light" size="sm">{{ texts.noPayment }}</app-badge>
+                    }
+                  </td>
+                  <td app-table-cell class="whitespace-nowrap px-4 py-4 text-end">
+                    <div class="flex flex-wrap items-center justify-end gap-1">
+                      <button app-button variant="ghost" size="sm" type="button" (click)="openDetail('entrevista', row.id)">{{ texts.view }}</button>
+                      @if (row.can.update) {
+                        <button app-button variant="ghost" size="sm" type="button" (click)="openEditInterview(row)">{{ texts.edit }}</button>
+                      }
+                      @if (row.can.withdraw) {
+                        <button app-button variant="link" size="sm" type="button" className="text-error-500 hover:text-error-600" (click)="openBaja('entrevista', row.id)">{{ texts.withdraw }}</button>
+                      }
+                    </div>
+                  </td>
+                </tr>
+              } @empty {
+                <tr app-table-row>
+                  <td app-table-cell colspan="8" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.emptyInterviews }}</td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+    } @else {
+      <div class="mt-5 overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+        <table app-table class="min-w-full">
+          <thead app-table-header class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
+            <tr app-table-row>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Paciente</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">{{ texts.type }}</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">{{ texts.professionals }}</th>
+              <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="ariaSort('fecha_inicio')">
+                <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="setSort('fecha_inicio')">
+                  Período <span aria-hidden="true">{{ sortIndicator('fecha_inicio') }}</span>
+                </button>
+              </th>
+              <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="ariaSort('monto_esperado')">
+                <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="setSort('monto_esperado')">
+                  {{ texts.amount }} <span aria-hidden="true">{{ sortIndicator('monto_esperado') }}</span>
+                </button>
+              </th>
+              <th app-table-cell class="px-4 py-3 text-start" [attr.aria-sort]="ariaSort('estado')">
+                <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300" (click)="setSort('estado')">
+                  Estado <span aria-hidden="true">{{ sortIndicator('estado') }}</span>
+                </button>
+              </th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">{{ texts.payment }}</th>
+              <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400">{{ texts.actions }}</th>
+            </tr>
+          </thead>
+          <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+            @if (loading()) {
+              <tr app-table-row>
+                <td app-table-cell colspan="8" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.loading }}</td>
+              </tr>
+            } @else {
+              @for (row of diagnosticoRows(); track row.id) {
+                <tr app-table-row class="transition-colors hover:bg-gray-50/70 dark:hover:bg-white/[0.02]">
+                  <td app-table-cell class="px-4 py-4">
+                    <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ row.paciente.nombre_completo }}</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">{{ row.paciente.codigo || 'Sin código' }}</p>
+                  </td>
+                  <td app-table-cell class="px-4 py-4">
+                    <p class="text-sm text-gray-700 dark:text-gray-300">{{ row.tipo_diagnostico.nombre }}</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">{{ row.servicio.nombre }}</p>
+                  </td>
+                  <td app-table-cell class="px-4 py-4">
+                    @if (row.profesionales.length > 0) {
+                      <div class="flex max-w-xs flex-wrap gap-1">
+                        @for (profesional of row.profesionales; track profesional.id) {
+                          <app-badge color="gray" variant="light" size="sm">{{ profesional.nombre_completo }}</app-badge>
+                        }
+                      </div>
+                    } @else {
+                      <app-badge color="warning" variant="light" size="sm">{{ texts.noProfessionals }}</app-badge>
+                    }
+                  </td>
+                  <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-600 dark:text-gray-300">
+                    {{ formatDate(row.fecha_inicio) }} — {{ formatDate(row.fecha_fin) }}
+                  </td>
+                  <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm font-medium text-gray-800 dark:text-white/90">{{ formatBs(row.monto_esperado) }}</td>
+                  <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                    <app-badge [color]="statusColor(row.estado)" variant="light" size="sm">{{ row.estado_label }}</app-badge>
+                    @if (row.omitio_entrevista) {
+                      <app-badge color="warning" variant="light" size="sm" class="ms-1">Sin entrevista</app-badge>
+                    }
+                  </td>
+                  <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                    @if (abilities().pago_disponible) {
+                      <span class="text-sm text-gray-400">—</span>
+                    } @else {
+                      <app-badge color="gray" variant="light" size="sm">{{ texts.noPayment }}</app-badge>
+                    }
+                  </td>
+                  <td app-table-cell class="whitespace-nowrap px-4 py-4 text-end">
+                    <div class="flex flex-wrap items-center justify-end gap-1">
+                      <button app-button variant="ghost" size="sm" type="button" (click)="openDetail('diagnostico', row.id)">{{ texts.view }}</button>
+                      @if (row.can.update) {
+                        <button app-button variant="ghost" size="sm" type="button" (click)="openEditDiagnosis(row)">{{ texts.edit }}</button>
+                      }
+                      @if (row.can.withdraw) {
+                        <button app-button variant="link" size="sm" type="button" className="text-error-500 hover:text-error-600" (click)="openBaja('diagnostico', row.id)">{{ texts.withdraw }}</button>
+                      }
+                    </div>
+                  </td>
+                </tr>
+              } @empty {
+                <tr app-table-row>
+                  <td app-table-cell colspan="8" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.emptyDiagnoses }}</td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+
+    @if (total() > 0) {
+      <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p class="text-sm text-gray-500 dark:text-gray-400">Mostrando {{ from() ?? 0 }}–{{ to() ?? 0 }} de {{ total() }}</p>
+        <app-pagination [currentPage]="page()" [totalPages]="lastPage()" variant="text-icon" (pageChange)="goToPage($event)" />
+      </div>
+    }
+  </app-component-card>
+</div>
+
+@if (formOpen() && formKind() === 'entrevista') {
+  <app-modal [open]="true" [title]="formMode() === 'create' ? texts.newInterview : texts.editInterview" subtitle="Los campos marcados con * son obligatorios." size="lg" (closed)="closeForm()">
+    <form class="space-y-4" [formGroup]="interviewForm" (ngSubmit)="saveInterview()">
+      @if (formError(); as message) {
+        <app-alert variant="error" [title]="'No se pudo guardar'" [message]="message" />
+      }
+      @if (tariffChanged(); as tarifa) {
+        <app-alert variant="warning" [title]="texts.tariffChanged" [message]="texts.tariffChangedDetail + ' Nuevo monto: ' + formatBs(tarifa.monto)" />
+        <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+          <input type="checkbox" [checked]="confirmTariff()" (change)="confirmTariff.set($any($event.target).checked)" />
+          {{ texts.confirmTariff }}
+        </label>
+      }
+
+      @if (formMode() === 'create') {
+        <app-inscripcion-paciente-search [selected]="formPatient()" (selectedChange)="onFormPatient($event)" [required]="true" />
+      } @else if (formPatient(); as paciente) {
+        <div class="rounded-xl border border-gray-200 p-3 dark:border-gray-800">
+          <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ paciente.nombre_completo }}</p>
+          <p class="text-xs text-gray-500">{{ paciente.estado_label }}</p>
+        </div>
+      }
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Tutor responsable *</label>
+          @if (formMode() === 'create') {
+            <app-select-field [options]="tutorFormOptions()" [value]="interviewForm.controls.tutor_id.value" placeholder="Seleccioná un tutor" ariaLabel="Tutor responsable" [disabled]="formTutoresLoading() || tutorFormOptions().length <= 1" (valueChange)="interviewForm.controls.tutor_id.setValue($event)" />
+            @if (formTutoresLoading()) {
+              <p class="mt-1 text-xs text-gray-500">Cargando tutores...</p>
+            }
+            @if (formTutoresError(); as message) {
+              <p class="mt-1 text-xs text-error-600">{{ message }}</p>
+            }
+          } @else if (formTutores()[0]; as tutor) {
+            <p class="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-gray-700">{{ tutor.nombre_completo }}</p>
+          }
+          @if (fieldError('tutor_id'); as message) {
+            <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+          }
+        </div>
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Sucursal *</label>
+          <app-select-field [options]="branchOptions()" [value]="interviewForm.controls.sucursal_id.value" placeholder="Seleccioná una sucursal" ariaLabel="Sucursal" [disabled]="formMode() === 'edit'" (valueChange)="interviewForm.controls.sucursal_id.setValue($event)" />
+          @if (fieldError('sucursal_id'); as message) {
+            <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+          }
+        </div>
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Servicio *</label>
+          <app-select-field [options]="interviewServiceOptions()" [value]="interviewForm.controls.servicio_id.value" placeholder="Servicio de entrevista" ariaLabel="Servicio de entrevista" [disabled]="formMode() === 'edit'" (valueChange)="interviewForm.controls.servicio_id.setValue($event)" />
+          @if (fieldError('servicio_id'); as message) {
+            <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+          }
+        </div>
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Categoría *</label>
+          <app-select-field [options]="categoryOptions()" [value]="interviewForm.controls.categoria_tarifa_id.value" placeholder="Seleccioná una categoría" ariaLabel="Categoría" [disabled]="formMode() === 'edit'" (valueChange)="interviewForm.controls.categoria_tarifa_id.setValue($event)" />
+          @if (fieldError('categoria_tarifa_id'); as message) {
+            <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+          }
+        </div>
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Fecha *</label>
+          <app-inscripcion-date-input formControlName="fecha" ariaLabel="Fecha de la entrevista" />
+          @if (fieldError('fecha'); as message) {
+            <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+          }
+        </div>
+      </div>
+
+      <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+        <p class="text-sm font-semibold text-gray-800 dark:text-white/90">{{ texts.expectedAmount }}</p>
+        @if (formMode() === 'edit' && editingAmount(); as amount) {
+          <p class="mt-2 text-2xl font-semibold text-brand-600 dark:text-brand-400">{{ formatBs(amount) }}</p>
+          <p class="mt-1 text-xs text-gray-500">El monto no cambia al editar la fecha o las notas.</p>
+        } @else if (previewLoading()) {
+          <p class="mt-2 text-sm text-gray-500">{{ texts.calculating }}</p>
+        } @else if (previewError(); as message) {
+          <p class="mt-2 text-sm text-warning-600">{{ message }}</p>
+        } @else if (preview(); as tarifa) {
+          <p class="mt-2 text-2xl font-semibold text-brand-600 dark:text-brand-400">{{ formatBs(tarifa.monto) }}</p>
+          <p class="mt-1 text-xs text-gray-500">{{ tarifa.servicio_nombre }} · {{ tarifa.categoria_nombre }} · {{ formatDate(tarifa.vigente_desde) }} — {{ tarifa.vigente_hasta ? formatDate(tarifa.vigente_hasta) : 'abierta' }}</p>
+        } @else {
+          <p class="mt-2 text-sm text-gray-500">Seleccioná servicio, sucursal, categoría y fecha para calcularlo.</p>
+        }
+      </div>
+
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="entrevista-notas">{{ texts.observations }}</label>
+        <textarea id="entrevista-notas" app-textarea rows="3" formControlName="notas_admin" maxlength="500" [placeholder]="texts.observationsHint"></textarea>
+        <p class="mt-1 text-xs text-gray-400">{{ interviewForm.controls.notas_admin.value.length }}/500</p>
+        @if (fieldError('notas_admin'); as message) {
+          <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+        }
+      </div>
+
+      <div class="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+        <button app-button variant="outline" type="button" [disabled]="formSaving()" (click)="closeForm()">{{ texts.cancel }}</button>
+        <button app-button type="submit" [disabled]="formSaving()">{{ formSaving() ? texts.saving : texts.save }}</button>
+      </div>
+    </form>
+  </app-modal>
+}
+
+@if (formOpen() && formKind() === 'diagnostico') {
+  <app-modal [open]="true" [title]="formMode() === 'create' ? texts.newDiagnosis : texts.editDiagnosis" subtitle="Los campos marcados con * son obligatorios." size="xl" (closed)="closeForm()">
+    <form class="space-y-4" [formGroup]="diagnosisForm" (ngSubmit)="saveDiagnosis()">
+      @if (formError(); as message) {
+        <app-alert variant="error" title="No se pudo guardar" [message]="message" />
+      }
+      @if (tariffChanged(); as tarifa) {
+        <app-alert variant="warning" [title]="texts.tariffChanged" [message]="texts.tariffChangedDetail + ' Nuevo monto: ' + formatBs(tarifa.monto)" />
+        <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+          <input type="checkbox" [checked]="confirmTariff()" (change)="confirmTariff.set($any($event.target).checked)" />
+          {{ texts.confirmTariff }}
+        </label>
+      }
+
+      @if (formMode() === 'create') {
+        <app-inscripcion-paciente-search [selected]="formPatient()" (selectedChange)="onFormPatient($event)" [required]="true" />
+      } @else if (formPatient(); as paciente) {
+        <div class="rounded-xl border border-gray-200 p-3 dark:border-gray-800">
+          <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ paciente.nombre_completo }}</p>
+          <p class="text-xs text-gray-500">{{ paciente.estado_label }}</p>
+        </div>
+      }
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Sucursal *</label>
+          <app-select-field [options]="branchOptions()" [value]="diagnosisForm.controls.sucursal_id.value" placeholder="Seleccioná una sucursal" ariaLabel="Sucursal" [disabled]="formMode() === 'edit'" (valueChange)="diagnosisForm.controls.sucursal_id.setValue($event)" />
+          @if (fieldError('sucursal_id'); as message) {
+            <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+          }
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Tipo de diagnóstico *</label>
+          <app-select-field [options]="diagnosticTypeOptions()" [value]="diagnosisForm.controls.tipo_diagnostico_id.value" placeholder="Seleccioná un tipo" ariaLabel="Tipo de diagnóstico" [disabled]="formMode() === 'edit'" (valueChange)="diagnosisForm.controls.tipo_diagnostico_id.setValue($event)" />
+          @if (fieldError('tipo_diagnostico_id'); as message) {
+            <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+          }
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Categoría *</label>
+          <app-select-field [options]="categoryOptions()" [value]="diagnosisForm.controls.categoria_tarifa_id.value" placeholder="Seleccioná una categoría" ariaLabel="Categoría" [disabled]="formMode() === 'edit'" (valueChange)="diagnosisForm.controls.categoria_tarifa_id.setValue($event)" />
+          @if (fieldError('categoria_tarifa_id'); as message) {
+            <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+          }
+        </div>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Fecha inicio *</label>
+            <app-inscripcion-date-input formControlName="fecha_inicio" ariaLabel="Fecha de inicio" />
+            @if (fieldError('fecha_inicio'); as message) {
+              <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+            }
+          </div>
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Fecha fin *</label>
+            <app-inscripcion-date-input formControlName="fecha_fin" [minDate]="diagnosisForm.controls.fecha_inicio.value || undefined" ariaLabel="Fecha de fin" />
+            @if (fieldError('fecha_fin'); as message) {
+              <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+            }
+          </div>
+        </div>
+      </div>
+
+      @if (requirementsLoading()) {
+        <p class="text-sm text-gray-500">Cargando especialidades requeridas...</p>
+      } @else if (requirementsError(); as message) {
+        <app-alert variant="warning" title="Catálogo incompleto" [message]="message" />
+      } @else if (requirements().length > 0) {
+        <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p class="text-sm font-semibold text-gray-800 dark:text-white/90">{{ texts.requirements }}</p>
+              <p class="mt-1 text-xs text-gray-500">Podés dejar el diagnóstico sin asignar o cubrir las especialidades requeridas.</p>
+            </div>
+            <app-badge [color]="selectedProfessionals().size === 0 ? 'warning' : (missingProfessionals().length === 0 ? 'success' : 'error')" variant="light" size="sm">
+              {{ selectedProfessionals().size === 0 ? texts.noProfessionals : (missingProfessionals().length === 0 ? 'Cobertura completa' : texts.missingProfessionals) }}
+            </app-badge>
+          </div>
+
+          <div class="mt-3 flex flex-wrap gap-2">
+            @for (requisito of requirements(); track requisito.especialidad_id) {
+              <span class="rounded-lg border border-gray-200 px-2.5 py-1 text-xs text-gray-600 dark:border-gray-700 dark:text-gray-300">
+                {{ requisito.especialidad_nombre }}:
+                {{ countProfessionalsFor(requisito.especialidad_id) }}/{{ requisito.cantidad_minima }}
+              </span>
+            }
+          </div>
+
+          @if (availableProfessionals().length === 0) {
+            <p class="mt-3 text-sm text-warning-600 dark:text-warning-400">No hay profesionales activos en la sucursal para las especialidades requeridas.</p>
+          } @else {
+            <div class="mt-3 max-h-56 space-y-1 overflow-y-auto rounded-lg border border-gray-200 p-2 dark:border-gray-800">
+              @for (profesional of availableProfessionals(); track profesional.id) {
+                <label class="flex cursor-pointer items-start gap-3 rounded-md px-2 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-white/5">
+                  <input type="checkbox" class="mt-0.5 size-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500" [checked]="isProfesionalSelected(profesional.id)" (change)="toggleProfesional(profesional.id)" />
+                  <span>
+                    <span class="block font-medium">{{ profesional.nombre_completo }}</span>
+                    <span class="block text-xs text-gray-500">{{ specialtiesLabel(profesional) }}</span>
+                  </span>
+                </label>
+              }
+            </div>
+          }
+        </div>
+      }
+
+      @if (formMode() === 'create' && previousInterviews().length > 0) {
+        <app-alert variant="info" title="Entrevista previa" [message]="texts.previousInterview" />
+      }
+
+      @if (formMode() === 'create') {
+        <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+          <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-800 dark:text-white/90">
+            <input type="checkbox" [checked]="omitInterview()" [disabled]="previousInterviews().length === 0" (change)="toggleOmitInterview($any($event.target).checked)" />
+            {{ texts.omitInterview }}
+          </label>
+
+          @if (!omitInterview() && previousInterviews().length > 0) {
+            <div class="mt-3">
+              <app-select-field [options]="previousInterviewOptions()" [value]="selectedPreviousInterview()?.toString() ?? ''" placeholder="Seleccioná una entrevista" ariaLabel="Entrevista previa" (valueChange)="selectPreviousInterview($event)" />
+            </div>
+          }
+
+          @if (omitInterview()) {
+            <div class="mt-3">
+              <label class="mb-1.5 block text-xs font-medium text-gray-500 dark:text-gray-400" for="motivo-omision">{{ texts.omitInterviewReason }}</label>
+              <input id="motivo-omision" app-input type="text" formControlName="motivo_omision_entrevista" maxlength="500" placeholder="Opcional" />
+            </div>
+          }
+        </div>
+      } @else if (detailDiagnostico(); as detalle) {
+        <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+          <p class="text-sm text-gray-600 dark:text-gray-300">
+            @if (detalle.entrevista_previa_id) {
+              {{ texts.linkedInterview }} #{{ detalle.entrevista_previa_id }}
+            } @else if (detalle.omitio_entrevista) {
+              {{ texts.omittedInterview }}
+            }
+          </p>
+        </div>
+      }
+
+      <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+        <p class="text-sm font-semibold text-gray-800 dark:text-white/90">{{ texts.expectedAmount }}</p>
+        @if (formMode() === 'edit' && editingAmount(); as amount) {
+          <p class="mt-2 text-2xl font-semibold text-brand-600 dark:text-brand-400">{{ formatBs(amount) }}</p>
+          <p class="mt-1 text-xs text-gray-500">El monto no cambia al editar fechas, profesionales o notas.</p>
+        } @else if (previewLoading()) {
+          <p class="mt-2 text-sm text-gray-500">{{ texts.calculating }}</p>
+        } @else if (previewError(); as message) {
+          <p class="mt-2 text-sm text-warning-600">{{ message }}</p>
+        } @else if (preview(); as tarifa) {
+          <p class="mt-2 text-2xl font-semibold text-brand-600 dark:text-brand-400">{{ formatBs(tarifa.monto) }}</p>
+          <p class="mt-1 text-xs text-gray-500">{{ tarifa.servicio_nombre }} · {{ tarifa.categoria_nombre }} · {{ formatDate(tarifa.vigente_desde) }} — {{ tarifa.vigente_hasta ? formatDate(tarifa.vigente_hasta) : 'abierta' }}</p>
+        } @else {
+          <p class="mt-2 text-sm text-gray-500">Seleccioná tipo, sucursal, categoría y fecha para calcularlo.</p>
+        }
+      </div>
+
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="diagnostico-notas">{{ texts.observations }}</label>
+        <textarea id="diagnostico-notas" app-textarea rows="3" formControlName="notas_admin" maxlength="500" [placeholder]="texts.observationsHint"></textarea>
+        <p class="mt-1 text-xs text-gray-400">{{ diagnosisForm.controls.notas_admin.value.length }}/500</p>
+        @if (fieldError('notas_admin'); as message) {
+          <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+        }
+      </div>
+
+      <div class="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+        <button app-button variant="outline" type="button" [disabled]="formSaving()" (click)="closeForm()">{{ texts.cancel }}</button>
+        <button app-button type="submit" [disabled]="formSaving()">{{ formSaving() ? texts.saving : texts.save }}</button>
+      </div>
+    </form>
+  </app-modal>
+}
+
+@if (detailOpen()) {
+  <app-modal [open]="true" [customHeader]="true" [showClose]="false" [ariaLabel]="'Ficha de ' + texts.title" size="xl" (closed)="closeDetail()">
+    <div modal-header class="flex items-start justify-between gap-4 border-b border-gray-100 p-6 pb-4 dark:border-gray-800">
+      <div>
+        @if (detail(); as registro) {
+          <p class="text-xs font-medium uppercase tracking-wide text-gray-400">{{ entityLabel(detailKind()) }}</p>
+          <h3 class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ registro.paciente.nombre_completo }}</h3>
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <app-badge [color]="statusColor(registro.estado)" variant="light" size="sm">{{ registro.estado_label }}</app-badge>
+            <span class="text-sm text-gray-500">{{ registro.sucursal.nombre }}</span>
+            <span class="text-sm text-gray-500">{{ formatBs(registro.monto_esperado) }}</span>
+          </div>
+        } @else {
+          <h3 class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ entityLabel(detailKind()) }}</h3>
+        }
+      </div>
+      <button app-button variant="ghost" size="icon-sm" type="button" ariaLabel="Cerrar ficha" (click)="closeDetail()">✕</button>
+    </div>
+
+    @if (detailLoading()) {
+      <p class="py-10 text-center text-sm text-gray-500">{{ texts.loading }}</p>
+    } @else if (detailError(); as message) {
+      <app-alert variant="error" title="No se pudo abrir la ficha" [message]="message" />
+    } @else if (detail(); as registro) {
+      <div class="space-y-5">
+        <div class="flex flex-wrap gap-2 border-b border-gray-100 pb-3 dark:border-gray-800">
+          <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-medium" [class.bg-brand-50]="detailTab() === 'resumen'" [class.text-brand-600]="detailTab() === 'resumen'" [class.text-gray-500]="detailTab() !== 'resumen'" (click)="setDetailTab('resumen')">{{ texts.summary }}</button>
+          <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-medium" [class.bg-brand-50]="detailTab() === 'pago'" [class.text-brand-600]="detailTab() === 'pago'" [class.text-gray-500]="detailTab() !== 'pago'" (click)="setDetailTab('pago')">{{ texts.payment }}</button>
+          <button type="button" class="rounded-lg px-3 py-1.5 text-sm font-medium" [class.bg-brand-50]="detailTab() === 'comprobante'" [class.text-brand-600]="detailTab() === 'comprobante'" [class.text-gray-500]="detailTab() !== 'comprobante'" (click)="setDetailTab('comprobante')">{{ texts.receipt }}</button>
+        </div>
+
+        @switch (detailTab()) {
+          @case ('resumen') {
+            @if (detailEntrevista(); as ficha) {
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <p class="text-xs uppercase tracking-wide text-gray-400">Tutor</p>
+                  <p class="mt-1 font-medium text-gray-800 dark:text-white/90">{{ ficha.tutor.nombre_completo }}</p>
+                  @if (ficha.tutor.parentesco) {
+                    <p class="text-sm text-gray-500">{{ ficha.tutor.parentesco }}</p>
+                  }
+                </div>
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <p class="text-xs uppercase tracking-wide text-gray-400">Servicio / categoría</p>
+                  <p class="mt-1 font-medium text-gray-800 dark:text-white/90">{{ ficha.servicio.nombre }}</p>
+                  <p class="text-sm text-gray-500">{{ ficha.categoria.nombre }}</p>
+                </div>
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <p class="text-xs uppercase tracking-wide text-gray-400">Fecha</p>
+                  <p class="mt-1 font-medium text-gray-800 dark:text-white/90">{{ formatDate(ficha.fecha) }}</p>
+                </div>
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <p class="text-xs uppercase tracking-wide text-gray-400">Monto esperado</p>
+                  <p class="mt-1 text-2xl font-semibold text-brand-600 dark:text-brand-400">{{ formatBs(ficha.monto_esperado) }}</p>
+                </div>
+                @if (ficha.notas_admin) {
+                  <div class="rounded-xl border border-gray-200 p-4 sm:col-span-2 dark:border-gray-800">
+                    <p class="text-xs uppercase tracking-wide text-gray-400">{{ texts.observations }}</p>
+                    <p class="mt-1 whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">{{ ficha.notas_admin }}</p>
+                  </div>
+                }
+              </div>
+            }
+            @if (detailDiagnostico(); as ficha) {
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <p class="text-xs uppercase tracking-wide text-gray-400">Tipo de diagnóstico</p>
+                  <p class="mt-1 font-medium text-gray-800 dark:text-white/90">{{ ficha.tipo_diagnostico.nombre }}</p>
+                  <p class="text-sm text-gray-500">{{ ficha.servicio.nombre }} · {{ ficha.tipo_diagnostico.dias_estimados }} día(s)</p>
+                </div>
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <p class="text-xs uppercase tracking-wide text-gray-400">Período</p>
+                  <p class="mt-1 font-medium text-gray-800 dark:text-white/90">{{ formatDate(ficha.fecha_inicio) }} — {{ formatDate(ficha.fecha_fin) }}</p>
+                </div>
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <p class="text-xs uppercase tracking-wide text-gray-400">Categoría</p>
+                  <p class="mt-1 font-medium text-gray-800 dark:text-white/90">{{ ficha.categoria.nombre }}</p>
+                </div>
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <p class="text-xs uppercase tracking-wide text-gray-400">Monto esperado</p>
+                  <p class="mt-1 text-2xl font-semibold text-brand-600 dark:text-brand-400">{{ formatBs(ficha.monto_esperado) }}</p>
+                </div>
+                <div class="rounded-xl border border-gray-200 p-4 sm:col-span-2 dark:border-gray-800">
+                  <p class="text-xs uppercase tracking-wide text-gray-400">{{ texts.professionals }}</p>
+                  @if (ficha.profesionales.length > 0) {
+                    <div class="mt-2 flex flex-wrap gap-1">
+                      @for (profesional of ficha.profesionales; track profesional.id) {
+                        <app-badge color="gray" variant="light" size="sm">{{ profesional.nombre_completo }}</app-badge>
+                      }
+                    </div>
+                  } @else {
+                    <app-badge color="warning" variant="light" size="sm" class="mt-2">{{ texts.noProfessionals }}</app-badge>
+                  }
+                  @if (ficha.requisitos.length > 0) {
+                    <div class="mt-3 flex flex-wrap gap-1">
+                      @for (requisito of ficha.requisitos; track requisito.especialidad_id) {
+                        <span class="text-xs text-gray-500">{{ requisito.especialidad_nombre }} × {{ requisito.cantidad_minima }}</span>
+                      }
+                    </div>
+                  }
+                </div>
+                <div class="rounded-xl border border-gray-200 p-4 sm:col-span-2 dark:border-gray-800">
+                  <p class="text-xs uppercase tracking-wide text-gray-400">Entrevista previa</p>
+                  @if (ficha.entrevista_previa) {
+                    <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">Vinculada #{{ ficha.entrevista_previa.id }} · {{ formatDate(ficha.entrevista_previa.fecha) }}</p>
+                  } @else if (ficha.omitio_entrevista) {
+                    <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ texts.omittedInterview }}</p>
+                    @if (ficha.motivo_omision_entrevista) {
+                      <p class="mt-1 text-xs text-gray-500">{{ ficha.motivo_omision_entrevista }}</p>
+                    }
+                  } @else {
+                    <p class="mt-1 text-sm text-gray-500">Sin entrevista vinculada.</p>
+                  }
+                </div>
+                @if (ficha.notas_admin) {
+                  <div class="rounded-xl border border-gray-200 p-4 sm:col-span-2 dark:border-gray-800">
+                    <p class="text-xs uppercase tracking-wide text-gray-400">{{ texts.observations }}</p>
+                    <p class="mt-1 whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">{{ ficha.notas_admin }}</p>
+                  </div>
+                }
+              </div>
+            }
+            @if (registro.retiro; as retiro) {
+              <div class="mt-4 rounded-xl border border-warning-200 bg-warning-50 p-4 dark:border-warning-500/30 dark:bg-warning-500/10">
+                <p class="text-sm font-semibold text-warning-700 dark:text-warning-400">Baja</p>
+                <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ retiro.fecha_baja ? formatDate(retiro.fecha_baja) : '—' }} · {{ retiro.motivo_codigo || '—' }}</p>
+                @if (retiro.motivo_detalle) {
+                  <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ retiro.motivo_detalle }}</p>
+                }
+              </div>
+            }
+          }
+          @case ('pago') {
+            @if (!abilities().pago_disponible) {
+              <app-alert variant="info" title="Pagos no disponible" message="El módulo de Pagos y Caja todavía no está implementado." />
+            } @else if (pagoLoading()) {
+              <p class="text-sm text-gray-500">Consultando Pagos y Caja...</p>
+            } @else if (pagoError(); as message) {
+              <app-alert variant="error" title="No se pudo consultar el pago" [message]="message" />
+            } @else if (pago(); as estado) {
+              <div class="grid gap-4 sm:grid-cols-3">
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800"><p class="text-xs uppercase tracking-wide text-gray-400">Estado</p><p class="mt-1 font-medium">{{ estado.estado }}</p></div>
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800"><p class="text-xs uppercase tracking-wide text-gray-400">Pagado</p><p class="mt-1 font-medium">{{ formatBs(estado.monto_pagado) }}</p></div>
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800"><p class="text-xs uppercase tracking-wide text-gray-400">Saldo</p><p class="mt-1 font-medium">{{ formatBs(estado.saldo) }}</p></div>
+              </div>
+              <button app-button type="button" class="mt-4" (click)="registrarPago()">Registrar pago</button>
+            }
+          }
+          @case ('comprobante') {
+            @if (comprobanteLoading()) {
+              <p class="text-sm text-gray-500">Cargando comprobante...</p>
+            } @else if (comprobanteError(); as message) {
+              <app-alert variant="error" title="No se pudo generar el comprobante" [message]="message" />
+            } @else if (comprobanteData(); as data) {
+              <app-atencion-comprobante [data]="data" (close)="closeDetail()" />
+            }
+          }
+        }
+
+        <div class="flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+          <button app-button variant="outline" type="button" (click)="closeDetail()">{{ texts.close }}</button>
+          @if (registro.can.update) {
+            <button app-button variant="outline" type="button" (click)="detailKind() === 'entrevista' ? openEditInterview($any(registro)) : openEditDiagnosis($any(registro))">{{ texts.edit }}</button>
+          }
+          @if (detailKind() === 'diagnostico' && registro.can.update) {
+            <button app-button variant="outline" type="button" (click)="openLinkInterview()">{{ texts.linkInterview }}</button>
+          }
+          @if (registro.can.withdraw) {
+            <button app-button variant="destructive" type="button" (click)="openBaja(detailKind(), registro.id)">{{ texts.withdraw }}</button>
+          }
+        </div>
+      </div>
+    }
+  </app-modal>
+}
+
+@if (bajaOpen()) {
+  <app-modal [open]="true" title="Dar de baja atención" [subtitle]="entityLabel(bajaKind())" size="md" (closed)="closeBaja()">
+    <form class="space-y-4" [formGroup]="bajaForm" (ngSubmit)="confirmBaja()">
+      @if (bajaError(); as message) {
+        <app-alert variant="error" title="No se pudo dar de baja" [message]="message" />
+      }
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Motivo *</label>
+        <app-select-field [options]="motivoOptions" [value]="bajaForm.controls.motivo.value" ariaLabel="Motivo de baja" (valueChange)="bajaForm.controls.motivo.setValue($event)" />
+      </div>
+      @if (motivoOtro()) {
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="baja-detalle">Detalle *</label>
+          <textarea id="baja-detalle" app-textarea rows="3" formControlName="motivo_detalle" maxlength="500"></textarea>
+        </div>
+      }
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Fecha de baja *</label>
+        <app-inscripcion-date-input formControlName="fecha_baja" [maxDate]="todayDate" ariaLabel="Fecha de baja" />
+      </div>
+      <p class="text-sm text-gray-600 dark:text-gray-300">{{ texts.deleted }}</p>
+      <div class="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+        <button app-button variant="outline" type="button" [disabled]="bajaSaving()" (click)="closeBaja()">{{ texts.cancel }}</button>
+        <button app-button variant="destructive" type="submit" [disabled]="bajaSaving()">{{ bajaSaving() ? texts.saving : texts.withdraw }}</button>
+      </div>
+    </form>
+  </app-modal>
+}
+
+@if (linkOpen()) {
+  <app-modal [open]="true" title="Vincular entrevista" subtitle="Seleccioná una entrevista registrada del mismo paciente." size="md" (closed)="closeLink()">
+    <div class="space-y-4">
+      @if (linkError(); as message) {
+        <app-alert variant="error" title="No se pudo vincular" [message]="message" />
+      }
+      @if (previousInterviewsForLink().length === 0) {
+        <p class="text-sm text-gray-500">No hay entrevistas anteriores disponibles.</p>
+      } @else {
+        <app-select-field [options]="linkInterviewOptions()" [value]="selectedLinkInterview()?.toString() ?? ''" placeholder="Seleccioná una entrevista" ariaLabel="Entrevista a vincular" (valueChange)="selectLinkInterview($event)" />
+      }
+      <div class="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+        <button app-button variant="outline" type="button" [disabled]="linkSaving()" (click)="closeLink()">{{ texts.cancel }}</button>
+        <button app-button type="button" [disabled]="linkSaving() || selectedLinkInterview() === null" (click)="confirmLink()">{{ linkSaving() ? texts.saving : texts.linkInterview }}</button>
+      </div>
+    </div>
+  </app-modal>
+}

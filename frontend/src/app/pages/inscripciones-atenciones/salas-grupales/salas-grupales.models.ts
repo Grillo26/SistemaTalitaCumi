@@ -345,6 +345,7 @@ export const MONTH_OPTIONS = [
 export const SALAS_GRUPALES_TEXTS = {
   title: 'Inscripciones a salas grupales',
   subtitle: 'Altas, renovaciones y bajas de inscripciones mensuales a salas grupales.',
+  listTitle: 'Inscripciones registradas',
   newInscription: 'Nueva inscripción',
   filters: 'Filtros',
   searchPatient: 'Buscar paciente',

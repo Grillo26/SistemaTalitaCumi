@@ -68,5 +68,10 @@ class DatabaseSeeder extends Seeder
         $this->call(CatalogoDiagnosticosAccionAuditadaSeeder::class);
         $this->call(InscripcionesAtencionesPermissionSeeder::class);
         $this->call(InscripcionesAtencionesAccionAuditadaSeeder::class);
+        $this->call(PaquetesSesionesPermissionSeeder::class);
+        $this->call(PaquetesSesionesAccionAuditadaSeeder::class);
+        $this->call(PaquetesSesionesConfiguracionSeeder::class);
+        $this->call(EntrevistaDiagnosticoPermissionSeeder::class);
+        $this->call(EntrevistaDiagnosticoAccionAuditadaSeeder::class);
     }
 }

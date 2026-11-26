@@ -56,6 +56,26 @@ export const routes: Routes = [
         title: 'Inscripciones a salas grupales | TalitaCumi',
       },
       {
+        path: 'inscripciones-atenciones/paquetes-sesiones',
+        canActivate: [permissionGuard],
+        data: { permission: 'paquete.ver' },
+        loadChildren: () =>
+          import('./pages/inscripciones-atenciones/paquetes-sesiones/paquetes-sesiones.routes').then(
+            (m) => m.PAQUETES_SESIONES_ROUTES,
+          ),
+        title: 'Paquetes de sesiones individuales | TalitaCumi',
+      },
+      {
+        path: 'inscripciones-atenciones/entrevista-diagnostico',
+        canActivate: [permissionGuard],
+        data: { permission: 'atencion.ver' },
+        loadChildren: () =>
+          import('./pages/inscripciones-atenciones/entrevista-diagnostico/entrevista-diagnostico.routes').then(
+            (m) => m.ENTREVISTA_DIAGNOSTICO_ROUTES,
+          ),
+        title: 'Entrevistas y diagnósticos | TalitaCumi',
+      },
+      {
         path: 'pagos',
         component: PagosComponent,
         title: 'Pagos y caja | TalitaCumi',
