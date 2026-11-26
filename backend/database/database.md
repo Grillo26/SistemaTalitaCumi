@@ -174,7 +174,7 @@ erDiagram
 
 ### Pacientes y tutores
 
-> **Implementación real 04.01 + 04.02 Fase A:** las tablas físicas son `paciente`, `tutor`, `parentesco`, `paciente_tutor` y `estado_paciente_historial`. `paciente` es global y usa `sucursal_registro_id` como ancla de visibilidad, `version` para concurrencia optimista, columnas normalizadas para búsqueda/unicidad y `tipo_diagnostico_id` con **FK diferida** hasta el módulo 05. No hay `deleted_at`: el retiro es `estado = retirado` (04.01/RF-009, 04.01/RN-006). `tutor` tampoco usa SoftDeletes; se crea activo y se desactiva con motivo. `tutor.sucursal_registro_id` es su home branch y `paciente_tutor.parentesco_id` es el parentesco autoritativo de la relación. `estado_paciente_historial.usuario_id` apunta a `users` en la implementación real.
+> **Implementación real 04.01 + 04.02 Fase A:** las tablas físicas son `paciente`, `tutor`, `parentesco`, `paciente_tutor` y `estado_paciente_historial`. `paciente` es global y usa `sucursal_registro_id` como ancla de visibilidad, `version` para concurrencia optimista, columnas normalizadas para búsqueda/unicidad y `tipo_diagnostico_id` con **FK diferida** hasta habilitar la integración con el catálogo 05. No hay `deleted_at`: el retiro es `estado = retirado` (04.01/RF-009, 04.01/RN-006). `tutor` tampoco usa SoftDeletes; se crea activo y se desactiva con motivo. `tutor.sucursal_registro_id` es su home branch y `paciente_tutor.parentesco_id` es el parentesco autoritativo de la relación. `estado_paciente_historial.usuario_id` apunta a `users` en la implementación real.
 
 ```mermaid
 erDiagram
@@ -302,7 +302,10 @@ erDiagram
     area {
         bigint id PK
         varchar nombre UK
+        varchar descripcion
         varchar color
+        boolean activo
+        integer version
     }
     sucursal {
         bigint id PK
@@ -336,15 +339,24 @@ erDiagram
         varchar uso
         boolean activo
     }
+    tipo_servicio {
+        bigint id PK
+        varchar nombre UK
+        varchar codigo UK
+        boolean activo
+    }
     servicio {
         bigint id PK
         bigint area_id FK
+        bigint tipo_servicio_id FK
         varchar nombre
         int duracion_minutos
     }
     categoria_tarifa {
         bigint id PK
         varchar nombre UK
+        boolean activo
+        integer version
     }
     tarifa {
         bigint id PK
@@ -354,11 +366,16 @@ erDiagram
         numeric monto
         date vigente_desde
         date vigente_hasta
+        boolean activo
+        integer version
     }
     tipo_diagnostico {
         bigint id PK
+        bigint servicio_id FK
         varchar nombre UK
         int dias_estimados
+        boolean activo
+        integer version
     }
     tipo_diagnostico_profesional {
         bigint tipo_diagnostico_id FK
@@ -372,9 +389,11 @@ erDiagram
     turno_catalogo ||--o{ sala : "define"
     sucursal ||--o{ ambiente : "tiene"
     area ||--o{ servicio : "clasifica"
+    tipo_servicio ||--o{ servicio : "tipifica"
     servicio ||--o{ tarifa : "tiene"
     categoria_tarifa ||--o{ tarifa : "clasifica"
     sucursal ||--o{ tarifa : "aplica en"
+    servicio ||--o| tipo_diagnostico : "se especializa"
     tipo_diagnostico ||--o{ tipo_diagnostico_profesional : "requiere"
 ```
 
@@ -1045,7 +1064,7 @@ Timestamps: `created_at`, `updated_at`.
 
 **Decisiones de esquema:**
 
-- `tipo_diagnostico_id` queda nullable y **sin FK física** hasta que exista la migración del módulo 05. La Action rechaza valores no nulos mientras `PacientesModule::DIAGNOSTICOS_DISPONIBLES = false`.
+- `tipo_diagnostico_id` queda nullable y **sin FK física**. La tabla `tipo_diagnostico` ya existe desde 05.03, pero la constraint se agregará cuando se habilite la integración con 04. La Action rechaza valores no nulos mientras `PacientesModule::DIAGNOSTICOS_DISPONIBLES = false`.
 - `sucursal_registro_id` es `NOT NULL` y se valida contra el alcance del usuario. No cambia desde la edición.
 - `sexo` es obligatorio (`M`/`F`).
 - `codigo` se genera como `PAC-` + id con 6 dígitos.
@@ -1291,16 +1310,18 @@ Sin `updated_at`; se escribe una revisión por mutación y no se actualiza ni bo
 
 *Configuración.* Salas Grupales e Intervención Terapéutica. El color es configurable.
 
-> **Implementación actual:** el submódulo 01.02 crea esta tabla como prerequisito de solo lectura para `sala.area_id`. El CRUD y la administración de colores pertenecen al módulo 05; aquí no se modifican.
+> **Implementación actual:** el submódulo 01.02 la usa como prerequisito de solo lectura para `sala.area_id`. El módulo 05 es el dueño del CRUD, la descripción y el color; Administración y Recepción solo consultan.
 
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `nombre` | `varchar(100)` |  | `UK` |  |
+| `nombre` | `varchar(100)` |  | `UK` funcional | Único sin distinguir mayúsculas ni espacios externos |
+| `descripcion` | `text` | sí |  | Descripción del área (RF-C01) |
 | `color` | `varchar(7)` |  | `DEFAULT '#6B7280'` | Hex, para la agenda |
 | `activo` | `boolean` |  | `DEFAULT true` |  |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
 
-Timestamps: `created_at`, `updated_at`.
+Índices: `UNIQUE (nombre)` exacto y `UNIQUE ((lower(trim(nombre))))`. Timestamps: `created_at`, `updated_at`.
 
 #### `tipo_sala` — Tipos de sala
 
@@ -1363,6 +1384,20 @@ Timestamps: `created_at`, `updated_at`.
 
 Índices: `UNIQUE (sucursal_id, lower(trim(nombre)))`, `(sucursal_id)`, `(uso)`. Timestamps: `created_at`, `updated_at`.
 
+#### `tipo_servicio` — Tipos de servicio
+
+*Configuración.* Catálogo configurable (RN-C09). El cliente puede agregar, renombrar o desactivar tipos.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `nombre` | `varchar(100)` |  | `UNIQUE` funcional | Único sin distinguir mayúsculas ni espacios externos |
+| `codigo` | `varchar(50)` | sí | `UNIQUE` | Identificador estable (`diagnostico_evaluacion`); el nombre sigue siendo configurable |
+| `activo` | `boolean` |  | `DEFAULT true` |  |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
+
+Índices: `UNIQUE (codigo)`, `UNIQUE ((lower(trim(nombre))))`. Timestamps: `created_at`, `updated_at`. Los tipos creados desde la UI del 01 sin código no son seleccionables como diagnóstico hasta que se les asigne uno.
+
 #### `servicio` — Servicios
 
 *Maestro.* Terapias, entrevista, diagnóstico, sala grupal, venta de materiales.
@@ -1370,13 +1405,15 @@ Timestamps: `created_at`, `updated_at`.
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `area_id` | `bigint` |  | `FK → area` |  |
-| `nombre` | `varchar(150)` |  |  |  |
+| `area_id` | `bigint` |  | `FK → area` | Exactamente un área (RN-C04) |
+| `tipo_servicio_id` | `bigint` |  | `FK → tipo_servicio` | Tipo configurable (RN-C09) |
+| `nombre` | `varchar(150)` |  |  | Único dentro del área |
 | `descripcion` | `text` | sí |  |  |
-| `duracion_minutos` | `int` |  | `DEFAULT 50` |  |
+| `duracion_minutos` | `int` |  | `DEFAULT 50`, `CHECK > 0` | Dato del servicio |
 | `activo` | `boolean` |  | `DEFAULT true` |  |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
 
-Índices: GIN `(nombre)` con `pg_trgm`. Timestamps: `created_at`, `updated_at`. Soft delete: `deleted_at`.
+Índices: `UNIQUE (area_id, (lower(trim(nombre))))`, `(area_id)`, `(tipo_servicio_id)`, `(activo)`. Timestamps: `created_at`, `updated_at`. Sin `deleted_at`: se desactiva, no se elimina.
 
 #### `categoria_tarifa` — Categorías de tarifa
 
@@ -1385,11 +1422,12 @@ Timestamps: `created_at`, `updated_at`.
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `nombre` | `varchar(100)` |  | `UK` |  |
+| `nombre` | `varchar(100)` |  | `UK` funcional | Único sin distinguir mayúsculas ni espacios externos |
 | `descripcion` | `text` | sí |  |  |
 | `activo` | `boolean` |  | `DEFAULT true` |  |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
 
-Timestamps: `created_at`, `updated_at`.
+Índices: `UNIQUE (nombre)` exacto y `UNIQUE ((lower(trim(nombre))))`. Timestamps: `created_at`, `updated_at`.
 
 #### `tarifa` — Tarifas
 
@@ -1404,29 +1442,33 @@ Timestamps: `created_at`, `updated_at`.
 | `monto` | `numeric(12,2)` |  | `CHECK >= 0` |  |
 | `vigente_desde` | `date` |  |  |  |
 | `vigente_hasta` | `date` | sí | `CHECK >= vigente_desde` |  |
-| `activo` | `boolean` |  | `DEFAULT true` |  |
+| `activo` | `boolean` |  | `DEFAULT true` | Bandera técnica; el cierre se expresa con `vigente_hasta` |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
 
-Índices: `(servicio_id, categoria_tarifa_id)`, `(sucursal_id)`. Timestamps: `created_at`, `updated_at`.
+Índices: `(servicio_id, categoria_tarifa_id)`, `(sucursal_id)`, `(servicio_id, sucursal_id, categoria_tarifa_id, vigente_desde, vigente_hasta)` y `(vigente_desde, vigente_hasta)`. Timestamps: `created_at`, `updated_at`.
+Sin `deleted_at`: las tarifas no se eliminan; se cierra su vigencia con motivo. El no-solapamiento se valida en la aplicación con bloqueo de la fila de servicio; no hay constraint `EXCLUDE` porque el proyecto testea en SQLite.
 
 #### `tipo_diagnostico` — Tipos de diagnóstico
 
-*Configuración.* Cada tipo define los profesionales requeridos y los días estimados.
+*Configuración.* Catálogo global (RN-D01). Cada tipo es un servicio del catálogo con atributos adicionales (RN-D08): días estimados y especialidades requeridas. No se elimina: se desactiva con motivo.
 
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `nombre` | `varchar(150)` |  | `UK` |  |
+| `servicio_id` | `bigint` |  | `FK → servicio`, `UNIQUE` | Servicio de tipo diagnóstico/evaluación (RN-D08) |
+| `nombre` | `varchar(150)` |  | `UK` exacto y funcional | Único sin distinguir mayúsculas ni espacios externos |
 | `descripcion` | `text` | sí |  |  |
-| `dias_estimados` | `int` |  | `DEFAULT 1` |  |
+| `dias_estimados` | `int` |  | `DEFAULT 1`, `CHECK > 0` |  |
 | `activo` | `boolean` |  | `DEFAULT true` |  |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
 
-Timestamps: `created_at`, `updated_at`.
+Índices: `UNIQUE (servicio_id)`, `UNIQUE (nombre)`, `UNIQUE ((lower(trim(nombre))))`. Timestamps: `created_at`, `updated_at`. Sin `deleted_at`: el `DELETE` responde `409`.
 
-#### `tipo_diagnostico_profesional` — Profesionales requeridos por tipo
+#### `tipo_diagnostico_profesional` — Especialidades requeridas por tipo
 
-*Configuración.* Define los profesionales mínimos por especialidad para cada tipo de diagnóstico.
+*Configuración.* Define las especialidades y la cantidad mínima de profesionales para cada tipo de diagnóstico (RN-D03, RN-D04).
 
-`PRIMARY KEY (tipo_diagnostico_id, especialidad_id)`. `cantidad_minima int DEFAULT 1`. Sin timestamps.
+`PRIMARY KEY (tipo_diagnostico_id, especialidad_id)`. `cantidad_minima int DEFAULT 1 CHECK (cantidad_minima >= 1)`. FKs con `ON DELETE CASCADE`; el tipo no se borra por API. Índice `(especialidad_id)`. Sin timestamps. Editar los requisitos no altera diagnósticos ya realizados: 06/11 deben conservar el snapshot aplicado (RN-D11).
 
 ---
 

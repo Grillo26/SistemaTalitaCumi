@@ -2,8 +2,10 @@
 
 namespace App\Modules\Profesionales\Providers;
 
+use App\Modules\Profesionales\Contracts\EloquentEspecialidadDirectory;
 use App\Modules\Profesionales\Contracts\EloquentProfessionalAssignmentValidator;
 use App\Modules\Profesionales\Contracts\EloquentProfessionalDirectory;
+use App\Modules\Profesionales\Contracts\EspecialidadDirectoryContract;
 use App\Modules\Profesionales\Contracts\ProfessionalAssignmentValidatorContract;
 use App\Modules\Profesionales\Contracts\ProfessionalDiagnosticRequirementsContract;
 use App\Modules\Profesionales\Contracts\ProfessionalDirectoryContract;
@@ -39,6 +41,7 @@ final class ProfesionalesServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(ProfessionalDirectoryContract::class, EloquentProfessionalDirectory::class);
+        $this->app->bind(EspecialidadDirectoryContract::class, EloquentEspecialidadDirectory::class);
         $this->app->bind(ProfessionalAssignmentValidatorContract::class, EloquentProfessionalAssignmentValidator::class);
         $this->app->bind(ProfessionalScheduleContract::class, StubProfessionalScheduleContract::class);
         $this->app->bind(ProfessionalDiagnosticRequirementsContract::class, StubProfessionalDiagnosticRequirementsContract::class);

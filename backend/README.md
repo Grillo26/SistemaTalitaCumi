@@ -2082,6 +2082,416 @@ RN-001 a RN-010, CU-01 a CU-03 y CA-001 a CA-010 quedan cubiertos según las dep
 
 ---
 
+## Módulo 05 — Catálogo de servicios y tarifas (submódulo 01)
+
+Este es el primer submódulo del módulo 05. Crea la base del módulo padre para que los submódulos 02 (tarifas/categorías) y 03 (tipos de diagnóstico) reutilicen el provider, el prefijo y los catálogos de auditoría.
+
+### Estructura
+
+```text
+app/Modules/CatalogoServicios/
+├── Actions/
+│   ├── Areas/
+│   ├── Servicios/
+│   └── TiposServicio/
+├── Contracts/       Directorio, uso de servicios y exportador
+├── Events/          Área, servicio y tipo
+├── Exceptions/      Dominio del catálogo
+├── Http/
+│   ├── Controllers/
+│   ├── Requests/
+│   └── Resources/
+├── Listeners/       Bitácora e invalidación de caché
+├── Models/          Area, Servicio, TipoServicio, BitacoraEntry
+├── Providers/       CatalogoServiciosServiceProvider
+├── Queries/         Listados, fichas y directorio cacheado
+├── Rules/           Color, normalización, unicidad, estado y motivo
+├── Support/         Constantes, permisos, abilities, snapshots y guard
+├── routes-areas.php
+├── routes-servicios.php
+└── routes-tipos-servicio.php
+```
+
+`CatalogoServiciosServiceProvider` se registra después de `PacientesServiceProvider`. Prefijo público: `App\Modules\CatalogoServicios\Support\CatalogoServiciosModule::MODULE_URL = '/catalogo-servicios'`. Prefijo real de la API: `/api/catalogo-servicios`.
+
+> **Propiedad de `area`:** la tabla nació en 01.02 como prerequisito de solo lectura de `sala.area_id`. El módulo 05 es el dueño del CRUD y del color. Para no romper 01.02 se conserva su modelo de solo lectura; el modelo canónico es `CatalogoServicios\Models\Area`. Queda como TODO consolidar ambos mapeos en una fase posterior.
+
+### Endpoints
+
+| Entidad | Endpoints |
+|---|---|
+| Áreas | `GET /areas`, `GET /areas/{id}`, `POST /areas`, `PATCH /areas/{id}`, `POST /areas/{id}/activar`, `POST /areas/{id}/desactivar`, `DELETE /areas/{id}` → `409` |
+| Servicios | `GET /servicios`, `GET /servicios/{id}`, `POST /servicios`, `PATCH /servicios/{id}`, `POST /servicios/{id}/activar`, `POST /servicios/{id}/desactivar`, `DELETE /servicios/{id}` → `409` |
+| Tipos de servicio | `GET /tipos-servicio`, `GET /tipos-servicio/{id}`, `POST /tipos-servicio`, `PATCH /tipos-servicio/{id}`, `POST /tipos-servicio/{id}/activar`, `POST /tipos-servicio/{id}/desactivar`, `DELETE /tipos-servicio/{id}` → `409` |
+
+Filtros de servicios: `search`, `area_id`, `tipo_servicio_id`, `estado`, `page`, `per_page` (máx. 50), `sort` (`nombre|area|tipo|duracion_minutos|activo|updated_at`), `direction`.
+Filtros de áreas: `search`, `estado`, `sort`, `direction`.
+Filtros de tipos: `search`, `estado`, `sort`, `direction`.
+
+Todas las rutas usan `auth:sanctum` + `EnsureSessionIsValid` + `PermissionMiddleware`. No hay scoping por sucursal: áreas, servicios y tipos son globales (RN-C01).
+
+### Permisos
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `areas.ver` | sí | sí | sí |
+| `areas.editar` | sí | no | no |
+| `servicios.ver` | sí | sí | sí |
+| `servicios.editar` | sí | no | no |
+
+`areas.editar` gobierna alta, edición, color y cambio de estado de áreas. `servicios.editar` gobierna servicios y tipos de servicio. La API devuelve `can` y la UI oculta acciones. Seeder: `CatalogoServiciosPermissionSeeder`, con asignación inicial única por módulo.
+
+### Eventos y bitácora
+
+| Entidad (`bitacora.entidad`) | Eventos |
+|---|---|
+| `area` | `AreaCreated`, `AreaUpdated`, `AreaColorChanged`, `AreaStatusChanged` |
+| `servicio` | `ServicioCreated`, `ServicioUpdated`, `ServicioStatusChanged` |
+| `tipo_servicio` | `TipoServicioCreated`, `TipoServicioUpdated`, `TipoServicioStatusChanged` |
+
+`RecordCatalogoServiciosAudit` escribe `CREAR`, `ACTUALIZAR`, `ACTIVAR`, `DESACTIVAR` y `CAMBIAR_COLOR`, con snapshots antes/después, actor, IP y `motivo` en los cambios de estado. `sucursal_id` es `NULL` porque el catálogo es global. `InvalidateCatalogoServiciosCache` olvida las claves del directorio.
+
+### Contratos y caché
+
+- **`CatalogoServiciosDirectoryContract`** (RF-C15): `areas()`, `servicios()`, `servicio()`, `asegurarServicioActivo()` y `tiposServicio()`. Devuelve DTOs `AreaResumen`, `ServicioResumen` y `TipoServicioResumen`. Incluye el color del área para la agenda.
+- `CatalogoServiciosDirectoryQuery` cachea las listas completas con TTL de 60 segundos. Driver `file` (no hay Redis ni tags); la invalidación es explícita por listener.
+- **`ServicioUsageContract`** + `StubServicioUsageContract`: `hasTarifas`, `hasInscripciones`, `hasTurnos`. Hoy no se invoca porque no existe endpoint de borrado. Se conectará en el submódulo 02 y en los módulos 06/07.
+- **`CatalogoServiciosExporterContract`** + `UnavailableCatalogoServiciosExporter`: RF-C17 pendiente de infraestructura. No hay ruta ni botón.
+
+### Schema, migraciones y seeders
+
+Migraciones nuevas:
+
+- `2026_11_25_000000_create_tipo_servicio_table.php`.
+- `2026_11_25_000100_create_servicio_table.php`.
+- `2026_11_25_000200_add_descripcion_and_version_to_area_table.php`.
+
+Cambios:
+
+- `area`: `descripcion` nullable, `version` default 1 e índice único funcional `lower(trim(nombre))`.
+- `tipo_servicio`: catálogo configurable con `nombre`, `activo`, `version` e índice único funcional.
+- `servicio`: `area_id` NOT NULL, `tipo_servicio_id` NOT NULL, `nombre`, `descripcion`, `duracion_minutos`, `activo`, `version`; índice único `(area_id, lower(trim(nombre)))`.
+- Sin `deleted_at`: RN-C08 exige no eliminar; se desactiva con motivo. El motivo queda solo en `bitacora.motivo`.
+- No se crean `tarifa`, `categoria_tarifa`, `tipo_diagnostico`, `inscripcion_sala` ni `turno`: son de 02/03/06/07.
+
+Seeders idempotentes: `AreaSeeder` (Intervención Terapéutica `#671C61` y Salas Grupales `#F9733F`), `TipoServicioSeeder` (Entrevista, Diagnóstico / Evaluación, Terapia individual, Sala grupal), `CatalogoServiciosPermissionSeeder` y `CatalogoServiciosAccionAuditadaSeeder`. No se crean servicios de ejemplo.
+
+En una instalación existente, ejecutar `php artisan migrate` y luego `php artisan db:seed --class=CatalogoServiciosPermissionSeeder`. Si la base ya tenía las dos áreas base con otros colores, el seeder **no los sobrescribe**.
+
+### Estado del submódulo
+
+| Cobertura | Estado |
+|---|---|
+| RF-C01 a RF-C12, RF-C14, RF-C15, RF-C16 | Implementados |
+| RF-C13 | Sin DELETE; `409`; contrato de uso en stub hasta 02/06/07 |
+| RF-C17 | Pendiente de infraestructura; contrato stub y sin botón |
+| RN-C01 a RN-C05, RN-C07 a RN-C10 | Implementadas |
+| RN-C06 | API expone `activo`; consumo real en 06/07 |
+
+Tests: unit de reglas (color, normalización, unicidad, motivo, área con servicios activos) y feature de áreas, servicios, tipos, permisos, bitácora, contratos y seeders.
+
+Checklist RF-C:
+
+| RF | Evidencia | Estado |
+|---|---|---|
+| RF-C01 | `CreateAreaAction`, `StoreAreaRequest`, `AreaSeeder` | Completo |
+| RF-C02 | `UpdateAreaAction`, `ChangeAreaStatusAction`, `AreaStateRule` | Completo |
+| RF-C03 | `AreaNombreUnicoRule`, índice funcional | Completo |
+| RF-C04 | `ColorRule`, selector/picker en UI | Completo |
+| RF-C05 | `CreateServicioAction`, `tipo_servicio` | Completo |
+| RF-C06 | `ServicioNombreUnicoRule`, índice por área | Completo |
+| RF-C07 | `servicio.area_id NOT NULL` + FK | Completo |
+| RF-C08 | `ListServiciosQuery` + filtros UI | Completo |
+| RF-C09 | `ListAreasQuery` con color/estado/conteo | Completo |
+| RF-C10 | `GetServicioQuery`, ficha con `updated_at` | Completo |
+| RF-C11 | `UpdateServicioAction`, eventos y bitácora | Completo |
+| RF-C12 | `ChangeServicioStatusAction` | Completo |
+| RF-C13 | DELETE → `409`; `ServicioUsageContract` stub | Parcial: falta chequeo real 02/06/07 |
+| RF-C14 | `RecordCatalogoServiciosAudit` | Completo |
+| RF-C15 | Endpoints + `CatalogoServiciosDirectoryContract` + caché | Completo |
+| RF-C16 | Permisos, seeder, middleware y `can` | Completo |
+| RF-C17 | `CatalogoServiciosExporterContract` stub | Pendiente de infraestructura |
+
+Checklist RN-C:
+
+| RN | Evidencia | Estado |
+|---|---|---|
+| RN-C01 | Sin `sucursal_id`; catálogo global | Completo |
+| RN-C02 | `AreaNombreUnicoRule` + índice | Completo |
+| RN-C03 | `ServicioNombreUnicoRule` + índice por área | Completo |
+| RN-C04 | FK `servicio.area_id` NOT NULL | Completo |
+| RN-C05 | Color solo en swatch/etiqueta y API | Completo |
+| RN-C06 | API expone `activo`; consumo en 06/07 | Parcial, fuera de alcance |
+| RN-C07 | `AreaStateRule` + bloqueo de servicio en área inactiva | Completo |
+| RN-C08 | Sin DELETE; desactivación con motivo | Completo |
+| RN-C09 | `tipo_servicio` + CRUD + seeder | Completo |
+| RN-C10 | `MotivoObligatorioRule` en activar/desactivar | Completo |
+
+**TODOs:** `ServicioUsageContract::hasTarifas` ya es real; `hasInscripciones`/`hasTurnos` siguen en stub. Quedan exportación PDF/Excel, migración inicial del cliente, consolidación del modelo `Area` de 01.02 y `ambiente_id` en agenda (07).
+
+---
+
+## Módulo 05 — Catálogo de servicios y tarifas (submódulo 02)
+
+Submódulo de **tarifas, categorías y vigencias**. Reutiliza el módulo padre y el prefijo creado por el 01.
+
+### Estructura agregada
+
+```text
+app/Modules/CatalogoServicios/
+├── Actions/
+│   ├── CategoriasTarifa/
+│   └── Tarifas/
+├── Contracts/       TarifaAplicableResolver, TarifaUsage, EloquentServicioUsage
+├── Events/          Categoría y tarifa
+├── Exceptions/      Solapamiento, cierre, categoría en uso, etc.
+├── Http/            Categorías y tarifas
+├── Listeners/       RecordCatalogoTarifasAudit
+├── Models/          CategoriaTarifa, Tarifa
+├── Queries/         Listados, fichas y resolución aplicable
+├── Rules/           Monto, vigencia, solapamiento y estado
+├── Support/         Snapshots, scoping y guard de solapamiento
+├── routes-categorias-tarifa.php
+└── routes-tarifas.php
+```
+
+### Endpoints
+
+Prefijo: `/api/catalogo-servicios`.
+
+| Entidad | Endpoints |
+|---|---|
+| Categorías | `GET/POST /categorias-tarifa`, `GET/PATCH /categorias-tarifa/{id}`, `POST /{id}/activar`, `POST /{id}/desactivar`, `DELETE /{id}` → `409` |
+| Tarifas | `GET/POST /tarifas`, `GET/PATCH /tarifas/{id}`, `POST /tarifas/{id}/cerrar-vigencia`, `DELETE /tarifas/{id}` → `409` |
+| Resolución | `GET /tarifas/aplicable?servicio_id&sucursal_id&categoria_tarifa_id&fecha` |
+
+Filtros de tarifas: `search`, `servicio_id`, `categoria_tarifa_id`, `sucursal_id`, `solo_global`, `estado_vigencia` (`vigente|futura|cerrada`), `page`, `per_page` (máx. 50), `sort`, `direction`.
+`GET /tarifas/aplicable` devuelve `data: null` si no hay tarifa; error de dominio si el servicio/categoría están inactivos o la sucursal no corresponde.
+
+### Permisos y alcance
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `tarifas.ver` | sí | sí | sí |
+| `tarifas.editar` | sí | sí, solo sus sucursales | no |
+| `categorias.ver` | sí | sí | sí |
+| `categorias.editar` | sí | no | no |
+
+`TarifaAccessScope` usa `UserBranchAccessContract` y `sucursal.alcance_global`:
+
+- Las tarifas globales son visibles para usuarios con sucursales asignadas.
+- Solo alcance global crea, edita o cierra tarifas globales.
+- Administración edita/cierra tarifas de sus sucursales.
+- Una tarifa de otra sucursal se presenta como inexistente (`404`).
+- El endpoint `/tarifas/aplicable` exige sucursal accesible.
+- Las categorías son globales y no llevan scoping.
+
+Seeder: `CatalogoTarifasPermissionSeeder`, con marcador propio `catalogo.tarifas` para no pisar la matriz del 01.
+
+### Eventos y bitácora
+
+| Entidad (`bitacora.entidad`) | Eventos |
+|---|---|
+| `categoria_tarifa` | `CategoriaTarifaCreated`, `CategoriaTarifaUpdated`, `CategoriaTarifaStatusChanged` |
+| `tarifa` | `TarifaCreated`, `TarifaUpdated`, `TarifaVigenciaClosed` |
+
+`RecordCatalogoTarifasAudit` escribe `CREAR`, `ACTUALIZAR`, `ACTIVAR`, `DESACTIVAR` y `CERRAR_VIGENCIA`, con snapshots antes/después, actor, IP y motivo. `sucursal_id` es la sucursal de la tarifa o `NULL` para globales/categorías.
+
+### Contratos y caché
+
+- **`TarifaAplicableResolverContract`** + `EloquentTarifaAplicableResolver`: resuelve servicio + sucursal + categoría + fecha con precedencia sucursal > global.
+- `TarifaUsageContract` + `StubTarifaUsageContract`: `hasInscripcionesOrPagos`; pendiente de 06/08.
+- `ServicioUsageContract` → `EloquentServicioUsageContract`: `hasTarifas` real; `hasInscripciones`/`hasTurnos` siguen en `LogicException`.
+- `CatalogoServiciosExporterContract` extendido con `exportarTarifas`/`exportarCategorias`; `Unavailable...` lanza `LogicException`. Sin ruta ni botón.
+- `ResolveTarifaAplicableQuery` cachea la lista activa con TTL 60 s; `InvalidateCatalogoServiciosCache` la invalida ante altas/ediciones/cierres/cambios de categoría.
+
+### Schema, migraciones y seeders
+
+Migraciones:
+
+- `2026_11_25_000300_create_categoria_tarifa_table.php`.
+- `2026_11_25_000400_create_tarifa_table.php`.
+
+Cambios:
+
+- `categoria_tarifa`: `version`, índice único funcional de nombre.
+- `tarifa`: `version`, índices de solapamiento y vigencia, FK a servicio/categoría/sucursal.
+- Sin `deleted_at`; sin columnas de motivo. `tarifa.activo` es bandera técnica; el cierre usa `vigente_hasta`.
+- Sin `moneda`; todo en Bs con `numeric(12,2)`.
+- No se agrega constraint `EXCLUDE` de PostgreSQL; el no-solapamiento se valida en la Action con bloqueo del servicio.
+
+Seeders: `CategoriaTarifaSeeder` (General, sin tarifas), `CatalogoTarifasPermissionSeeder` y `CatalogoTarifasAccionAuditadaSeeder`.
+
+### Checklist RF-T / RN-T
+
+| RF | Evidencia | Estado |
+|---|---|---|
+| RF-T01 | `CreateCategoriaTarifaAction`, `StoreCategoriaTarifaRequest` | Completo |
+| RF-T02 | `ChangeCategoriaTarifaStatusAction`, `CategoriaTarifaStateRule` | Completo |
+| RF-T03 | `CreateTarifaAction` | Completo |
+| RF-T04 | FK `categoria_tarifa_id` | Completo |
+| RF-T05 | `TarifaOverlapRule` + `TarifaOverlapGuard` | Completo |
+| RF-T06 | `TarifaMontoRule` + cast decimal | Completo |
+| RF-T07 | `TarifaVigenciaRule` | Completo |
+| RF-T08 | `ResolveTarifaAplicableQuery` + endpoint | Completo |
+| RF-T09 | `ListTarifasQuery` + filtros UI | Completo |
+| RF-T10 | `GetTarifaQuery` + ficha | Completo |
+| RF-T11 | `UpdateTarifaAction` | Completo |
+| RF-T12 | `CloseTarifaVigenciaAction` | Completo |
+| RF-T13 | DELETE `409`; `TarifaUsageContract` stub | Completo hoy; integración 06/08 pendiente |
+| RF-T14 | API de categorías activas | Parcial: selección real en 06 |
+| RF-T15 | `RecordCatalogoTarifasAudit` | Completo |
+| RF-T16 | `/tarifas/aplicable` + contract | API completa; consumo 06/08 fuera |
+| RF-T17 | Permisos + `TarifaAccessScope` | Completo con asunción de Administración |
+| RF-T18 | Exportador stub | Pendiente de infraestructura |
+
+| RN | Evidencia | Estado |
+|---|---|---|
+| RN-T01 | `TarifaMontoRule` + `decimal:2` | Completo |
+| RN-T02 | FK `servicio_id` + servicio activo al crear | Completo |
+| RN-T03 | `TarifaVigenciaRule` | Completo |
+| RN-T04 | `TarifaOverlapRule` | Completo |
+| RN-T05 | `ResolveTarifaAplicableQuery` | Completo |
+| RN-T06 | Categoría elegida por el usuario; API no infiere | API; UI en 06 |
+| RN-T07 | Snapshot en inscripción (06) | Fuera de este submódulo |
+| RN-T08 | Cierre no altera históricos | Fuera de este submódulo |
+| RN-T09 | Sin DELETE; cierre de vigencia | Completo |
+| RN-T10 | Categoría inactiva no listada para selección | API; consumo 06 |
+| RN-T11 | Permisos + `TarifaAccessScope` | Completo con asunción |
+| RN-T12 | Motivo en desactivación y cierre | Completo |
+
+**TODOs:** implementar `TarifaUsageContract` con 06/08; exportación PDF/Excel; migración inicial de tarifas desde planilla; confirmar si Administración edita categorías (hoy no).
+
+---
+
+## Módulo 05 — Catálogo de servicios y tarifas (submódulo 03)
+
+Submódulo de **tipos de diagnóstico y evaluación**. Un tipo es un servicio del catálogo con atributos adicionales (RN-D08): días estimados y especialidades requeridas con cantidad mínima. El catálogo es global y no se elimina físicamente.
+
+### Estructura agregada
+
+```text
+app/Modules/CatalogoServicios/
+├── Actions/TiposDiagnostico/
+│   ├── CreateTipoDiagnosticoAction
+│   ├── UpdateTipoDiagnosticoAction
+│   ├── ChangeTipoDiagnosticoStatusAction
+│   └── RejectTipoDiagnosticoDeletionAction
+├── Contracts/       TipoDiagnosticoUsage, EloquentProfessionalDiagnosticRequirements
+├── Events/          TipoDiagnosticoCreated, Updated, StatusChanged
+├── Exceptions/      Nombre/servicio duplicado, servicio no diagnóstico,
+│                    especialidad inactiva/duplicada, cantidad y días inválidos,
+│                    sin especialidades, DELETE no permitido
+├── Http/            Controller, requests y resource de tipos de diagnóstico
+├── Listeners/       RecordCatalogoDiagnosticosAudit
+├── Models/          TipoDiagnostico
+├── Queries/         Listado, ficha, requisitos cacheados
+├── Rules/           Nombre único, servicio diagnóstico, especialidades,
+│                    días, estado y participantes requeridos
+├── Support/         Snapshot, unicidad y guard
+└── routes-tipos-diagnostico.php
+```
+
+También se agregó `codigo` a `tipo_servicio` para identificar de forma estable el tipo `diagnostico_evaluacion`, sin depender del nombre configurable.
+
+### Endpoints
+
+Prefijo: `/api/catalogo-servicios`.
+
+| Entidad | Endpoints |
+|---|---|
+| Tipos de diagnóstico | `GET/POST /tipos-diagnostico`, `GET/PATCH /tipos-diagnostico/{id}`, `POST /{id}/activar`, `POST /{id}/desactivar`, `DELETE /{id}` → `409` |
+| Requisitos | `GET /tipos-diagnostico/{id}/especialidades-requeridas` |
+
+Filtros del listado: `search` (nombre/descripción), `estado` (`activo|inactivo`), `especialidad_id`, `page`, `per_page` (máx. 50), `sort` (`nombre|activo|dias_estimados|updated_at`) y `direction`.
+
+Reglas de la API:
+
+- Alta: servicio activo de tipo `diagnostico_evaluacion`, nombre único normalizado, al menos una especialidad activa y cantidad mínima `>= 1`.
+- Edición: exige `version`; el estado no se cambia por `PATCH`. Las especialidades enviadas reemplazan el conjunto completo.
+- Activación/desactivación: exige `motivo` y `version`; el estado debe ser distinto.
+- `DELETE` responde siempre `409 TIPO_DIAGNOSTICO_DELETE_NOT_ALLOWED`.
+- `409 VERSION_CONFLICT` para concurrencia; `409 TIPO_DIAGNOSTICO_SERVICIO_DUPLICADO` si el servicio ya tiene tipo; `422` para nombre duplicado, especialidad inactiva/duplicada, cantidad o días inválidos.
+
+### Permisos y alcance
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `tipos_diagnostico.ver` | sí | sí | sí |
+| `tipos_diagnostico.editar` | sí | no | no |
+
+El catálogo es global: no hay scoping por sucursal. La API devuelve `can.tipos_diagnostico` y la UI oculta las acciones de escritura; el backend revalida con `PermissionMiddleware`. Seeder: `CatalogoDiagnosticosPermissionSeeder`, con marcador propio `catalogo.diagnosticos`.
+
+### Eventos y bitácora
+
+| Entidad (`bitacora.entidad`) | Eventos |
+|---|---|
+| `tipo_diagnostico` | `TipoDiagnosticoCreated`, `TipoDiagnosticoUpdated`, `TipoDiagnosticoStatusChanged` |
+
+`RecordCatalogoDiagnosticosAudit` escribe `CREAR`, `ACTUALIZAR`, `ACTIVAR` y `DESACTIVAR`, con snapshots antes/después que incluyen nombre, descripción, días, estado, servicio y **especialidades con cantidad mínima**. `sucursal_id` es `NULL` porque el catálogo es global. `InvalidateCatalogoServiciosCache` invalida la clave `catalogo_servicios:tipos_diagnostico`.
+
+### Contratos y caché
+
+- **`ProfessionalDiagnosticRequirementsContract`** (módulo 03) → `EloquentProfessionalDiagnosticRequirements`: implementación real que devuelve `especialidad_id` + `cantidad_minima` desde el catálogo 05. Reemplaza el stub anterior.
+- **`EspecialidadDirectoryContract`** (módulo 03) → `EloquentEspecialidadDirectory`: existencia, estado y profesionales activos por especialidad y sucursal. Es la base para RN-D05 en agenda/diagnósticos.
+- **`ParticipantesRequeridosRule`**: regla pura que compara requisitos contra participantes y devuelve faltantes por especialidad.
+- **`TipoDiagnosticoUsageContract`** + `StubTipoDiagnosticoUsageContract`: `hasDiagnosticosRegistrados`; se implementará con 06/11.
+- `GetEspecialidadesRequeridasQuery` cachea los requisitos con TTL 60 s. `CatalogoServiciosExporterContract` se extendió con `exportarTiposDiagnostico`; `Unavailable...` lanza `LogicException`. Sin ruta ni botón.
+
+### Schema, migraciones y seeders
+
+Migraciones:
+
+- `2026_11_25_000500_add_codigo_to_tipo_servicio_table.php`.
+- `2026_11_25_000600_create_tipo_diagnostico_table.php`.
+- `2026_11_25_000700_create_tipo_diagnostico_profesional_table.php`.
+
+Cambios:
+
+- `tipo_servicio.codigo` nullable y único; el seeder asigna `entrevista`, `diagnostico_evaluacion`, `terapia_individual` y `sala_grupal`.
+- `tipo_diagnostico`: `servicio_id` único con FK, nombre único exacto y funcional, `dias_estimados > 0`, `activo`, `version`.
+- `tipo_diagnostico_profesional`: PK compuesta, `cantidad_minima >= 1`, FKs con `ON DELETE CASCADE` e índice por especialidad.
+- Sin `deleted_at`; el borrado se rechaza con `409`.
+- La FK `paciente.tipo_diagnostico_id` sigue diferida y `PacientesModule::DIAGNOSTICOS_DISPONIBLES` continúa en `false`: la integración con 04 no forma parte de este submódulo.
+
+Seeders: `CatalogoDiagnosticosPermissionSeeder` y `CatalogoDiagnosticosAccionAuditadaSeeder`. No se siembran tipos de diagnóstico ni especialidades: se administran desde la UI.
+
+### Checklist RF-D / RN-D
+
+| RF | Evidencia | Estado |
+|---|---|---|
+| RF-D01 | `CreateTipoDiagnosticoAction`, `StoreTipoDiagnosticoRequest` | Completo |
+| RF-D02 | Pivot `tipo_diagnostico_profesional` + `TipoDiagnosticoEspecialidadesRule` | Completo |
+| RF-D03 | Unicidad normalizada + guard + 422 | Completo |
+| RF-D04 | `UpdateTipoDiagnosticoAction` + snapshots en bitácora | Completo |
+| RF-D05 | `ChangeTipoDiagnosticoStatusAction` con motivo; bloqueo de nuevas inscripciones en 06 | API completa; consumo 06 |
+| RF-D06 | `ListTiposDiagnosticoQuery` + filtros UI | Completo |
+| RF-D07 | `GetTipoDiagnosticoQuery` + ficha | Completo |
+| RF-D08 | Endpoint de requisitos + contrato real de 03 | Completo; consumo 07/11 |
+| RF-D09 | `DELETE` siempre `409`; `TipoDiagnosticoUsageContract` stub | Bloqueo completo; uso histórico 06/11 |
+| RF-D10 | `RecordCatalogoDiagnosticosAudit` | Completo |
+| RF-D11 | API de catálogo + `ProfessionalDiagnosticRequirementsContract` | API completa; consumo 07/11 |
+| RF-D12 | `tipos_diagnostico.ver/editar` + `PermissionMiddleware` | Completo |
+| RF-D13 | `CatalogoServiciosExporterContract::exportarTiposDiagnostico` stub | Pendiente de infraestructura |
+
+| RN | Evidencia | Estado |
+|---|---|---|
+| RN-D01 | Catálogo global sin `sucursal_id` | Completo |
+| RN-D02 | Índice único funcional + `TipoDiagnosticoNombreUnicoRule` | Completo |
+| RN-D03 | Mínimo una especialidad en request, regla y Action | Completo |
+| RN-D04 | `cantidad_minima` en pivot y validación `>= 1` | Completo |
+| RN-D05 | `EspecialidadDirectoryContract` expone cobertura por especialidad/sucursal | Contrato listo; asignación en 07 |
+| RN-D06 | `activo` en API y ficha; históricos conservan su tipo | API completa; consumo 06/11 |
+| RN-D07 | Sin `DELETE`; solo desactivación | Completo |
+| RN-D08 | `servicio_id` único + validación de `tipo_servicio.codigo` | Completo |
+| RN-D09 | `motivo` obligatorio en activar/desactivar | Completo |
+| RN-D10 | Superadmin administra; Administración/Recepción solo consultan | Completo |
+| RN-D11 | `version` y snapshots; requisitos editables sin tocar diagnósticos previos | Catálogo versionado; snapshot en 06/11 |
+
+**TODOs:** implementar `TipoDiagnosticoUsageContract` con 06/11; exportación PDF/Excel; filtrado de tipos inactivos y snapshot de requisitos en inscripciones/diagnósticos (06/07/11); integrar la FK diferida de `paciente` cuando 04 lo habilite.
+
+---
+
 ## Notas
 
 - No se agregaron librerías de PDF/Excel ni se modificó ningún otro módulo de negocio.

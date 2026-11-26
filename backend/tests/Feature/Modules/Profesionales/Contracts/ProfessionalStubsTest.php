@@ -2,11 +2,11 @@
 
 namespace Tests\Feature\Modules\Profesionales\Contracts;
 
+use App\Modules\CatalogoServicios\Contracts\EloquentProfessionalDiagnosticRequirements;
 use App\Modules\Profesionales\Actions\Directorio\DeactivateProfesionalAction;
 use App\Modules\Profesionales\Contracts\ProfessionalDiagnosticRequirementsContract;
 use App\Modules\Profesionales\Contracts\ProfessionalExporterContract;
 use App\Modules\Profesionales\Contracts\ProfessionalScheduleContract;
-use App\Modules\Profesionales\Contracts\StubProfessionalDiagnosticRequirementsContract;
 use App\Modules\Profesionales\Contracts\StubProfessionalScheduleContract;
 use App\Modules\Profesionales\Contracts\UnavailableProfessionalExporter;
 use Carbon\CarbonImmutable;
@@ -37,16 +37,11 @@ final class ProfessionalStubsTest extends ProfesionalesTestCase
         $contract->tieneAsignacionesFuturas(1, CarbonImmutable::now());
     }
 
-    public function test_diagnostic_requirements_stub_is_explicit(): void
+    public function test_diagnostic_requirements_are_provided_by_catalog(): void
     {
         $contract = app(ProfessionalDiagnosticRequirementsContract::class);
 
-        $this->assertInstanceOf(StubProfessionalDiagnosticRequirementsContract::class, $contract);
-
-        $this->expectException(LogicException::class);
-        $this->expectExceptionMessage('Módulo 05/06 — Diagnósticos no implementado todavía.');
-
-        $contract->especialidadesRequeridas(1);
+        $this->assertInstanceOf(EloquentProfessionalDiagnosticRequirements::class, $contract);
     }
 
     public function test_exporter_is_bound_to_unavailable_stub(): void

@@ -1,0 +1,21 @@
+<?php
+
+namespace App\Modules\CatalogoServicios\Exceptions;
+
+final class TipoServicioDeletionNotAllowedException extends CatalogoServiciosDomainException
+{
+    public function __construct()
+    {
+        parent::__construct('Los tipos de servicio no se eliminan. Desactivalos para conservar el historial.');
+    }
+
+    public function status(): int
+    {
+        return 409;
+    }
+
+    public function errorCode(): string
+    {
+        return 'TIPO_SERVICIO_DELETE_NOT_ALLOWED';
+    }
+}
