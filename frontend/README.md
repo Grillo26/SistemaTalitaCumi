@@ -90,6 +90,7 @@ Todas las rutas están dentro del layout principal y protegidas por `authGuard`.
 | `/inscripciones-atenciones/salas-grupales` | Inscripciones a salas grupales: listado, ficha, alta, renovación y baja |
 | `/inscripciones-atenciones/paquetes-sesiones` | Paquetes de sesiones individuales: listado, ficha, alta, edición, renovación, baja y comprobante |
 | `/inscripciones-atenciones/entrevista-diagnostico` | Entrevistas y diagnósticos: listado, ficha, alta, edición, baja, vinculación de entrevista y comprobante |
+| `/inscripciones-atenciones/vigencias` | Vigencias: panel de vencimientos, renovación individual/múltiple, reportes y ventana de alerta |
 | `/pagos` | Pagos y caja |
 | `/reportes` | Reportes |
 | `/catalogo` | Catálogo de servicios: áreas, servicios y tipos |
@@ -1489,3 +1490,50 @@ Reutiliza `InscripcionPacienteSearchComponent` y `InscripcionDateInputComponent`
 **Permisos:** `atencion.ver` para consultar; `atencion.crear` para alta; `atencion.editar` para modificar/vincular; `atencion.retirar` para baja; `atencion.exportar` reservado para cuando exista la infraestructura de exportación. Recepción consulta y crea; Administración además edita y da de baja; Superadmin todo. El backend revalida permisos y alcance por sucursal.
 
 **Estado:** submódulo implementado contra API real. Pendientes: Pagos (08), Agenda/Turnos (07), Reportes (09), PDF/Excel y vínculo real con `EntrevistaDirectoryContract` de Pacientes.
+
+### 33. Vigencia, vencimiento y renovación
+
+**Ruta:** `/inscripciones-atenciones/vigencias`.
+**Entrada de sidebar:** grupo `Inscripciones` → `Vigencias y renovaciones` (visible con `vigencia.ver`).
+**Guard:** `permissionGuard` con `vigencia.ver`.
+
+**Archivos:**
+
+- `src/app/pages/inscripciones-atenciones/vigencias/vigencias.page.ts`
+- `src/app/pages/inscripciones-atenciones/vigencias/vigencias.page.html`
+- `src/app/pages/inscripciones-atenciones/vigencias/vigencias.routes.ts`
+- `src/app/pages/inscripciones-atenciones/vigencias/vigencias.service.ts`
+- `src/app/pages/inscripciones-atenciones/vigencias/vigencias.models.ts`
+- `src/app/pages/inscripciones-atenciones/vigencias/vigencia-alerta.component.ts` (componente reutilizable RF-015; no integrado en Pacientes)
+
+**API consumida:**
+
+| Método | Endpoint | Acción |
+|---|---|---|
+| GET | `/api/inscripciones-atenciones/vigencias/panel` | Panel por vencer/vencidos |
+| GET | `/api/inscripciones-atenciones/vigencias/reportes` | Reporte filtrable |
+| GET | `/api/inscripciones-atenciones/vigencias/reportes/exportar` | Exportación (stub 503) |
+| GET | `/api/inscripciones-atenciones/vigencias/pacientes/{id}/resumen` | Resumen RF-015 |
+| GET | `/api/inscripciones-atenciones/vigencias/entidades/{tipo}/{id}/renovacion` | Preview anterior/vigente |
+| POST | `/api/inscripciones-atenciones/vigencias/entidades/{tipo}/{id}/renovar` | Renovación individual |
+| POST | `/api/inscripciones-atenciones/vigencias/renovaciones` | Renovación múltiple |
+| GET/PATCH | `/api/inscripciones-atenciones/vigencias/configuracion/ventana` | Ventana de alerta |
+
+**Funcionalidad:**
+
+- Página con tabs **Panel**, **Reportes** y **Configuración**.
+- Panel con tabs/selector de sucursal, filtros por tipo/estado, tabla con paciente, tutor, servicio, período, vencimiento, estado y saldo.
+- Selección múltiple limitada al mismo paciente; renovación atómica.
+- Renovación individual y múltiple en modal, con tarifa anterior vs vigente y confirmación explícita cuando cambió.
+- No se trasladan sesiones: la nueva entidad conserva la cantidad pactada de su configuración.
+- WhatsApp `wa.me` solo si hay teléfono visible y `tutor.ver_contacto`.
+- Comprobante HTML reutilizado de Salas/Paquetes; el pago usa los endpoints de origen y tolera el stub 503.
+- Reportes con filtros, validación de rango, mensaje de vacío y botones PDF/Excel que muestran el error 503 del backend si falta infraestructura.
+- Configuración de ventana de alerta de 1 a 365 días con `vigencia.configurar`.
+- Sin datos clínicos en panel/reportes.
+
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-pagination`, `app-modal`, `TABLE_IMPORTS`, `input[app-input]`, `app-select-field`, `InscripcionDateInputComponent`, `InscripcionComprobanteComponent`, `PaqueteComprobanteComponent`, `ToastService`, `SucursalesService`, `CatalogoServiciosService`, `SalasGrupalesService` y `PaquetesSesionesService`.
+
+**Permisos:** `vigencia.ver`, `vigencia.reportes`, `vigencia.exportar`, `vigencia.configurar`; la renovación exige además `inscripcion.renovar` o `paquete.renovar`. Recepción consulta y renueva; Administración consulta reportes, renueva y configura.
+
+**Estado:** implementado contra API real. Pendientes: Agenda (07) para saldo/asistencias reales, Pagos (08), PDF/Excel, integración del componente de alerta en Pacientes y widget del panel al iniciar sesión.

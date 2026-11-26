@@ -110,6 +110,12 @@ export class PaquetesSesionesService {
       .pipe(catchError((error: unknown) => this.fail(error)));
   }
 
+  registrarPago(id: number): Observable<{ data: unknown; can: unknown }> {
+    return this.http
+      .post<{ data: unknown; can: unknown }>(`${this.baseUrl}/${id}/pago`, {})
+      .pipe(catchError((error: unknown) => this.fail(error)));
+  }
+
   getTurnosFuturos(id: number): Observable<{ data: TurnosFuturosResumen; can: unknown }> {
     return this.http
       .get<{ data: TurnosFuturosResumen; can: unknown }>(`${this.baseUrl}/${id}/turnos-futuros`)

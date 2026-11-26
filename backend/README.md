@@ -2497,7 +2497,7 @@ Seeders: `CatalogoDiagnosticosPermissionSeeder` y `CatalogoDiagnosticosAccionAud
 
 ## Módulo 06 — Inscripciones y atenciones
 
-Submódulos implementados: **inscripción a salas grupales**, **paquetes de sesiones individuales** y **entrevistas y diagnósticos como atenciones**. Crean la base del módulo padre `App\Modules\InscripcionesAtenciones` para que los próximos submódulos (estados/pausa) reutilicen el prefijo, el provider y el catálogo de auditoría.
+Submódulos implementados: **inscripción a salas grupales**, **paquetes de sesiones individuales**, **entrevistas y diagnósticos como atenciones** y **vigencia, vencimiento y renovación**. Crean la base del módulo padre `App\Modules\InscripcionesAtenciones` para que los próximos submódulos (estados/pausa) reutilicen el prefijo, el provider y el catálogo de auditoría.
 
 ### Estructura
 
@@ -2508,6 +2508,8 @@ app/Modules/InscripcionesAtenciones/
 │                     Paquetes: CreatePaqueteSesionesAction, UpdatePaqueteAction,
 │                     RenovarPaqueteAction, BajaPaqueteAction,
 │                     RejectPaqueteDeletionAction
+│                     Vigencias: RenovarDesdePanelAction, RenovarMultipleAction,
+│                     UpdateVentanaAlertaAction
 ├── Contracts/        PagoInscripcion, AsistenciaInscripcion,
 │                     TurnosFuturosInscripcion, ComprobantePdfExporter,
 │                     InscripcionExporter + stubs/unavailable
@@ -2531,7 +2533,9 @@ app/Modules/InscripcionesAtenciones/
 │                     guards y cálculos de período
 ├── routes.php
 ├── routes-salas-grupales.php
-└── routes-paquetes-sesiones.php
+├── routes-paquetes-sesiones.php
+├── routes-entrevista-diagnostico.php
+└── routes-vigencias.php
 ```
 
 Constantes:
@@ -2541,11 +2545,13 @@ InscripcionesAtencionesModule::MODULE_URL = '/inscripciones-atenciones';
 InscripcionesAtencionesModule::MODULE_URL_SALAS_GRUPALES = '/inscripciones-atenciones/salas-grupales';
 InscripcionesAtencionesModule::MODULE_URL_PAQUETES = '/inscripciones-atenciones/paquetes-sesiones';
 InscripcionesAtencionesModule::MODULE_URL_ENTREVISTA_DIAGNOSTICO = '/inscripciones-atenciones/entrevista-diagnostico';
+InscripcionesAtencionesModule::MODULE_URL_VIGENCIAS = '/inscripciones-atenciones/vigencias';
 InscripcionesAtencionesModule::AUDIT_MODULE = 'inscripciones';
 InscripcionesAtencionesModule::ENTITY_INSCRIPCION_SALA = 'inscripcion_sala';
 InscripcionesAtencionesModule::ENTITY_PAQUETE_SESIONES = 'paquete_sesiones';
 InscripcionesAtencionesModule::ENTITY_ATENCION_ENTREVISTA = 'atencion_entrevista';
 InscripcionesAtencionesModule::ENTITY_ATENCION_DIAGNOSTICO = 'atencion_diagnostico';
+InscripcionesAtencionesModule::ENTITY_RENOVACION_MULTIPLE = 'renovacion_multiple';
 ```
 
 El provider se registra en `bootstrap/providers.php` después de `CatalogoServiciosServiceProvider`. Los futuros providers de Pagos/Agenda deben registrarse después para reemplazar los stubs de sus contratos.
@@ -2981,9 +2987,97 @@ Eventos: `EntrevistaCreated`, `DiagnosticoCreated`, `AtencionUpdated`, `Atencion
 
 - `EntrevistaDiagnosticoTest`: alta de entrevista, alta de diagnóstico con profesionales y snapshot, bloqueo por profesionales insuficientes, diagnóstico sin asignar/omitido, obligación de omitir o vincular, baja y bloqueo posterior, permisos, DELETE 409, pago/exportación stub 503, listado/filtros, rango multidía, vinculación, comprobante, actualizaciones y profesional de otra sucursal.
 - `AtencionRulesTest`: fechas, cobertura de profesionales, omisión de entrevista, notas y motivo de baja.
-- `InscripcionesAtenciones` completo: 176 passed, 3 skipped PostgreSQL-only, 659 assertions.
+- `InscripcionesAtenciones` completo: 204 passed, 3 skipped PostgreSQL-only, 809 assertions.
 
 **Pendientes:** Pagos/Agenda/Reportes reales, PDF/Excel, implementación real de `EntrevistaDirectoryContract` de Pacientes y de los stubs de uso del Catálogo (`hasInscripciones`, `hasDiagnosticosRegistrados`, `hasInscripcionesOrPagos`).
+
+---
+
+### Submódulo 04 — Vigencia, vencimiento y renovación
+
+Implementación de `docs/06_INSCRIPCIONES_ATENCIONES/04_vigencia_vencimiento_renovacion.md` (RF-001 a RF-017). Es transversal sobre Salas Grupales y Paquetes: **no crea una entidad nueva** y **delega la renovación** en `RenovarInscripcionAction` y `RenovarPaqueteAction`.
+
+#### Decisión de modelado
+
+- El estado de vigencia es **derivado**, no almacenado:
+  `Retirado > Renovado > Vencido > Por vencer > Vigente`.
+- `Renovado` se deriva de la existencia de una entidad sucesora no retirada.
+- No se modifica el Enum de estado de los submódulos de origen.
+- No hay job, columna `estado_vigencia` ni evento por cambio natural de vigencia.
+- La ventana de alerta se lee de `configuracion` (`vigencia.ventana_alerta_dias`) y no se hardcodea.
+- El panel/reporte une `inscripcion_sala` y `paquete_sesiones` con `UNION ALL` paginable; no se crea vista.
+- “Por vencer” es inclusivo: `0 <= fecha_fin - hoy <= ventana`.
+- Zona horaria: `America/La_Paz`.
+
+#### Configuración y migraciones
+
+- `VigenciasConfiguracionSeeder`: crea `vigencia.ventana_alerta_dias = 7` (rango 1–365, global) sin pisar valores existentes.
+- `2026_11_26_000500_add_vigencia_indexes.php`: índices de panel para `(sucursal_id, fecha_fin)` y `(paciente_id, fecha_fin)` en ambas tablas.
+- `ParameterAdminContract` (Organización): lectura/edición encapsulada del parámetro, reutilizando `UpdateParameterAction` para conservar versión, validación, caché y bitácora.
+- No se agregan tablas ni columnas de negocio.
+
+#### Permisos
+
+Seeder `VigenciasPermissionSeeder`, marcador `inscripciones.vigencias`:
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `vigencia.ver` | sí | sí | sí |
+| `vigencia.reportes` | sí | sí | no |
+| `vigencia.exportar` | sí | sí | no |
+| `vigencia.configurar` | sí | sí | no |
+
+No existe `vigencia.renovar`: la renovación exige `inscripcion.renovar` o `paquete.renovar`. Los tipos visibles se filtran además por `inscripcion.ver` y `paquete.ver`.
+
+#### Endpoints
+
+Prefijo real: **`/api/inscripciones-atenciones/vigencias`**.
+
+| Método | Ruta | Acción/Query | Permiso |
+|---|---|---|---|
+| GET | `/panel` | `GetPanelVigenciasQuery` | `vigencia.ver` |
+| GET | `/reportes` | `ListVencimientosReporteQuery` | `vigencia.reportes` |
+| GET | `/reportes/exportar?formato=pdf\|excel` | `ExportVigenciasQuery`; stub 503 | `vigencia.exportar` |
+| GET | `/pacientes/{pacienteId}/resumen` | `GetResumenVigenciaPacienteQuery` | `vigencia.ver` |
+| GET | `/entidades/{tipo}/{id}/renovacion` | `PreviewRenovacionQuery` | permiso de renovación del tipo |
+| POST | `/entidades/{tipo}/{id}/renovar` | `RenovarDesdePanelAction` | permiso de renovación del tipo |
+| POST | `/renovaciones` | `RenovarMultipleAction` | permiso de renovación del tipo |
+| GET | `/configuracion/ventana` | `GetVentanaAlertaQuery` | `vigencia.configurar` |
+| PATCH | `/configuracion/ventana` | `UpdateVentanaAlertaAction` | `vigencia.configurar` |
+
+Filtros de panel/reportes: `search`, `sucursal_id`, `paciente_id`, `servicio_id`, `tipo_entidad`, `estado`, `periodo_desde`, `periodo_hasta`, `page`, `per_page` (máx. 50), `sort`, `direction`. El panel usa por defecto “por vencer + vencidos”. Los reportes aceptan los cinco estados.
+
+#### Renovación y tarifa
+
+- `PreviewRenovacionQuery` devuelve tarifa anterior, tarifa vigente, `monto_anterior`, `monto_vigente` y `cambio_tarifa`.
+- `RenovarDesdePanelAction`:
+  - valida permiso subyacente y sucursal;
+  - resuelve tarifa actual;
+  - exige `monto_visto` y confirmación cuando cambió;
+  - delega en la Action de origen con `tarifa_id_esperada` vigente;
+  - después de crear, verifica el monto final y revierte si cambió durante la operación.
+- `RenovarMultipleAction` es atómica y exige mismo paciente; registra el lote en bitácora con `renovacion_multiple` y mantiene las auditorías individuales.
+- No se trasladan sesiones: se crea un paquete nuevo con la cantidad completa.
+
+#### Agenda y pacientes
+
+- `VigenciaEntidadContract` / `EloquentVigenciaEntidad`: `puedeRegistrarAsistencia(tipo, id, fechaTurno)`.
+- Usa la fecha del turno, no “hoy”; permite cargar asistencias históricas dentro del período y bloquea fuera del período o si la entidad está retirada.
+- El mensaje “Debe renovar...” y el bloqueo de Agenda se implementan en el módulo 07.
+- RF-015 expone `GET /pacientes/{id}/resumen` y el componente reutilizable `VigenciaAlertaComponent`; la integración visual en la ficha de Pacientes queda pendiente de autorización de ese módulo.
+
+#### Exportación
+
+`VigenciaExporterContract` es stub (`503`) hasta instalar infraestructura PDF/Excel. Los filtros se envían al contrato para que el archivo real los incluya. No se genera un archivo vacío ni simulado.
+
+#### Tests
+
+- Unit: clasificación con bordes, ventana, elegibilidad, comparación de tarifa.
+- Feature: panel, scoping, tipos visibles, reportes, preview, renovación individual, cambio de tarifa entre preview y ejecución, no traslado, múltiple atómica, contrato de Agenda, resumen del paciente, exportación 503 y configuración.
+- Índices: migración aplicada en PostgreSQL local.
+- Suite completa: **946 passed, 6 skipped (PostgreSQL-only), 4822 assertions** con `make test`.
+
+**Pendientes:** Agenda (07) para consumo/asistencias reales, Pagos (08), exportación PDF/Excel, integración en la ficha de Pacientes y widget del panel en el inicio (CA-003).
 
 ---
 

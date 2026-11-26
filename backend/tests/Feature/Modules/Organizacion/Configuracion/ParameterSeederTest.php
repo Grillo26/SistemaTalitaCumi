@@ -10,8 +10,8 @@ final class ParameterSeederTest extends ConfiguracionTestCase
 {
     public function test_catalog_is_seeded_with_initial_audit_entries(): void
     {
-        $this->assertSame(36, Parametro::query()->count());
-        $this->assertSame(36, BitacoraEntry::query()
+        $this->assertSame(37, Parametro::query()->count());
+        $this->assertSame(37, BitacoraEntry::query()
             ->where('entidad', 'parametro')
             ->where('accion', 'CREAR')
             ->count());
@@ -63,8 +63,8 @@ final class ParameterSeederTest extends ConfiguracionTestCase
 
         $this->seed(OrganizacionConfiguracionCatalogSeeder::class);
 
-        $this->assertSame(36, Parametro::query()->count());
-        $this->assertSame(36, BitacoraEntry::query()
+        $this->assertSame(37, Parametro::query()->count());
+        $this->assertSame(37, BitacoraEntry::query()
             ->where('entidad', 'parametro')
             ->where('accion', 'CREAR')
             ->count());

@@ -935,6 +935,8 @@ Timestamps: solo `updated_at`. Las altas y cambios se reconstruyen desde `bitaco
 Índices: `clave` único, `categoria`, `visible_recepcion`. El catálogo inicial tiene 23 claves y se carga con `OrganizacionConfiguracionCatalogSeeder`; cada alta deja un registro `CREAR` en bitácora.
 
 > **Módulo 02 (Fases 1–4):** se agregaron 12 claves de seguridad (categoría `seguridad`), por lo que el catálogo pasa a 35 claves. `sesion_inactividad_minutos` se reutiliza en `operacion`. Las fases 2 y 3 no agregan tablas; la Fase 4 agrega `accion_auditada` y reutiliza `bitacora`.
+>
+> **Módulo 06.04 (Vigencias):** se agrega `vigencia.ventana_alerta_dias` (categoría `operacion`, entero, valor inicial 7, rango 1–365). Es un parámetro global; no se agregan columnas ni tablas de vigencia.
 
 #### `accion_auditada` — Catálogo de acciones auditadas
 
@@ -1503,7 +1505,7 @@ Sin `deleted_at`: las tarifas no se eliminan; se cierra su vigencia con motivo. 
 | `inscripcion_origen_id` | `bigint` | sí | `FK → inscripcion_sala` | Renovación |
 | `observaciones` | `text` | sí |  |  |
 
-Índices: `(estado)`, `(fecha_inicio, fecha_fin)`, `(sucursal_id, fecha_inicio, fecha_fin)`, `(sala_id, fecha_inicio, fecha_fin)`, `(paciente_id, estado)`, `(inscripcion_origen_id)`. Timestamps: `created_at`, `updated_at`.
+Índices: `(estado)`, `(fecha_inicio, fecha_fin)`, `(sucursal_id, fecha_inicio, fecha_fin)`, `(sala_id, fecha_inicio, fecha_fin)`, `(paciente_id, estado)`, `(inscripcion_origen_id)`, `(sucursal_id, fecha_fin)` y `(paciente_id, fecha_fin)` (estos dos últimos para el panel de vigencias). Timestamps: `created_at`, `updated_at`.
 
 Concurrencia: en PostgreSQL, `btree_gist` + constraint `EXCLUDE` sobre `(paciente_id, sala_id, daterange(fecha_inicio, fecha_fin, '[]'))` para estados `activa` y `en_pausa`. La migración `2026_11_25_000800_create_inscripcion_sala_table` crea la tabla y la restricción. `estado_inscripcion_historial` queda para el submódulo de estados/pausa; esta entrega no la crea.
 
@@ -1531,7 +1533,7 @@ Concurrencia: en PostgreSQL, `btree_gist` + constraint `EXCLUDE` sobre `(pacient
 | `estado` | `varchar(20)` |  | `DEFAULT 'activo'`, `CHECK IN ('activo','en_pausa','vencido','renovado','retirado')` |  |
 | `paquete_origen_id` | `bigint` | sí | `FK → paquete_sesiones` | Renovación |
 
-Concurrencia: en PostgreSQL, `btree_gist` + constraint `EXCLUDE` sobre `(paciente_id, servicio_id, daterange(fecha_inicio, fecha_fin, '[]'))` para estados `activo` y `en_pausa`. La migración `2026_11_26_000000_create_paquete_sesiones_table` crea la tabla y la restricción. Índices: `(estado)`, `(fecha_inicio, fecha_fin)`, `(sucursal_id, fecha_inicio, fecha_fin)`, `(paciente_id, estado)`, `(servicio_id, fecha_inicio)`, `(profesional_id, fecha_inicio)` y `(paquete_origen_id)`. Timestamps: `created_at`, `updated_at`. El parámetro `paquete.cantidad_sesiones_default` (10) se crea con seeder; la duración reutiliza `duracion_sesion_minutos` (50). En el submódulo 02 solo se escriben los estados `activo` y `retirado`; `vencido` se deriva de `fecha_fin` y no se persiste.
+Concurrencia: en PostgreSQL, `btree_gist` + constraint `EXCLUDE` sobre `(paciente_id, servicio_id, daterange(fecha_inicio, fecha_fin, '[]'))` para estados `activo` y `en_pausa`. La migración `2026_11_26_000000_create_paquete_sesiones_table` crea la tabla y la restricción. Índices: `(estado)`, `(fecha_inicio, fecha_fin)`, `(sucursal_id, fecha_inicio, fecha_fin)`, `(paciente_id, estado)`, `(servicio_id, fecha_inicio)`, `(profesional_id, fecha_inicio)`, `(paquete_origen_id)`, `(sucursal_id, fecha_fin)` y `(paciente_id, fecha_fin)` (estos dos últimos para el panel de vigencias). Timestamps: `created_at`, `updated_at`. El parámetro `paquete.cantidad_sesiones_default` (10) se crea con seeder; la duración reutiliza `duracion_sesion_minutos` (50). En el submódulo 02 solo se escriben los estados `activo` y `retirado`; `vencido` se deriva de `fecha_fin` y no se persiste.
 
 #### `atencion_entrevista` — Entrevista con los padres
 

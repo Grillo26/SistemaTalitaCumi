@@ -76,6 +76,16 @@ export const routes: Routes = [
         title: 'Entrevistas y diagnósticos | TalitaCumi',
       },
       {
+        path: 'inscripciones-atenciones/vigencias',
+        canActivate: [permissionGuard],
+        data: { permission: 'vigencia.ver' },
+        loadChildren: () =>
+          import('./pages/inscripciones-atenciones/vigencias/vigencias.routes').then(
+            (m) => m.VIGENCIAS_ROUTES,
+          ),
+        title: 'Vigencias y renovaciones | TalitaCumi',
+      },
+      {
         path: 'pagos',
         component: PagosComponent,
         title: 'Pagos y caja | TalitaCumi',

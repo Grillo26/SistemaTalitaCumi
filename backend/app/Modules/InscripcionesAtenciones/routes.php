@@ -16,3 +16,8 @@ Route::middleware('auth:sanctum')
     ->prefix('entrevista-diagnostico')
     ->name('entrevista-diagnostico.')
     ->group(__DIR__.'/routes-entrevista-diagnostico.php');
+
+Route::middleware('auth:sanctum')
+    ->prefix('vigencias')
+    ->name('vigencias.')
+    ->group(__DIR__.'/routes-vigencias.php');

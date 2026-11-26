@@ -119,6 +119,11 @@ export class AppSidebarComponent {
           path: '/inscripciones-atenciones/entrevista-diagnostico',
           permission: 'atencion.ver',
         },
+        {
+          name: 'Vigencias y renovaciones',
+          path: '/inscripciones-atenciones/vigencias',
+          permission: 'vigencia.ver',
+        },
       ],
     },
     {

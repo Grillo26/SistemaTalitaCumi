@@ -6,8 +6,10 @@ use App\Modules\Organizacion\Contracts\AmbienteDirectoryContract;
 use App\Modules\Organizacion\Contracts\BranchDirectoryContract;
 use App\Modules\Organizacion\Contracts\EloquentAmbienteDirectory;
 use App\Modules\Organizacion\Contracts\EloquentBranchDirectory;
+use App\Modules\Organizacion\Contracts\EloquentParameterAdmin;
 use App\Modules\Organizacion\Contracts\EloquentParameterReader;
 use App\Modules\Organizacion\Contracts\EloquentSalaDirectory;
+use App\Modules\Organizacion\Contracts\ParameterAdminContract;
 use App\Modules\Organizacion\Contracts\ParameterReaderContract;
 use App\Modules\Organizacion\Contracts\SalaDirectoryContract;
 use App\Modules\Organizacion\Events\AmbienteCreated;
@@ -48,6 +50,7 @@ final class OrganizacionServiceProvider extends ServiceProvider
         $this->app->bind(SalaDirectoryContract::class, EloquentSalaDirectory::class);
         $this->app->bind(AmbienteDirectoryContract::class, EloquentAmbienteDirectory::class);
         $this->app->bind(ParameterReaderContract::class, EloquentParameterReader::class);
+        $this->app->bind(ParameterAdminContract::class, EloquentParameterAdmin::class);
     }
 
     public function boot(): void
