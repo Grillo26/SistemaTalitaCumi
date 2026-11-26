@@ -1495,7 +1495,9 @@ Sin `deleted_at`: las tarifas no se eliminan; se cierra su vigencia con motivo. 
 | `inscripcion_origen_id` | `bigint` | sí | `FK → inscripcion_sala` | Renovación |
 | `observaciones` | `text` | sí |  |  |
 
-Índices: `(estado)`, `(fecha_inicio, fecha_fin)`, `(paciente_id)`. Timestamps: `created_at`, `updated_at`.
+Índices: `(estado)`, `(fecha_inicio, fecha_fin)`, `(sucursal_id, fecha_inicio, fecha_fin)`, `(sala_id, fecha_inicio, fecha_fin)`, `(paciente_id, estado)`, `(inscripcion_origen_id)`. Timestamps: `created_at`, `updated_at`.
+
+Concurrencia: en PostgreSQL, `btree_gist` + constraint `EXCLUDE` sobre `(paciente_id, sala_id, daterange(fecha_inicio, fecha_fin, '[]'))` para estados `activa` y `en_pausa`. La migración `2026_11_25_000800_create_inscripcion_sala_table` crea la tabla y la restricción. `estado_inscripcion_historial` queda para el submódulo de estados/pausa; esta entrega no la crea.
 
 #### `paquete_sesiones` — Paquetes de sesiones individuales
 

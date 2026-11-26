@@ -40,11 +40,9 @@ export class AppSidebarComponent {
   readonly isExpanded$ = this.sidebarService.isExpanded$;
   readonly isMobileOpen$ = this.sidebarService.isMobileOpen$;
   readonly isHovered$ = this.sidebarService.isHovered$;
-  readonly isVisible$ = combineLatest([
-    this.isExpanded$,
-    this.isHovered$,
-    this.isMobileOpen$,
-  ]).pipe(map(([expanded, hovered, mobileOpen]) => expanded || hovered || mobileOpen));
+  readonly isVisible$ = combineLatest([this.isExpanded$, this.isHovered$, this.isMobileOpen$]).pipe(
+    map(([expanded, hovered, mobileOpen]) => expanded || hovered || mobileOpen),
+  );
 
   readonly expandedGroups = signal<ReadonlySet<string>>(new Set());
 
@@ -103,8 +101,9 @@ export class AppSidebarComponent {
     },
     {
       name: 'Inscripciones',
-      path: '/inscripciones',
+      path: '/inscripciones-atenciones/salas-grupales',
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3.25h8a2 2 0 0 1 2 2v14.5H6V5.25a2 2 0 0 1 2-2Z"/><path d="M9.5 8h5M9.5 11.5h5M9.5 15h3"/><path d="M16.5 18.25h3v-5.5l-2.5-2.5"/></svg>',
+      permission: 'inscripcion.ver',
     },
     {
       name: 'Pagos y caja',
@@ -219,8 +218,10 @@ export class AppSidebarComponent {
     }
 
     if (path === '/pacientes') {
-      return url === '/pacientes'
-        || (url.startsWith('/pacientes/') && !url.startsWith('/pacientes/tutores'));
+      return (
+        url === '/pacientes' ||
+        (url.startsWith('/pacientes/') && !url.startsWith('/pacientes/tutores'))
+      );
     }
 
     if (path === '/pacientes/tutores') {

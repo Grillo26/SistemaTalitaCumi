@@ -5,7 +5,6 @@ import { permissionGuard } from './core/guards/permission.guard';
 import { AppLayoutComponent } from './layout/shell/app-layout/app-layout.component';
 import { HomeComponent } from './pages/home/home.component';
 import { AgendaComponent } from './pages/agenda/agenda.component';
-import { InscripcionesComponent } from './pages/inscripciones/inscripciones.component';
 import { PagosComponent } from './pages/pagos/pagos.component';
 import { ReportesComponent } from './pages/reportes/reportes.component';
 import { InventarioComponent } from './pages/inventario/inventario.component';
@@ -15,9 +14,7 @@ export const routes: Routes = [
     path: 'login',
     canActivate: [guestGuard],
     loadComponent: () =>
-      import('./pages/auth-pages/sign-in/sign-in.component').then(
-        (m) => m.SignInComponent,
-      ),
+      import('./pages/auth-pages/sign-in/sign-in.component').then((m) => m.SignInComponent),
     title: 'Iniciar sesión | TalitaCumi',
   },
   {
@@ -41,14 +38,22 @@ export const routes: Routes = [
         canActivate: [permissionGuard],
         data: { permissions: ['paciente.ver', 'tutor.ver', 'ficha_ingreso.ver'] },
         loadChildren: () =>
-          import('./pages/pacientes/pacientes.routes').then(
-            (m) => m.PACIENTES_ROUTES,
-          ),
+          import('./pages/pacientes/pacientes.routes').then((m) => m.PACIENTES_ROUTES),
       },
       {
         path: 'inscripciones',
-        component: InscripcionesComponent,
-        title: 'Inscripciones | TalitaCumi',
+        redirectTo: 'inscripciones-atenciones/salas-grupales',
+        pathMatch: 'full',
+      },
+      {
+        path: 'inscripciones-atenciones/salas-grupales',
+        canActivate: [permissionGuard],
+        data: { permission: 'inscripcion.ver' },
+        loadChildren: () =>
+          import('./pages/inscripciones-atenciones/salas-grupales/salas-grupales.routes').then(
+            (m) => m.SALAS_GRUPALES_ROUTES,
+          ),
+        title: 'Inscripciones a salas grupales | TalitaCumi',
       },
       {
         path: 'pagos',
@@ -70,9 +75,7 @@ export const routes: Routes = [
         canActivate: [permissionGuard],
         data: { permissions: ['tarifas.ver', 'categorias.ver'] },
         loadChildren: () =>
-          import('./pages/catalogo-servicios/tarifas/tarifas.routes').then(
-            (m) => m.TARIFAS_ROUTES,
-          ),
+          import('./pages/catalogo-servicios/tarifas/tarifas.routes').then((m) => m.TARIFAS_ROUTES),
         title: 'Tarifas y categorías | TalitaCumi',
       },
       {
@@ -100,9 +103,7 @@ export const routes: Routes = [
         canActivate: [permissionGuard],
         data: { permission: 'profesional.ver' },
         loadChildren: () =>
-          import('./pages/profesionales/profesionales.routes').then(
-            (m) => m.PROFESIONALES_ROUTES,
-          ),
+          import('./pages/profesionales/profesionales.routes').then((m) => m.PROFESIONALES_ROUTES),
       },
       {
         path: 'inventario',
@@ -127,9 +128,7 @@ export const routes: Routes = [
         canActivate: [permissionGuard],
         data: { permission: 'usuario.ver' },
         loadChildren: () =>
-          import('./pages/seguridad/usuarios/usuarios.routes').then(
-            (m) => m.USUARIOS_ROUTES,
-          ),
+          import('./pages/seguridad/usuarios/usuarios.routes').then((m) => m.USUARIOS_ROUTES),
       },
       {
         path: 'seguridad/roles-permisos',
@@ -145,9 +144,7 @@ export const routes: Routes = [
         canActivate: [permissionGuard],
         data: { permission: 'bitacora.ver' },
         loadChildren: () =>
-          import('./pages/seguridad/bitacora/bitacora.routes').then(
-            (m) => m.BITACORA_ROUTES,
-          ),
+          import('./pages/seguridad/bitacora/bitacora.routes').then((m) => m.BITACORA_ROUTES),
       },
       {
         path: 'organizacion/sucursales',
@@ -208,9 +205,7 @@ export const routes: Routes = [
       {
         path: 'shared/calendar',
         loadComponent: () =>
-          import('./pages/calendar/calendar.component').then(
-            (m) => m.CalendarComponent,
-          ),
+          import('./pages/calendar/calendar.component').then((m) => m.CalendarComponent),
         title: 'Calendario | TalitaCumi',
       },
       {
@@ -224,55 +219,42 @@ export const routes: Routes = [
       {
         path: 'shared/bar-chart',
         loadComponent: () =>
-          import('./pages/charts/bar-chart/bar-chart.component').then(
-            (m) => m.BarChartComponent,
-          ),
+          import('./pages/charts/bar-chart/bar-chart.component').then((m) => m.BarChartComponent),
         title: 'Gráfico de barras | TalitaCumi',
       },
       {
         path: 'shared/pie-chart',
         loadComponent: () =>
-          import('./pages/charts/pie-chart/pie-chart.component').then(
-            (m) => m.PieChartComponent,
-          ),
+          import('./pages/charts/pie-chart/pie-chart.component').then((m) => m.PieChartComponent),
         title: 'Gráfico circular | TalitaCumi',
       },
       {
         path: 'shared/buttons',
         loadComponent: () =>
-          import('./pages/ui-elements/buttons/buttons.component').then(
-            (m) => m.ButtonsComponent,
-          ),
+          import('./pages/ui-elements/buttons/buttons.component').then((m) => m.ButtonsComponent),
         title: 'Botones | TalitaCumi',
       },
       {
         path: 'shared/badge',
         loadComponent: () =>
-          import('./pages/ui-elements/badge/badge.component').then(
-            (m) => m.BadgesComponent,
-          ),
+          import('./pages/ui-elements/badge/badge.component').then((m) => m.BadgesComponent),
         title: 'Badges | TalitaCumi',
       },
       {
         path: 'shared/alerts',
         loadComponent: () =>
-          import('./pages/ui-elements/alerts/alerts.component').then(
-            (m) => m.AlertsComponent,
-          ),
+          import('./pages/ui-elements/alerts/alerts.component').then((m) => m.AlertsComponent),
         title: 'Alertas y toasts | TalitaCumi',
       },
       {
         path: 'shared/invoice',
         loadComponent: () =>
-          import('./pages/ecommerce/invoice/invoice.component').then(
-            (m) => m.InvoiceComponent,
-          ),
+          import('./pages/ecommerce/invoice/invoice.component').then((m) => m.InvoiceComponent),
         title: 'Comprobante de pago | TalitaCumi',
       },
       {
         path: 'shared/blank',
-        loadComponent: () =>
-          import('./pages/blank/blank.component').then((m) => m.BlankComponent),
+        loadComponent: () => import('./pages/blank/blank.component').then((m) => m.BlankComponent),
         title: 'Página en blanco | TalitaCumi',
       },
     ],
@@ -282,33 +264,25 @@ export const routes: Routes = [
   {
     path: 'error-404',
     loadComponent: () =>
-      import('./pages/other-page/not-found/not-found.component').then(
-        (m) => m.NotFoundComponent,
-      ),
+      import('./pages/other-page/not-found/not-found.component').then((m) => m.NotFoundComponent),
     title: 'Página no encontrada | TalitaCumi',
   },
   {
     path: 'error-403',
     loadComponent: () =>
-      import('./pages/other-page/forbidden/forbidden.component').then(
-        (m) => m.ForbiddenComponent,
-      ),
+      import('./pages/other-page/forbidden/forbidden.component').then((m) => m.ForbiddenComponent),
     title: 'Acceso denegado | TalitaCumi',
   },
   {
     path: 'error-500',
     loadComponent: () =>
-      import('./pages/other-page/error-500/error-500.component').then(
-        (m) => m.Error500Component,
-      ),
+      import('./pages/other-page/error-500/error-500.component').then((m) => m.Error500Component),
     title: 'Error del servidor | TalitaCumi',
   },
   {
     path: 'error-503',
     loadComponent: () =>
-      import('./pages/other-page/error-503/error-503.component').then(
-        (m) => m.Error503Component,
-      ),
+      import('./pages/other-page/error-503/error-503.component').then((m) => m.Error503Component),
     title: 'Servicio no disponible | TalitaCumi',
   },
   {
@@ -322,17 +296,13 @@ export const routes: Routes = [
   {
     path: 'exito',
     loadComponent: () =>
-      import('./pages/other-page/success/success.component').then(
-        (m) => m.SuccessComponent,
-      ),
+      import('./pages/other-page/success/success.component').then((m) => m.SuccessComponent),
     title: 'Operación completada | TalitaCumi',
   },
   {
     path: '**',
     loadComponent: () =>
-      import('./pages/other-page/not-found/not-found.component').then(
-        (m) => m.NotFoundComponent,
-      ),
+      import('./pages/other-page/not-found/not-found.component').then((m) => m.NotFoundComponent),
     title: 'Página no encontrada | TalitaCumi',
   },
 ];

@@ -86,7 +86,8 @@ Todas las rutas están dentro del layout principal y protegidas por `authGuard`.
 | `/pacientes/:id/ficha-ingreso` | Ficha administrativa de ingreso, consentimientos y observaciones del paciente (04.03 Fases A, B y C) |
 | `/pacientes/tutores` | Tutores: listado, búsqueda, alta y filtros |
 | `/pacientes/tutores/:id` | Ficha del tutor, contacto, estado y pacientes asociados |
-| `/inscripciones` | Inscripciones |
+| `/inscripciones` | Redirige a `/inscripciones-atenciones/salas-grupales` |
+| `/inscripciones-atenciones/salas-grupales` | Inscripciones a salas grupales: listado, ficha, alta, renovación y baja |
 | `/pagos` | Pagos y caja |
 | `/reportes` | Reportes |
 | `/catalogo` | Catálogo de servicios: áreas, servicios y tipos |
@@ -103,7 +104,7 @@ Todas las rutas están dentro del layout principal y protegidas por `authGuard`.
 | `/seguridad/roles-permisos` | Matriz de roles y permisos |
 | `/seguridad/bitacora` | Consulta y reconstrucción de bitácora |
 
-Los módulos sin implementar muestran un estado vacío reutilizable (`app-module-placeholder`). Las rutas `/pacientes`, `/profesionales`, `/organizacion/sucursales`, `/organizacion/salas-ambientes`, `/organizacion/configuracion`, `/seguridad/usuarios`, `/seguridad/roles-permisos` y `/seguridad/bitacora` ya están implementadas y consumen la API real del backend. `/pacientes` usa `permissionGuard` con `paciente.ver` y el sidebar oculta la entrada sin permiso.
+Las rutas `/pacientes`, `/profesionales`, `/organizacion/sucursales`, `/organizacion/salas-ambientes`, `/organizacion/configuracion`, `/seguridad/usuarios`, `/seguridad/roles-permisos`, `/seguridad/bitacora` y `/inscripciones-atenciones/salas-grupales` ya están implementadas y consumen la API real del backend. Los módulos sin implementar muestran un estado vacío reutilizable (`app-module-placeholder`). `/pacientes` usa `permissionGuard` con `paciente.ver` y el sidebar oculta la entrada sin permiso.
 
 ### Páginas de referencia
 
@@ -183,7 +184,7 @@ frontend/
 │   │   │   ├── ecommerce/
 │   │   │   ├── forms/
 │   │   │   ├── home/
-│   │   │   ├── inscripciones/
+│   │   │   ├── inscripciones-atenciones/
 │   │   │   ├── inventario/
 │   │   │   ├── other-page/
 │   │   │   ├── organizacion/
@@ -1309,3 +1310,64 @@ No se ejecutó `ng serve` ni se levantó el servidor.
 - No se agregaron datos mock ni dependencias nuevas para sucursales, salas/ambientes, configuración, profesionales ni autenticación. La exportación PDF/Excel sigue fuera de alcance y no se muestra el botón.
 - `npm run build` se ejecutó correctamente después de implementar el módulo.
 - No se realizó commit.
+
+---
+
+### 30. Inscripciones a salas grupales
+
+**Ruta:** `/inscripciones-atenciones/salas-grupales` (la ruta heredada `/inscripciones` redirige).
+**Entrada de sidebar:** `Inscripciones` (visible con `inscripcion.ver`).
+**Guard:** `permissionGuard` con `inscripcion.ver`.
+
+**Archivos:**
+
+- `src/app/pages/inscripciones-atenciones/salas-grupales/salas-grupales.page.ts`
+- `src/app/pages/inscripciones-atenciones/salas-grupales/salas-grupales.page.html`
+- `src/app/pages/inscripciones-atenciones/salas-grupales/salas-grupales.routes.ts`
+- `src/app/pages/inscripciones-atenciones/salas-grupales/salas-grupales.service.ts`
+- `src/app/pages/inscripciones-atenciones/salas-grupales/salas-grupales.models.ts`
+- `src/app/pages/inscripciones-atenciones/salas-grupales/inscripcion-paciente-search.component.ts`
+- `src/app/pages/inscripciones-atenciones/salas-grupales/inscripcion-date-input.component.ts`
+- `src/app/pages/inscripciones-atenciones/salas-grupales/inscripcion-comprobante.component.ts`
+
+**API consumida:**
+
+| Método | Endpoint | Acción |
+|---|---|---|
+| GET | `/api/inscripciones-atenciones/salas-grupales` | Listado paginado con filtros |
+| GET | `/api/inscripciones-atenciones/salas-grupales/monto-esperado` | Vista previa del monto |
+| GET | `/api/inscripciones-atenciones/salas-grupales/{id}` | Ficha |
+| GET | `/api/inscripciones-atenciones/salas-grupales/{id}/renovacion` | Fechas y tarifa propuestas |
+| POST | `/api/inscripciones-atenciones/salas-grupales` | Alta |
+| PATCH | `/api/inscripciones-atenciones/salas-grupales/{id}` | Edición |
+| POST | `/api/inscripciones-atenciones/salas-grupales/{id}/renovar` | Renovación |
+| POST | `/api/inscripciones-atenciones/salas-grupales/{id}/retirar` | Baja |
+| GET | `/api/inscripciones-atenciones/salas-grupales/{id}/pago` | Estado de pago (stub 503) |
+| POST | `/api/inscripciones-atenciones/salas-grupales/{id}/pago` | Inicio de registro de pago (stub 503) |
+| GET | `/api/inscripciones-atenciones/salas-grupales/{id}/asistencia` | Asistencia (stub 503) |
+| GET | `/api/inscripciones-atenciones/salas-grupales/{id}/turnos-futuros` | Pre-chequeo de turnos (stub 503) |
+| GET | `/api/inscripciones-atenciones/salas-grupales/{id}/comprobante` | Datos del comprobante |
+| GET | `/api/inscripciones-atenciones/salas-grupales/{id}/comprobante/pdf` | PDF pendiente (503) |
+| GET | `/api/inscripciones-atenciones/salas-grupales/exportar` | Exportación pendiente (503) |
+
+**Funcionalidad:**
+
+- Listado paginado con filtros por sucursal, sala, paciente (autocompletado por nombre/apellido/CI/código), mes, año y estado; orden por período, monto o estado.
+- Alta en modal con búsqueda de paciente, tutor responsable, sucursal, sala, servicio de sala grupal, categoría, fechas, observaciones y vista previa del monto calculada por el backend.
+- Bloqueo de paciente no activo con mensaje “Debe reactivar al paciente antes de inscribir”.
+- Confirmación explícita cuando la tarifa vigente cambió (`409 TARIFA_CAMBIO`).
+- Errores claros de duplicidad, sala inactiva, sucursal fuera de alcance y fechas inválidas.
+- Ficha en modal con resumen, pago, asistencia, comprobante, vínculo de renovación y datos de baja.
+- Edición de fechas, servicio, categoría y observaciones; paciente, tutor, sucursal y sala son inmutables.
+- Renovación con fechas propuestas, tarifa vigente y vínculo con la inscripción anterior.
+- Baja con motivo cerrado, detalle, fecha y pre-chequeo separado de turnos futuros; si Agenda no está disponible, se informa y la baja continúa.
+- Comprobante imprimible con datos reales del centro, paciente, tutor, sala, período y leyenda de que no es factura.
+- Enlace `wa.me` solo en la ficha y solo con `tutor.ver_contacto`.
+- Pagos y asistencia se muestran como “No disponible” mientras los módulos 08/07 no existan; nunca con valores falsos.
+- Sin eliminación física y sin botón de exportación; PDF/Excel pendientes de infraestructura.
+
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-pagination`, `app-modal`, `TABLE_IMPORTS`, `input[app-input]`, `app-select-field`, `textarea[app-textarea]`, Flatpickr, `ToastService`, `SucursalesService`, `SalasAmbientesService`, `CatalogoServiciosService`, `TarifasService` y `PacientesService`.
+
+**Permisos:** `inscripcion.ver` para acceder; `inscripcion.crear` para alta; `inscripcion.editar` para modificar; `inscripcion.renovar` para renovar; `inscripcion.retirar` para baja. Recepción crea/consulta/renueva; Administración además edita y da de baja. El backend revalida permisos y alcance por sucursal.
+
+**Estado:** submódulo implementado contra API real. Pendientes: Pagos (08), Asistencia/Agenda (07), PDF real y exportación PDF/Excel, y el flujo de ajuste de RF-009 cuando existan pagos.

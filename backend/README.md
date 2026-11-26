@@ -77,6 +77,8 @@ app/Modules/Organizacion/
 └── routes-configuracion.php      Configuración (03)
 ```
 
+Módulos actuales: `Organizacion`, `Seguridad`, `Profesionales`, `Pacientes`, `CatalogoServicios` e `InscripcionesAtenciones`.
+
 Reglas de dependencia:
 
 - Controller → Action o Query. Nunca usa Models directamente.
@@ -1510,7 +1512,7 @@ No se tocaron esos módulos.
 | Contrato | Implementación | Mensaje |
 |---|---|---|
 | `DiagnosticTypeDirectoryContract` | `StubDiagnosticTypeDirectoryContract` | `Módulo 05 — Catálogo de tipos de diagnóstico no implementado todavía.` |
-| `PatientEnrollmentDirectoryContract` | `StubPatientEnrollmentDirectoryContract` | `Módulo 06 — Inscripciones no implementado todavía.` |
+| `PatientEnrollmentDirectoryContract` | `StubPatientEnrollmentDirectoryContract` | `Contrato de resumen de inscripciones del paciente aún no implementado por 06.` |
 | `PacienteExporterContract` | `UnavailablePacienteExporter` | `Exportación PDF/Excel pendiente de infraestructura.` |
 
 - `TutorDirectoryContract` tiene implementación real (`EloquentTutorDirectory`): `existe`, `estaActivo`, `resumen`, `tutoresDePaciente`, `tieneTutorPrincipal`, `tutorPrincipal` y `asegurarTutorPrincipal`. `tieneTutorPrincipal` y `tutorPrincipal` exigen que el principal esté **activo** (04.02/RN-007); `tutorPrincipal` devuelve `null` si el principal está inactivo. `TutorResumen` incluye el parentesco de la relación.
@@ -2489,6 +2491,215 @@ Seeders: `CatalogoDiagnosticosPermissionSeeder` y `CatalogoDiagnosticosAccionAud
 | RN-D11 | `version` y snapshots; requisitos editables sin tocar diagnósticos previos | Catálogo versionado; snapshot en 06/11 |
 
 **TODOs:** implementar `TipoDiagnosticoUsageContract` con 06/11; exportación PDF/Excel; filtrado de tipos inactivos y snapshot de requisitos en inscripciones/diagnósticos (06/07/11); integrar la FK diferida de `paciente` cuando 04 lo habilite.
+
+
+---
+
+## Módulo 06 — Inscripciones y atenciones
+
+Primer submódulo: **inscripción a salas grupales**. Crea la base del módulo padre `App\Modules\InscripcionesAtenciones` para que los próximos submódulos (terapia individual, diagnóstico, estados/pausa) reutilicen el prefijo, el provider y el catálogo de auditoría.
+
+### Estructura
+
+```text
+app/Modules/InscripcionesAtenciones/
+├── Actions/          CreateInscripcionSalaGrupal, UpdateInscripcion,
+│                     RenovarInscripcion, BajaInscripcion
+├── Contracts/        PagoInscripcion, AsistenciaInscripcion,
+│                     TurnosFuturosInscripcion, ComprobantePdfExporter,
+│                     InscripcionExporter + stubs/unavailable
+├── Enums/            EstadoInscripcionSala, MotivoBaja
+├── Events/           InscripcionCreated, InscripcionUpdated,
+│                     InscripcionRenewed, InscripcionRetirada
+├── Exceptions/       Dominio con render HTTP
+├── Http/             Controllers, Requests y Resources del submódulo
+├── Listeners/        RecordInscripcionAudit
+├── Models/           InscripcionSala, BitacoraEntry
+├── Providers/        InscripcionesAtencionesServiceProvider
+├── Queries/          List, Get, PreviewMonto, Renovación, Comprobante,
+│                     Pago, Asistencia, Turnos futuros
+├── Rules/            Reglas puras de período, solapamiento, estado,
+│                     motivo, tarifa, monto, observaciones y datos
+├── Support/          Constantes, permisos, abilities, snapshot, joins
+├── routes.php
+└── routes-salas-grupales.php
+```
+
+Constantes:
+
+```php
+InscripcionesAtencionesModule::MODULE_URL = '/inscripciones-atenciones';
+InscripcionesAtencionesModule::MODULE_URL_SALAS_GRUPALES = '/inscripciones-atenciones/salas-grupales';
+InscripcionesAtencionesModule::AUDIT_MODULE = 'inscripciones';
+```
+
+El provider se registra en `bootstrap/providers.php` después de `CatalogoServiciosServiceProvider`. Los futuros providers de Pagos/Agenda deben registrarse después para reemplazar los stubs de sus contratos.
+
+### Migración
+
+`2026_11_25_000800_create_inscripcion_sala_table.php`:
+
+- Tabla real **`inscripcion_sala`** (no existe una tabla genérica `inscripciones`).
+- FKs a paciente, tutor, sala, sucursal, servicio, tarifa, categoría y self-FK `inscripcion_origen_id`.
+- `monto_esperado numeric(12,2)` con checks de no negativo y fechas coherentes.
+- `estado varchar(20)` con `CHECK IN ('activa','en_pausa','vencida','renovada','retirada')`.
+- PostgreSQL: `btree_gist` + constraint `EXCLUDE` `(paciente_id, sala_id, daterange(fecha_inicio, fecha_fin, '[]'))` para estados `activa` y `en_pausa`.
+- Índices por sucursal/período, sala/período, paciente/estado y origen.
+- **No** se crea `estado_inscripcion_historial`; queda para el submódulo de estados/pausa. La baja se audita en `bitacora`.
+- **No** se crean `pago` ni `turno`.
+
+### Permisos
+
+Seeder `InscripcionesAtencionesPermissionSeeder`, marcador `inscripciones.salas_grupales`:
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `inscripcion.ver` | sí | sí | sí |
+| `inscripcion.crear` | sí | sí | sí |
+| `inscripcion.editar` | sí | sí | no |
+| `inscripcion.renovar` | sí | sí | sí |
+| `inscripcion.retirar` | sí | sí | no |
+| `inscripcion.exportar` (reservado) | sí | sí | no |
+
+El código decide por permiso. No hay comparaciones por nombre de rol. Recepción crea/consulta/renueva; Administración además edita y da de baja.
+
+### Endpoints
+
+Prefijo real: **`/api/inscripciones-atenciones/salas-grupales`**.
+
+| Método | Ruta | Acción/Query | Permiso |
+|---|---|---|---|
+| GET | `/` | `ListInscripcionesQuery` | `inscripcion.ver` |
+| GET | `/monto-esperado` | `PreviewMontoEsperadoQuery` | `inscripcion.ver` |
+| GET | `/{id}` | `GetInscripcionQuery` | `inscripcion.ver` |
+| GET | `/{id}/renovacion` | `GetRenovacionPreviewQuery` | `inscripcion.renovar` |
+| GET | `/{id}/pago` | `GetPagoInscripcionQuery` | `inscripcion.ver` |
+| POST | `/{id}/pago` | `IniciarPagoInscripcionQuery` | `inscripcion.ver` (TODO: `pago.crear` cuando exista 08) |
+| GET | `/{id}/asistencia` | `GetAsistenciaInscripcionQuery` | `inscripcion.ver` |
+| GET | `/{id}/turnos-futuros` | `GetTurnosFuturosQuery` | `inscripcion.retirar` |
+| GET | `/{id}/comprobante` | `GetComprobanteDataQuery` | `inscripcion.ver` |
+| GET | `/{id}/comprobante/pdf` | `GenerateComprobantePdfQuery` | `inscripcion.ver` |
+| GET | `/exportar` | `ExportInscripcionesQuery` | `inscripcion.exportar` |
+| POST | `/` | `CreateInscripcionSalaGrupalAction` | `inscripcion.crear` |
+| PATCH | `/{id}` | `UpdateInscripcionAction` | `inscripcion.editar` |
+| POST | `/{id}/renovar` | `RenovarInscripcionAction` | `inscripcion.renovar` |
+| POST | `/{id}/retirar` | `BajaInscripcionAction` | `inscripcion.retirar` |
+| DELETE | `/{id}` | siempre `409 INSCRIPCION_DELETE_NOT_ALLOWED` | `inscripcion.retirar` |
+
+Filtros del listado: `search`, `sucursal_id`, `sala_id`, `paciente_id`, `periodo_mes`, `periodo_anio`, `estado` (`activa`, `vencida`, `retirada`, `en_pausa`, `renovada`), `page`, `per_page` (máx. 50), `sort`, `direction`. La respuesta incluye `data`, `links`, `meta` y `can`.
+
+### Alcance, estado y snapshot
+
+- **Alcance por sucursal:** filtro explícito `whereIn('sucursal_id', UserBranchAccessContract::accesibles())` en las Queries; `puedeAcceder()` en las Actions. Sin `GlobalScope`. Ficha/acción fuera de alcance → `403 BRANCH_ACCESS_DENIED`. Listado con filtro de sucursal fuera de alcance → `403`.
+- **Sucursal inmutable:** `sucursal_id` y `sala_id` no se modifican por PATCH. Para cambiar de sucursal o sala se da de baja y se crea otra inscripción (RN-007).
+- **Estados:** este submódulo solo escribe `activa` y `retirada`. `vencida` se deriva de `fecha_fin`; `en_pausa` y `renovada` quedan reservados para el submódulo de estados/pausa. Sin soft-delete y sin `DELETE`.
+- **Dinero:** `monto_esperado` se guarda como `decimal:2`/string. El cliente nunca envía el monto; la Action lo resuelve. `MontoEsperadoRule` usa bcmath y regex de dos decimales.
+- **Snapshot de tarifa:** `tarifa_id` + `categoria_tarifa_id` + `monto_esperado`. Cambios posteriores del catálogo no alteran inscripciones existentes. En RF-009, si la tarifa resuelta cambia, se exige `confirmar_tarifa_cambio=true` y se re-snapshotea con bitácora antes/después.
+- **Renovación:** nueva inscripción con `inscripcion_origen_id`; por defecto inicio = día siguiente al fin anterior y fin = inicio + 1 mes - 1 día. La anterior no se marca `renovada`; se muestra vencida por fecha.
+- **Concurrencia:** `InscripcionOverlapRule` en la Action + `EXCLUDE` PostgreSQL para doble envío.
+- **Pagos/Agenda:** la ficha principal no los llama. `GET/POST /{id}/pago` y `GET /{id}/asistencia` son endpoints separados; con stubs responden `503 MODULO_NO_DISPONIBLE`. `BajaInscripcionAction` no llama Agenda: el pre-chequeo de turnos es un endpoint separado y la baja funciona sin él.
+
+### Eventos y bitácora
+
+Listener `RecordInscripcionAudit`, síncrono y fail-closed (`503 AUDIT_UNAVAILABLE`). Entidad `inscripcion_sala`, módulo `inscripciones`.
+
+| Evento | Acción | Payload mínimo |
+|---|---|---|
+| `InscripcionCreated` | `CREAR` | `inscripcion_id`, paciente, tutor, sucursal, sala, servicio, tarifa, categoría, período, `monto_esperado`, origen, actor, IP, snapshot |
+| `InscripcionUpdated` | `ACTUALIZAR` | id, snapshot antes/después, campos cambiados, actor, IP |
+| `InscripcionRenewed` | `RENOVAR` | nueva inscripción, origen, paciente, tutor, sucursal, sala, servicio, tarifa, categoría, período, monto, antes/después |
+| `InscripcionRetirada` | `RETIRAR` | id, sucursal, paciente, sala, motivo, detalle, `fecha_baja`, antes/después, actor, IP |
+
+`InscripcionCreated`/`InscripcionRenewed` dejan la expectativa de pago para Pagos y Caja. `InscripcionRetirada` deja el bloqueo de nuevas asistencias para Agenda. **No se llaman esos módulos desde las Actions.** La alerta de RN-005 (período iniciado sin pago) pertenece a Reportes/Alertas.
+
+Seeder `InscripcionesAtencionesAccionAuditadaSeeder`: `CREAR`, `ACTUALIZAR`, `RENOVAR` no críticos; `RETIRAR` crítico.
+
+### Contratos
+
+Reales, sin modificar otros módulos:
+
+- `PatientDirectoryContract` (paciente activo y resumen).
+- `TutorDirectoryContract` (tutores del paciente, resumen y estado).
+- `SalaDirectoryContract` (sala activa en sucursal).
+- `BranchDirectoryContract` y `UserBranchAccessContract`.
+- `TarifaAplicableResolverContract`.
+- `ParameterReaderContract` para los datos del centro y la leyenda.
+
+Stubs propios (503 con `MODULE_NO_DISPONIBLE`):
+
+- `PagoInscripcionContract` / `StubPagoInscripcionContract`.
+- `AsistenciaInscripcionContract` / `StubAsistenciaInscripcionContract`.
+- `TurnosFuturosInscripcionContract` / `StubTurnosFuturosInscripcionContract`.
+- `ComprobantePdfExporterContract` / `UnavailableComprobantePdfExporter`.
+- `InscripcionExporterContract` / `UnavailableInscripcionExporter`.
+
+`SalaGrupalServicioGuard` hace una lectura puntual de `servicio`+`tipo_servicio` porque el contrato de Catálogo no expone `codigo`; no modifica el módulo 05. Los joins de presentación (`InscripcionQueryJoins`) son de solo lectura para evitar N+1 y no cambian Pacientes/Organización/Catálogo.
+
+### Comprobante
+
+`GET /{id}/comprobante` devuelve datos reales: centro desde `configuracion`, logo público, paciente, tutor, sala/tipo/turno, sucursal, servicio, categoría, período, monto y leyenda `comprobante.leyenda_no_factura`. El frontend imprime con `window.print()`. El PDF real y la exportación PDF/Excel quedan pendientes de infraestructura (`dompdf`/`snappy`/`maatwebsite/excel` no están instalados).
+
+### Tests
+
+- Unit: período, solapamiento con casos de borde, transición de estados, motivo, tarifa vigente, monto/observaciones.
+- Feature: alta, paciente inactivo, duplicado, misma paciente en otra sala, sala inactiva, sala de otra sucursal, scoping, permisos, preview, modificación con bitácora, snapshot inmutable, cambio de tarifa con confirmación, renovación vinculada, baja con motivo, DELETE 409, stubs 503 y comprobante.
+- PostgreSQL: test de la constraint `EXCLUDE` con `phpunit.pgsql.xml`.
+
+### Checklist del submódulo
+
+| RF | Evidencia | Estado |
+|---|---|---|
+| RF-001 | `CreateInscripcionSalaGrupalAction` + form | Completo |
+| RF-002 | `PatientDirectoryContract::asegurarPermiteInscripcion` | Completo |
+| RF-003 | `InscripcionOverlapRule` + `EXCLUDE` | Completo |
+| RF-004 | Autocompletado sobre API Pacientes | Completo |
+| RF-005 | `PreviewMontoEsperadoQuery` + resolver | Completo |
+| RF-006 | `InscripcionObservacionesRule` + max 500 | Completo |
+| RF-007 | `ListInscripcionesQuery` | Completo |
+| RF-008 | `GetInscripcionQuery` + ficha; pago/asistencia separados | Parcial por 08/07 |
+| RF-009 | `UpdateInscripcionAction` + bitácora | Completo; pagos pendientes |
+| RF-010 | `RenovarInscripcionAction` + `inscripcion_origen_id` | Completo |
+| RF-011 | `BajaInscripcionAction` + bitácora | Completo; bloqueo Agenda en 07 |
+| RF-012 | Datos + comprobante imprimible; PDF pendiente | Parcial por infraestructura |
+| RF-013 | Contrato/stub + endpoints separados | Pendiente 08 |
+| RF-014 | Contrato/stub + endpoint separado | Pendiente 07 |
+| RF-015 | Contrato/stub + endpoint 503; sin botón | Pendiente infraestructura |
+| RF-016 | Queries + Actions + middleware | Completo |
+
+| RN | Evidencia |
+|---|---|
+| RN-001 | `InscripcionPeriodoRule` |
+| RN-002 | `SalaDirectoryContract::asegurarActivaEnSucursal` |
+| RN-003 | `InscripcionOverlapRule` + `EXCLUDE` |
+| RN-004 | Categoría seleccionada manualmente, sin inferencia |
+| RN-005 | Evento con monto/período; alerta en Reportes (pendiente) |
+| RN-006 | Sin control de cupo |
+| RN-007 | Sucursal/sala inmutables; baja + alta |
+| RN-008 | FormRequest + `InscripcionDatosObligatoriosRule` |
+| RN-009 | Estado `retirada`; DELETE 409 |
+| RN-010 | Leyenda desde configuración |
+| RN-011 | Resolver + `TarifaVigenteRule` + confirmación |
+
+| CA | Evidencia |
+|---|---|
+| CA-001 | Feature de alta |
+| CA-002 | Feature de paciente inactivo |
+| CA-003 | Feature de duplicidad |
+| CA-004 | Feature de preview |
+| CA-005 | Feature de modificación + bitácora |
+| CA-006 | Feature de renovación vinculada |
+| CA-007 | Feature de baja; asistencias en 07 |
+| CA-008 | Feature de scoping |
+| CA-009 | Comprobante imprimible; PDF pendiente |
+| CA-010 | Pendiente 08; UI “No disponible” |
+
+**TODOs:**
+
+- Implementar `PagoInscripcionContract` en 08 y `AsistenciaInscripcionContract`/`TurnosFuturosInscripcionContract` en 07.
+- Definir el comportamiento de RF-009 cuando existan pagos: `tienePagos` en el contrato y bloqueo/ajuste de tarifa/categoría/monto.
+- Implementar PDF y exportación PDF/Excel cuando se instale la infraestructura.
+- Implementar `ServicioUsageContract::hasInscripciones` y separar `TarifaUsageContract` en la conexión real con Catálogo (propuesta pendiente de confirmación).
+- La alerta RN-005 corresponde a Reportes/Alertas.
 
 ---
 
