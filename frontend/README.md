@@ -91,6 +91,7 @@ Todas las rutas están dentro del layout principal y protegidas por `authGuard`.
 | `/reportes` | Reportes |
 | `/catalogo` | Catálogo de servicios: áreas, servicios y tipos |
 | `/catalogo-servicios/servicios` | Redirige a `/catalogo` |
+| `/catalogo-servicios/tarifas` | Tarifas y categorías: vigencias, precios y consulta aplicable |
 | `/profesionales` | Profesionales: directorio, especialidades y sucursales |
 | `/inventario` | Inventario |
 | `/configuracion` | Redirige a `/organizacion/configuracion` |
@@ -1133,6 +1134,51 @@ Inputs: `title`, `description`. Estado vacío de los módulos pendientes.
 
 **Estado:** submódulo 01 implementado contra la API real. Pendientes: exportación PDF/Excel, migración inicial desde planilla del cliente y consolidación del mapeo `Area` con 01.02.
 
+### 28. Tarifas y categorías
+
+**Ruta:** `/catalogo-servicios/tarifas`.
+**Entrada de sidebar:** `Tarifas` (visible con `tarifas.ver`).
+**Guard:** `permissionGuard` con `tarifas.ver` o `categorias.ver`.
+
+**Archivos:**
+
+- `src/app/pages/catalogo-servicios/tarifas/tarifas.page.ts`
+- `src/app/pages/catalogo-servicios/tarifas/tarifas.page.html`
+- `src/app/pages/catalogo-servicios/tarifas/tarifas.routes.ts`
+- `src/app/pages/catalogo-servicios/tarifas/tarifas.service.ts`
+- `src/app/pages/catalogo-servicios/tarifas/tarifas.models.ts`
+- `src/app/pages/catalogo-servicios/tarifas/tarifa-date-input.component.ts`
+
+**API consumida:**
+
+| Entidad | Endpoints |
+|---|---|
+| Categorías | `GET/POST /api/catalogo-servicios/categorias-tarifa`, `GET/PATCH /{id}`, `POST /{id}/activar`, `POST /{id}/desactivar`, `DELETE /{id}` → `409` |
+| Tarifas | `GET/POST /api/catalogo-servicios/tarifas`, `GET/PATCH /{id}`, `POST /{id}/cerrar-vigencia`, `DELETE /{id}` → `409` |
+| Aplicable | `GET /api/catalogo-servicios/tarifas/aplicable?servicio_id&sucursal_id&categoria_tarifa_id&fecha` |
+
+**Funcionalidad:**
+
+- Una sola página con tabs propias: **Tarifas** (default) y **Categorías**.
+- Tarifas: búsqueda por servicio, filtros por servicio, sucursal (incluye “Globales”), categoría y estado de vigencia; orden y paginación.
+- Tabla con servicio/área, categoría, sucursal/Global, monto `Bs 0.00`, vigencia, estado (`Vigente`, `Futura`, `Cerrada`) y acciones.
+- Ficha de tarifa en `app-modal`.
+- Alta/edición con servicio (API del 01), categoría, sucursal, monto y vigencia desde/hasta. En edición, `vigente_hasta` no se edita: se cierra con la acción específica.
+- “Cerrar vigencia” con fecha fin y motivo obligatorio.
+- “Consultar tarifa aplicable” con servicio, sucursal, categoría y fecha; muestra monto, origen sucursal/global o “sin tarifa aplicable”.
+- Categorías: búsqueda, filtro por estado, tarifas vigentes/totales, alta/edición y activación/desactivación con motivo.
+- `409 TARIFA_SOLAPADA` con detalle del conflicto; `409 CATEGORIA_CON_TARIFAS_VIGENTES`; `409 TARIFA_CERRADA`/`TARIFA_YA_CERRADA`; `409 VERSION_CONFLICT`.
+- `422` por campo, `403`/`401`/`503` con alerta. El formulario conserva lo digitado si falla la red.
+- Controles de escritura ocultos según `can` de pantalla y `can` por fila de tarifa.
+- Sin eliminación y sin exportación (RF-T18 pendiente, sin botón).
+- Montos como string, nunca `float`; fechas con Flatpickr (`app-tarifa-date-input`).
+
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-pagination`, `app-modal`, `TABLE_IMPORTS`, `input[app-input]`, `app-select-field`, `textarea[app-textarea]`, `app-switch`, `SucursalesService`, `CatalogoServiciosService` del 01 y `ToastService`.
+
+**Permisos:** `tarifas.ver`/`categorias.ver` para consultar; `tarifas.editar` para tarifas (según alcance por sucursal); `categorias.editar` para categorías (Superadmin). Administración edita tarifas de sus sucursales; Recepción solo consulta.
+
+**Estado:** submódulo 02 implementado contra API real. Pendientes: selección de categoría en inscripción (06), integración de pagos (08), exportación PDF/Excel y migración inicial de tarifas.
+
 ---
 
 ## Paleta de colores
@@ -1177,7 +1223,8 @@ No se agregaron `swiper` ni `jsvectormap` porque sus componentes no forman parte
 - Tasks y Kanban.
 - Coming Soon.
 - Carrusel, mapas vectoriales, avatares, tabs y popovers no solicitados. Los diálogos de las páginas de negocio usan el modal compartido `app-modal`; las tabs de salas/ambientes siguen siendo propias de esa página.
-- Exportación PDF/Excel de parámetros (RF-015) y del catálogo de servicios (RF-C17): sin librerías instaladas y sin botón en la UI.
+- Exportación PDF/Excel de parámetros (RF-015), del catálogo de servicios (RF-C17) y de tarifas (RF-T18): sin librerías instaladas y sin botón en la UI.
+- Tarifas: selección de categoría dentro del flujo de inscripción (06) e integración con pagos (08). El submódulo 02 expone la API y el contrato de resolución.
 - Exportaciones de usuarios/matriz/bitácora/profesionales/pacientes y envío automático de contraseña temporal (pendiente de infraestructura).
 - Persistencia real de asignaciones a turnos/diagnósticos (módulo 07). Los contratos/stubs de Fase 3 ya están implementados en backend.
 - Asignación de profesionales a turnos/diagnósticos (módulo 07): solo se documentan los contratos.

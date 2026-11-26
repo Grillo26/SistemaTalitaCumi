@@ -1,0 +1,419 @@
+<div>
+  <app-page-breadcrumb pageTitle="Tarifas y categorías" />
+
+  <div class="space-y-5 sm:space-y-6">
+    @if (error(); as apiError) {
+      <app-alert variant="error" title="No se pudo completar la operación" [message]="apiError.message" />
+    }
+
+    <app-component-card [title]="texts.title" [desc]="texts.subtitle">
+      <div class="flex flex-wrap gap-2" role="tablist" aria-label="Secciones de tarifas">
+        @for (section of sectionOptions; track section.value) {
+          <button
+            app-button
+            type="button"
+            [variant]="activeSection() === section.value ? 'default' : 'outline'"
+            [attr.aria-pressed]="activeSection() === section.value"
+            (click)="setSection(section.value)"
+          >
+            {{ section.label }}
+          </button>
+        }
+      </div>
+
+      @switch (activeSection()) {
+        @case ('tarifas') {
+          <div class="space-y-4">
+            <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <div class="relative w-full sm:w-56">
+                  <span class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-gray-400" aria-hidden="true">
+                    <svg class="size-5" viewBox="0 0 20 20" fill="none">
+                      <path d="M14.382 14.383l3.325 3.326m-1.249-8.334a7.082 7.082 0 01-7.083 7.081 7.082 7.082 0 110-14.163 7.082 7.082 0 017.083 7.082z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </span>
+                  <input app-input type="text" [formControl]="servicioSearch" class="ps-10" placeholder="Buscar por servicio..." aria-label="Buscar tarifas por servicio" />
+                </div>
+
+                <div class="w-full sm:w-52">
+                  <app-select-field [options]="servicioFilterOptions()" [value]="servicioFilter()" placeholder="Todos los servicios" ariaLabel="Filtrar por servicio" (valueChange)="onServicioFilter($event)" />
+                </div>
+
+                <div class="w-full sm:w-44">
+                  <app-select-field [options]="branchFilterOptions()" [value]="sucursalFilter()" placeholder="Todas las sucursales" ariaLabel="Filtrar por sucursal" (valueChange)="onSucursalFilter($event)" />
+                </div>
+
+                <div class="w-full sm:w-44">
+                  <app-select-field [options]="categoriaFilterOptions()" [value]="categoriaFilter()" placeholder="Todas las categorías" ariaLabel="Filtrar por categoría" (valueChange)="onCategoriaFilter($event)" />
+                </div>
+
+                <div class="w-full sm:w-40">
+                  <app-select-field [options]="estadoVigenciaOptions" [value]="estadoVigenciaFilter()" placeholder="Todas las vigencias" ariaLabel="Filtrar por vigencia" (valueChange)="onEstadoVigenciaFilter($event)" />
+                </div>
+              </div>
+
+              <div class="flex flex-wrap gap-2">
+                <button app-button variant="outline" type="button" (click)="openAplicable()">Consultar tarifa aplicable</button>
+                @if (canCreateTarifa()) {
+                  <button app-button type="button" (click)="openTarifaCreate()">Nueva tarifa</button>
+                }
+              </div>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table app-table>
+                <thead app-table-header>
+                  <tr app-table-row>
+                    <th app-table-cell [attr.aria-sort]="ariaSort(tarifaSort(), 'servicio', tarifaDirection())">
+                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortTarifas('servicio')">Servicio <span aria-hidden="true">{{ sortIndicator(tarifaSort(), 'servicio', tarifaDirection()) }}</span></button>
+                    </th>
+                    <th app-table-cell [attr.aria-sort]="ariaSort(tarifaSort(), 'categoria', tarifaDirection())">
+                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortTarifas('categoria')">Categoría <span aria-hidden="true">{{ sortIndicator(tarifaSort(), 'categoria', tarifaDirection()) }}</span></button>
+                    </th>
+                    <th app-table-cell [attr.aria-sort]="ariaSort(tarifaSort(), 'sucursal', tarifaDirection())">
+                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortTarifas('sucursal')">Sucursal <span aria-hidden="true">{{ sortIndicator(tarifaSort(), 'sucursal', tarifaDirection()) }}</span></button>
+                    </th>
+                    <th app-table-cell [attr.aria-sort]="ariaSort(tarifaSort(), 'monto', tarifaDirection())">
+                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortTarifas('monto')">Monto <span aria-hidden="true">{{ sortIndicator(tarifaSort(), 'monto', tarifaDirection()) }}</span></button>
+                    </th>
+                    <th app-table-cell [attr.aria-sort]="ariaSort(tarifaSort(), 'vigente_desde', tarifaDirection())">
+                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortTarifas('vigente_desde')">Vigencia <span aria-hidden="true">{{ sortIndicator(tarifaSort(), 'vigente_desde', tarifaDirection()) }}</span></button>
+                    </th>
+                    <th app-table-cell>Estado</th>
+                    <th app-table-cell class="text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody app-table-body>
+                  @if (loading()) {
+                    <tr app-table-row><td app-table-cell colspan="7" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">Cargando tarifas...</td></tr>
+                  } @else {
+                    @for (tarifa of tarifas(); track tarifa.id) {
+                      <tr app-table-row>
+                        <td app-table-cell>
+                          <p class="font-medium text-gray-800 dark:text-white/90">{{ tarifa.servicio?.nombre || '—' }}</p>
+                          @if (tarifa.servicio?.area; as area) {
+                            <span class="mt-0.5 inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                              <span class="inline-block size-2 rounded-full" [style.background]="area.color" aria-hidden="true"></span>{{ area.nombre }}
+                            </span>
+                          }
+                        </td>
+                        <td app-table-cell>{{ tarifa.categoria?.nombre || '—' }}</td>
+                        <td app-table-cell>{{ tarifa.sucursal?.nombre || texts.global }}</td>
+                        <td app-table-cell class="font-medium">{{ formatMonto(tarifa.monto) }}</td>
+                        <td app-table-cell class="whitespace-nowrap text-sm">{{ formatDate(tarifa.vigente_desde) }} — {{ tarifa.vigente_hasta ? formatDate(tarifa.vigente_hasta) : 'abierta' }}</td>
+                        <td app-table-cell><app-badge [color]="estadoVigenciaColor(tarifa.estado_vigencia)" variant="light" size="sm">{{ estadoVigenciaLabel(tarifa.estado_vigencia) }}</app-badge></td>
+                        <td app-table-cell>
+                          <div class="flex flex-wrap justify-end gap-2">
+                            <button app-button variant="ghost" size="sm" type="button" (click)="openTarifaDetail(tarifa)">Ver</button>
+                            @if (canEditTarifa() && tarifa.can.update) {
+                              <button app-button variant="outline" size="sm" type="button" (click)="openTarifaEdit(tarifa)">Editar</button>
+                            }
+                            @if (canCloseTarifa() && tarifa.can.close) {
+                              <button app-button variant="destructive" size="sm" type="button" (click)="openClose(tarifa)">Cerrar vigencia</button>
+                            }
+                          </div>
+                        </td>
+                      </tr>
+                    } @empty {
+                      <tr app-table-row><td app-table-cell colspan="7" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.emptyTarifas }}</td></tr>
+                    }
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            @if (tarifaTotal() > 0) {
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p class="text-sm text-gray-500 dark:text-gray-400">Mostrando {{ tarifaFrom() ?? 0 }}–{{ tarifaTo() ?? 0 }} de {{ tarifaTotal() }}</p>
+                <app-pagination [currentPage]="tarifaPage()" [totalPages]="tarifaLastPage()" variant="text-icon" (pageChange)="goToTarifaPage($event)" />
+              </div>
+            }
+          </div>
+        }
+
+        @case ('categorias') {
+          <div class="space-y-4">
+            <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+              <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <div class="relative w-full sm:w-64">
+                  <span class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-gray-400" aria-hidden="true">
+                    <svg class="size-5" viewBox="0 0 20 20" fill="none">
+                      <path d="M14.382 14.383l3.325 3.326m-1.249-8.334a7.082 7.082 0 01-7.083 7.081 7.082 7.082 0 110-14.163 7.082 7.082 0 017.083 7.082z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </span>
+                  <input app-input type="text" [formControl]="categoriaSearch" class="ps-10" placeholder="Buscar categoría..." aria-label="Buscar categorías" />
+                </div>
+                <div class="w-full sm:w-40">
+                  <app-select-field [options]="estadoCategoriaOptions" [value]="categoriaEstado()" placeholder="Todos los estados" ariaLabel="Filtrar categorías por estado" (valueChange)="onCategoriaEstado($event)" />
+                </div>
+              </div>
+              @if (canCreateCategoria()) {
+                <button app-button type="button" (click)="openCategoriaCreate()">Nueva categoría</button>
+              }
+            </div>
+
+            <div class="overflow-x-auto">
+              <table app-table>
+                <thead app-table-header>
+                  <tr app-table-row>
+                    <th app-table-cell [attr.aria-sort]="ariaSort(categoriaSort(), 'nombre', categoriaDirection())">
+                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortCategorias('nombre')">Categoría <span aria-hidden="true">{{ sortIndicator(categoriaSort(), 'nombre', categoriaDirection()) }}</span></button>
+                    </th>
+                    <th app-table-cell>Descripción</th>
+                    <th app-table-cell>Tarifas vigentes</th>
+                    <th app-table-cell>Total tarifas</th>
+                    <th app-table-cell [attr.aria-sort]="ariaSort(categoriaSort(), 'activo', categoriaDirection())">
+                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortCategorias('activo')">Estado <span aria-hidden="true">{{ sortIndicator(categoriaSort(), 'activo', categoriaDirection()) }}</span></button>
+                    </th>
+                    <th app-table-cell>Última modificación</th>
+                    <th app-table-cell class="text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody app-table-body>
+                  @if (loading()) {
+                    <tr app-table-row><td app-table-cell colspan="7" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">Cargando categorías...</td></tr>
+                  } @else {
+                    @for (categoria of categorias(); track categoria.id) {
+                      <tr app-table-row>
+                        <td app-table-cell class="font-medium text-gray-800 dark:text-white/90">{{ categoria.nombre }}</td>
+                        <td app-table-cell>{{ categoria.descripcion || '—' }}</td>
+                        <td app-table-cell>{{ categoria.tarifas_vigentes_count ?? 0 }}</td>
+                        <td app-table-cell>{{ categoria.tarifas_total_count ?? 0 }}</td>
+                        <td app-table-cell><app-badge [color]="categoria.activo ? 'success' : 'gray'" variant="light" size="sm">{{ categoria.activo ? 'Activa' : 'Inactiva' }}</app-badge></td>
+                        <td app-table-cell>{{ formatDate(categoria.updated_at) }}</td>
+                        <td app-table-cell>
+                          <div class="flex flex-wrap justify-end gap-2">
+                            @if (canEditCategoria()) {
+                              <button app-button variant="outline" size="sm" type="button" (click)="openCategoriaEdit(categoria)">Editar</button>
+                            }
+                            @if (canChangeCategoriaStatus()) {
+                              <button app-button [variant]="categoria.activo ? 'destructive' : 'outline'" size="sm" type="button" (click)="openStatus(categoria, categoria.activo ? 'deactivate' : 'activate')">{{ categoria.activo ? 'Desactivar' : 'Activar' }}</button>
+                            }
+                          </div>
+                        </td>
+                      </tr>
+                    } @empty {
+                      <tr app-table-row><td app-table-cell colspan="7" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.emptyCategorias }}</td></tr>
+                    }
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        }
+      }
+
+      <div class="mt-4 flex flex-col gap-2 border-t border-gray-100 pt-4 text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between">
+        <span>Las tarifas no se eliminan: se cierra su vigencia con motivo.</span>
+        <span>La exportación PDF/Excel está pendiente de infraestructura.</span>
+      </div>
+    </app-component-card>
+  </div>
+
+  <app-modal [open]="categoriaFormOpen()" [title]="categoriaFormMode() === 'create' ? 'Nueva categoría' : 'Editar categoría'" subtitle="Los campos marcados con * son obligatorios." size="md" (closed)="closeCategoriaForm()">
+    <form class="space-y-4" [formGroup]="categoriaForm" (ngSubmit)="saveCategoria()">
+      @if (categoriaFormError(); as message) { <app-alert variant="error" [message]="message" /> }
+      @if (categoriaConcurrency()) { <app-alert variant="warning" title="Conflicto de edición" message="Otra persona modificó esta categoría. Cerrá y volvé a abrir el formulario." /> }
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="categoria-nombre">Nombre *</label>
+        <input id="categoria-nombre" app-input type="text" formControlName="nombre" placeholder="Ej. General" />
+        @if (fieldError('categoria', 'nombre'); as message) { <p class="mt-1 text-xs text-error-500">{{ message }}</p> }
+      </div>
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="categoria-descripcion">Descripción</label>
+        <textarea id="categoria-descripcion" app-textarea rows="3" formControlName="descripcion" placeholder="Descripción de la categoría"></textarea>
+        @if (fieldError('categoria', 'descripcion'); as message) { <p class="mt-1 text-xs text-error-500">{{ message }}</p> }
+      </div>
+      @if (categoriaFormMode() === 'create') {
+        <div class="flex items-center justify-between gap-4 rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+          <p class="text-sm font-medium text-gray-800 dark:text-white/90">Estado inicial activo</p>
+          <app-switch [checked]="categoriaForm.controls.activo.value" (checkedChange)="categoriaForm.controls.activo.setValue($event)" ariaLabel="Estado inicial de la categoría" />
+        </div>
+      } @else {
+        <p class="text-sm text-gray-500 dark:text-gray-400">El estado se cambia con las acciones Activar o Desactivar.</p>
+      }
+      <div class="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+        <button app-button variant="outline" type="button" [disabled]="saving()" (click)="closeCategoriaForm()">Cancelar</button>
+        <button app-button type="submit" [disabled]="saving()">{{ saving() ? 'Guardando...' : 'Guardar categoría' }}</button>
+      </div>
+    </form>
+  </app-modal>
+
+  <app-modal [open]="tarifaFormOpen()" [title]="tarifaFormMode() === 'create' ? 'Nueva tarifa' : 'Editar tarifa'" subtitle="Los campos marcados con * son obligatorios." size="lg" (closed)="closeTarifaForm()">
+    <form class="space-y-4" [formGroup]="tarifaForm" (ngSubmit)="saveTarifa()">
+      @if (tarifaFormError(); as message) { <app-alert variant="error" [message]="message" /> }
+      @if (tarifaConcurrency()) { <app-alert variant="warning" title="Conflicto de edición" message="Otra persona modificó esta tarifa. Cerrá y volvé a abrir el formulario." /> }
+      @if (tarifaConflict(); as conflict) {
+        <app-alert variant="warning" title="Vigencia superpuesta" [message]="'Ya existe una tarifa para ese servicio, sucursal y categoría: ' + (conflict.vigente_desde || '') + ' — ' + (conflict.vigente_hasta || 'abierta') + ' (' + formatMonto(conflict.monto) + ').'" />
+      }
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Servicio *</label>
+          <app-select-field [options]="servicioFormOptions()" [value]="tarifaForm.controls.servicio_id.value" placeholder="Seleccioná un servicio" ariaLabel="Servicio de la tarifa" (valueChange)="tarifaForm.controls.servicio_id.setValue($event)" />
+          @if (fieldError('tarifa', 'servicio_id'); as message) { <p class="mt-1 text-xs text-error-500">{{ message }}</p> }
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Categoría *</label>
+          <app-select-field [options]="categoriaFormOptions()" [value]="tarifaForm.controls.categoria_tarifa_id.value" placeholder="Seleccioná una categoría" ariaLabel="Categoría de la tarifa" (valueChange)="tarifaForm.controls.categoria_tarifa_id.setValue($event)" />
+          @if (fieldError('tarifa', 'categoria_tarifa_id'); as message) { <p class="mt-1 text-xs text-error-500">{{ message }}</p> }
+        </div>
+      </div>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Sucursal *</label>
+          <app-select-field [options]="branchFormOptions()" [value]="tarifaForm.controls.sucursal_id.value" placeholder="Seleccioná una sucursal" ariaLabel="Sucursal de la tarifa" (valueChange)="tarifaForm.controls.sucursal_id.setValue($event)" />
+          @if (fieldError('tarifa', 'sucursal_id'); as message) { <p class="mt-1 text-xs text-error-500">{{ message }}</p> }
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">La tarifa de sucursal reemplaza a la global.</p>
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tarifa-monto">Monto en Bs *</label>
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-medium text-gray-500 dark:text-gray-400">Bs</span>
+            <input id="tarifa-monto" app-input type="text" inputmode="decimal" formControlName="monto" placeholder="0.00" />
+          </div>
+          @if (fieldError('tarifa', 'monto'); as message) { <p class="mt-1 text-xs text-error-500">{{ message }}</p> }
+        </div>
+      </div>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Vigente desde *</label>
+          <app-tarifa-date-input formControlName="vigente_desde" ariaLabel="Fecha de inicio de vigencia" />
+          @if (fieldError('tarifa', 'vigente_desde'); as message) { <p class="mt-1 text-xs text-error-500">{{ message }}</p> }
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Vigente hasta</label>
+          @if (tarifaFormMode() === 'create') {
+            <app-tarifa-date-input formControlName="vigente_hasta" ariaLabel="Fecha de fin de vigencia" />
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Opcional. Si se deja vacío, queda abierta hasta el cierre manual.</p>
+            @if (fieldError('tarifa', 'vigente_hasta'); as message) { <p class="mt-1 text-xs text-error-500">{{ message }}</p> }
+          } @else {
+            <p class="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 dark:border-gray-700 dark:text-gray-300">{{ editingTarifa()?.vigente_hasta ? formatDate(editingTarifa()?.vigente_hasta ?? null) : 'Abierta' }}</p>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Para cerrar la vigencia usá la acción “Cerrar vigencia” con motivo.</p>
+          }
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+        <button app-button variant="outline" type="button" [disabled]="saving()" (click)="closeTarifaForm()">Cancelar</button>
+        <button app-button type="submit" [disabled]="saving()">{{ saving() ? 'Guardando...' : 'Guardar tarifa' }}</button>
+      </div>
+    </form>
+  </app-modal>
+
+  @if (detailOpen()) {
+    @if (selectedTarifa(); as tarifa) {
+      <app-modal [customHeader]="true" [showClose]="false" [ariaLabel]="'Ficha de tarifa'" size="lg" (closed)="closeTarifaDetail()">
+        <div modal-header class="flex items-start justify-between gap-4 border-b border-gray-100 p-6 pb-4 dark:border-gray-800">
+          <div>
+            <p class="text-xs font-medium uppercase tracking-wide text-gray-400">Tarifa</p>
+            <h3 class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ tarifa.servicio?.nombre || 'Servicio' }}</h3>
+            <div class="mt-3 flex flex-wrap items-center gap-2">
+              <app-badge [color]="estadoVigenciaColor(tarifa.estado_vigencia)" variant="light" size="sm">{{ estadoVigenciaLabel(tarifa.estado_vigencia) }}</app-badge>
+              <app-badge color="gray" variant="light" size="sm">{{ tarifa.categoria?.nombre || 'Sin categoría' }}</app-badge>
+              <app-badge color="gray" variant="light" size="sm">{{ tarifa.sucursal?.nombre || texts.global }}</app-badge>
+            </div>
+          </div>
+          <button app-button variant="ghost" size="icon-sm" type="button" ariaLabel="Cerrar ficha" (click)="closeTarifaDetail()">✕</button>
+        </div>
+        <div class="space-y-4">
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800"><p class="text-xs uppercase tracking-wide text-gray-400">Monto</p><p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ formatMonto(tarifa.monto) }}</p></div>
+            <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800"><p class="text-xs uppercase tracking-wide text-gray-400">Vigencia</p><p class="mt-1 font-medium text-gray-800 dark:text-white/90">{{ formatDate(tarifa.vigente_desde) }} — {{ tarifa.vigente_hasta ? formatDate(tarifa.vigente_hasta) : 'abierta' }}</p></div>
+            <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800"><p class="text-xs uppercase tracking-wide text-gray-400">Área</p><p class="mt-1 inline-flex items-center gap-2 font-medium text-gray-800 dark:text-white/90"><span class="inline-block size-3 rounded-full" [style.background]="tarifa.servicio?.area?.color || '#6B7280'" aria-hidden="true"></span>{{ tarifa.servicio?.area?.nombre || '—' }}</p></div>
+            <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800"><p class="text-xs uppercase tracking-wide text-gray-400">Última modificación</p><p class="mt-1 font-medium text-gray-800 dark:text-white/90">{{ formatDate(tarifa.updated_at) }}</p></div>
+          </div>
+        </div>
+        <div class="mt-5 flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+          <button app-button variant="outline" type="button" (click)="closeTarifaDetail()">Cerrar</button>
+          @if (canEditTarifa() && tarifa.can.update) { <button app-button type="button" (click)="openTarifaEdit(tarifa)">Editar tarifa</button> }
+        </div>
+      </app-modal>
+    }
+  }
+
+  <app-modal [open]="closeOpen()" title="Cerrar vigencia" [subtitle]="closingTarifa()?.servicio?.nombre || ''" size="md" (closed)="closeClose()">
+    <form class="space-y-4" [formGroup]="closeForm" (ngSubmit)="confirmClose()">
+      <p class="text-sm text-gray-600 dark:text-gray-300">El cierre no afecta inscripciones ya realizadas. El motivo es obligatorio y queda en bitácora.</p>
+      @if (closeError(); as message) { <app-alert variant="error" [message]="message" /> }
+      @if (closeConcurrency()) { <app-alert variant="warning" title="Conflicto de edición" message="La tarifa cambió. Cerrá el diálogo y volvé a intentar." /> }
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Vigente hasta *</label>
+        <app-tarifa-date-input formControlName="vigente_hasta" [minDate]="closingTarifa()?.vigente_desde" ariaLabel="Fecha de fin de vigencia" />
+        @if (fieldError('close', 'vigente_hasta'); as message) { <p class="mt-1 text-xs text-error-500">{{ message }}</p> }
+      </div>
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="close-motivo">Motivo *</label>
+        <textarea id="close-motivo" app-textarea rows="3" formControlName="motivo" placeholder="Ej. Actualización de tarifario"></textarea>
+        @if (fieldError('close', 'motivo'); as message) { <p class="mt-1 text-xs text-error-500">{{ message }}</p> }
+      </div>
+      <div class="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+        <button app-button variant="outline" type="button" [disabled]="saving()" (click)="closeClose()">Cancelar</button>
+        <button app-button type="submit" [disabled]="saving()">{{ saving() ? 'Guardando...' : 'Cerrar vigencia' }}</button>
+      </div>
+    </form>
+  </app-modal>
+
+  <app-modal [open]="statusOpen()" [title]="statusMode() === 'deactivate' ? 'Desactivar categoría' : 'Activar categoría'" [subtitle]="statusCategoria()?.nombre || ''" size="md" (closed)="closeStatus()">
+    <form class="space-y-4" [formGroup]="statusForm" (ngSubmit)="confirmStatus()">
+      @if (statusError(); as message) { <app-alert variant="error" [message]="message" /> }
+      @if (statusActiveTariffsCount(); as count) { <app-alert variant="warning" title="Categoría con tarifas vigentes" [message]="'No se puede desactivar la categoría porque tiene ' + count + ' tarifa(s) vigente(s). Cerrá primero esas vigencias.'" /> }
+      @if (statusConcurrency()) { <app-alert variant="warning" title="Conflicto de edición" message="La categoría cambió. Cerrá el diálogo y volvé a intentar." /> }
+      @if (statusMode() === 'deactivate') {
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="status-motivo">Motivo *</label>
+          <textarea id="status-motivo" app-textarea rows="3" formControlName="motivo" placeholder="Ej. Categoría fuera de uso"></textarea>
+          @if (statusFieldError(); as message) { <p class="mt-1 text-xs text-error-500">{{ message }}</p> }
+        </div>
+      } @else {
+        <p class="text-sm text-gray-600 dark:text-gray-300">La activación no requiere motivo. Quedará registrada en bitácora.</p>
+      }
+      <div class="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+        <button app-button variant="outline" type="button" [disabled]="saving()" (click)="closeStatus()">Cancelar</button>
+        <button app-button type="submit" [disabled]="saving()">{{ saving() ? 'Guardando...' : 'Confirmar' }}</button>
+      </div>
+    </form>
+  </app-modal>
+
+  <app-modal [open]="aplicableOpen()" title="Consultar tarifa aplicable" subtitle="Servicio + sucursal + categoría + fecha" size="lg" (closed)="closeAplicable()">
+    <form class="space-y-4" [formGroup]="aplicableForm" (ngSubmit)="consultarAplicable()">
+      @if (aplicableError(); as message) { <app-alert variant="error" [message]="message" /> }
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Servicio *</label>
+          <app-select-field [options]="aplicableServicioOptions()" [value]="aplicableForm.controls.servicio_id.value" placeholder="Seleccioná un servicio" ariaLabel="Servicio para consultar tarifa" (valueChange)="aplicableForm.controls.servicio_id.setValue($event)" />
+          @if (fieldError('aplicable', 'servicio_id'); as message) { <p class="mt-1 text-xs text-error-500">{{ message }}</p> }
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Sucursal *</label>
+          <app-select-field [options]="aplicableBranchOptions()" [value]="aplicableForm.controls.sucursal_id.value" placeholder="Seleccioná una sucursal" ariaLabel="Sucursal para consultar tarifa" (valueChange)="aplicableForm.controls.sucursal_id.setValue($event)" />
+          @if (fieldError('aplicable', 'sucursal_id'); as message) { <p class="mt-1 text-xs text-error-500">{{ message }}</p> }
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Categoría *</label>
+          <app-select-field [options]="aplicableCategoriaOptions()" [value]="aplicableForm.controls.categoria_tarifa_id.value" placeholder="Seleccioná una categoría" ariaLabel="Categoría para consultar tarifa" (valueChange)="aplicableForm.controls.categoria_tarifa_id.setValue($event)" />
+          @if (fieldError('aplicable', 'categoria_tarifa_id'); as message) { <p class="mt-1 text-xs text-error-500">{{ message }}</p> }
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Fecha *</label>
+          <app-tarifa-date-input formControlName="fecha" ariaLabel="Fecha para consultar tarifa" />
+          @if (fieldError('aplicable', 'fecha'); as message) { <p class="mt-1 text-xs text-error-500">{{ message }}</p> }
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+        <button app-button variant="outline" type="button" [disabled]="aplicableLoading()" (click)="closeAplicable()">Cerrar</button>
+        <button app-button type="submit" [disabled]="aplicableLoading()">{{ aplicableLoading() ? 'Consultando...' : 'Consultar' }}</button>
+      </div>
+      @if (aplicableSearched()) {
+        @if (aplicableResult(); as result) {
+          <div class="rounded-xl border border-success-200 bg-success-50 p-4 dark:border-success-500/30 dark:bg-success-500/10">
+            <p class="text-sm font-semibold text-success-700 dark:text-success-400">Tarifa encontrada</p>
+            <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ formatMonto(result.monto) }}</p>
+            <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ result.servicio_nombre }} · {{ result.categoria_nombre }} · {{ result.sucursal_nombre || texts.global }}</p>
+            <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">Vigencia: {{ formatDate(result.vigente_desde) }} — {{ result.vigente_hasta ? formatDate(result.vigente_hasta) : 'abierta' }} · Origen: {{ result.origen === 'sucursal' ? 'Sucursal' : 'Global' }}</p>
+          </div>
+        } @else if (!aplicableError()) {
+          <app-alert variant="warning" title="Sin tarifa aplicable" [message]="texts.noAplicable" />
+        }
+      }
+    </form>
+  </app-modal>
+</div>

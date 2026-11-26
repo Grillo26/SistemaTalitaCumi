@@ -354,6 +354,8 @@ erDiagram
     categoria_tarifa {
         bigint id PK
         varchar nombre UK
+        boolean activo
+        integer version
     }
     tarifa {
         bigint id PK
@@ -363,6 +365,8 @@ erDiagram
         numeric monto
         date vigente_desde
         date vigente_hasta
+        boolean activo
+        integer version
     }
     tipo_diagnostico {
         bigint id PK
@@ -1412,11 +1416,12 @@ Sin `updated_at`; se escribe una revisión por mutación y no se actualiza ni bo
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `nombre` | `varchar(100)` |  | `UK` |  |
+| `nombre` | `varchar(100)` |  | `UK` funcional | Único sin distinguir mayúsculas ni espacios externos |
 | `descripcion` | `text` | sí |  |  |
 | `activo` | `boolean` |  | `DEFAULT true` |  |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
 
-Timestamps: `created_at`, `updated_at`.
+Índices: `UNIQUE (nombre)` exacto y `UNIQUE ((lower(trim(nombre))))`. Timestamps: `created_at`, `updated_at`.
 
 #### `tarifa` — Tarifas
 
@@ -1431,9 +1436,11 @@ Timestamps: `created_at`, `updated_at`.
 | `monto` | `numeric(12,2)` |  | `CHECK >= 0` |  |
 | `vigente_desde` | `date` |  |  |  |
 | `vigente_hasta` | `date` | sí | `CHECK >= vigente_desde` |  |
-| `activo` | `boolean` |  | `DEFAULT true` |  |
+| `activo` | `boolean` |  | `DEFAULT true` | Bandera técnica; el cierre se expresa con `vigente_hasta` |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
 
-Índices: `(servicio_id, categoria_tarifa_id)`, `(sucursal_id)`. Timestamps: `created_at`, `updated_at`.
+Índices: `(servicio_id, categoria_tarifa_id)`, `(sucursal_id)`, `(servicio_id, sucursal_id, categoria_tarifa_id, vigente_desde, vigente_hasta)` y `(vigente_desde, vigente_hasta)`. Timestamps: `created_at`, `updated_at`.
+Sin `deleted_at`: las tarifas no se eliminan; se cierra su vigencia con motivo. El no-solapamiento se valida en la aplicación con bloqueo de la fila de servicio; no hay constraint `EXCLUDE` porque el proyecto testea en SQLite.
 
 #### `tipo_diagnostico` — Tipos de diagnóstico
 

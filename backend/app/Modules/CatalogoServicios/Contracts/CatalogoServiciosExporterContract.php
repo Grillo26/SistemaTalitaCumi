@@ -18,4 +18,14 @@ interface CatalogoServiciosExporterContract
      * @param  array<string, mixed>  $filtros
      */
     public function exportarServicios(array $filtros): string;
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function exportarTarifas(array $filtros): string;
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function exportarCategorias(array $filtros): string;
 }

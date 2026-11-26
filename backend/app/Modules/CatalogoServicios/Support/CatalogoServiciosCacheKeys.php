@@ -22,6 +22,11 @@ final class CatalogoServiciosCacheKeys
         return 'catalogo_servicios:tipos_servicio';
     }
 
+    public static function tarifas(): string
+    {
+        return 'catalogo_servicios:tarifas';
+    }
+
     /**
      * @return list<string>
      */
@@ -31,6 +36,7 @@ final class CatalogoServiciosCacheKeys
             self::areas(),
             self::servicios(),
             self::tiposServicio(),
+            self::tarifas(),
         ];
     }
 }

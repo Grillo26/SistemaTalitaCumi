@@ -18,6 +18,8 @@ final class AuditModuleResolver
         'area' => 'catalogo_servicios',
         'servicio' => 'catalogo_servicios',
         'tipo_servicio' => 'catalogo_servicios',
+        'categoria_tarifa' => 'catalogo_servicios',
+        'tarifa' => 'catalogo_servicios',
         'parametro' => 'organizacion',
         'usuario' => 'usuarios',
         'sesion' => 'autenticacion',
@@ -63,6 +65,8 @@ final class AuditModuleResolver
         'area' => 'Área',
         'servicio' => 'Servicio',
         'tipo_servicio' => 'Tipo de servicio',
+        'categoria_tarifa' => 'Categoría de tarifa',
+        'tarifa' => 'Tarifa',
         'parametro' => 'Parámetro',
         'usuario' => 'Usuario',
         'sesion' => 'Sesión',
@@ -105,6 +109,7 @@ final class AuditModuleResolver
         'EXPORTAR' => 'Exportación',
         'RESTAURAR' => 'Restauración',
         'CAMBIAR_COLOR' => 'Cambio de color',
+        'CERRAR_VIGENCIA' => 'Cierre de vigencia',
     ];
 
     public static function fromEntity(?string $entity): string

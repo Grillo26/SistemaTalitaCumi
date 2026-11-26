@@ -17,7 +17,17 @@ final class CatalogoServiciosPermission
 
     public const SERVICIO_EDIT = 'servicios.editar';
 
+    public const TARIFA_VIEW = 'tarifas.ver';
+
+    public const TARIFA_EDIT = 'tarifas.editar';
+
+    public const CATEGORIA_VIEW = 'categorias.ver';
+
+    public const CATEGORIA_EDIT = 'categorias.editar';
+
     /**
+     * Permisos del submódulo 01.
+     *
      * @return list<string>
      */
     public static function all(): array
@@ -27,6 +37,21 @@ final class CatalogoServiciosPermission
             self::AREA_EDIT,
             self::SERVICIO_VIEW,
             self::SERVICIO_EDIT,
+        ];
+    }
+
+    /**
+     * Permisos del submódulo 02 (tarifas y categorías).
+     *
+     * @return list<string>
+     */
+    public static function tarifas(): array
+    {
+        return [
+            self::TARIFA_VIEW,
+            self::TARIFA_EDIT,
+            self::CATEGORIA_VIEW,
+            self::CATEGORIA_EDIT,
         ];
     }
 }

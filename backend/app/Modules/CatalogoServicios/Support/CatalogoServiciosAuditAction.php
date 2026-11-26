@@ -16,4 +16,6 @@ final class CatalogoServiciosAuditAction
     public const DEACTIVATE = 'DESACTIVAR';
 
     public const COLOR_CHANGE = 'CAMBIAR_COLOR';
+
+    public const CLOSE_VIGENCIA = 'CERRAR_VIGENCIA';
 }

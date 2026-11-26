@@ -2227,7 +2227,140 @@ Checklist RN-C:
 | RN-C09 | `tipo_servicio` + CRUD + seeder | Completo |
 | RN-C10 | `MotivoObligatorioRule` en activar/desactivar | Completo |
 
-**TODOs:** implementar `ServicioUsageContract` cuando existan tarifas/inscripciones/turnos; implementar exportación PDF/Excel; migrar la planilla inicial del cliente; consolidar el modelo `Area` de 01.02 con el de 05; agregar `ambiente_id` a la agenda en el módulo 07.
+**TODOs:** `ServicioUsageContract::hasTarifas` ya es real; `hasInscripciones`/`hasTurnos` siguen en stub. Quedan exportación PDF/Excel, migración inicial del cliente, consolidación del modelo `Area` de 01.02 y `ambiente_id` en agenda (07).
+
+---
+
+## Módulo 05 — Catálogo de servicios y tarifas (submódulo 02)
+
+Submódulo de **tarifas, categorías y vigencias**. Reutiliza el módulo padre y el prefijo creado por el 01.
+
+### Estructura agregada
+
+```text
+app/Modules/CatalogoServicios/
+├── Actions/
+│   ├── CategoriasTarifa/
+│   └── Tarifas/
+├── Contracts/       TarifaAplicableResolver, TarifaUsage, EloquentServicioUsage
+├── Events/          Categoría y tarifa
+├── Exceptions/      Solapamiento, cierre, categoría en uso, etc.
+├── Http/            Categorías y tarifas
+├── Listeners/       RecordCatalogoTarifasAudit
+├── Models/          CategoriaTarifa, Tarifa
+├── Queries/         Listados, fichas y resolución aplicable
+├── Rules/           Monto, vigencia, solapamiento y estado
+├── Support/         Snapshots, scoping y guard de solapamiento
+├── routes-categorias-tarifa.php
+└── routes-tarifas.php
+```
+
+### Endpoints
+
+Prefijo: `/api/catalogo-servicios`.
+
+| Entidad | Endpoints |
+|---|---|
+| Categorías | `GET/POST /categorias-tarifa`, `GET/PATCH /categorias-tarifa/{id}`, `POST /{id}/activar`, `POST /{id}/desactivar`, `DELETE /{id}` → `409` |
+| Tarifas | `GET/POST /tarifas`, `GET/PATCH /tarifas/{id}`, `POST /tarifas/{id}/cerrar-vigencia`, `DELETE /tarifas/{id}` → `409` |
+| Resolución | `GET /tarifas/aplicable?servicio_id&sucursal_id&categoria_tarifa_id&fecha` |
+
+Filtros de tarifas: `search`, `servicio_id`, `categoria_tarifa_id`, `sucursal_id`, `solo_global`, `estado_vigencia` (`vigente|futura|cerrada`), `page`, `per_page` (máx. 50), `sort`, `direction`.
+`GET /tarifas/aplicable` devuelve `data: null` si no hay tarifa; error de dominio si el servicio/categoría están inactivos o la sucursal no corresponde.
+
+### Permisos y alcance
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `tarifas.ver` | sí | sí | sí |
+| `tarifas.editar` | sí | sí, solo sus sucursales | no |
+| `categorias.ver` | sí | sí | sí |
+| `categorias.editar` | sí | no | no |
+
+`TarifaAccessScope` usa `UserBranchAccessContract` y `sucursal.alcance_global`:
+
+- Las tarifas globales son visibles para usuarios con sucursales asignadas.
+- Solo alcance global crea, edita o cierra tarifas globales.
+- Administración edita/cierra tarifas de sus sucursales.
+- Una tarifa de otra sucursal se presenta como inexistente (`404`).
+- El endpoint `/tarifas/aplicable` exige sucursal accesible.
+- Las categorías son globales y no llevan scoping.
+
+Seeder: `CatalogoTarifasPermissionSeeder`, con marcador propio `catalogo.tarifas` para no pisar la matriz del 01.
+
+### Eventos y bitácora
+
+| Entidad (`bitacora.entidad`) | Eventos |
+|---|---|
+| `categoria_tarifa` | `CategoriaTarifaCreated`, `CategoriaTarifaUpdated`, `CategoriaTarifaStatusChanged` |
+| `tarifa` | `TarifaCreated`, `TarifaUpdated`, `TarifaVigenciaClosed` |
+
+`RecordCatalogoTarifasAudit` escribe `CREAR`, `ACTUALIZAR`, `ACTIVAR`, `DESACTIVAR` y `CERRAR_VIGENCIA`, con snapshots antes/después, actor, IP y motivo. `sucursal_id` es la sucursal de la tarifa o `NULL` para globales/categorías.
+
+### Contratos y caché
+
+- **`TarifaAplicableResolverContract`** + `EloquentTarifaAplicableResolver`: resuelve servicio + sucursal + categoría + fecha con precedencia sucursal > global.
+- `TarifaUsageContract` + `StubTarifaUsageContract`: `hasInscripcionesOrPagos`; pendiente de 06/08.
+- `ServicioUsageContract` → `EloquentServicioUsageContract`: `hasTarifas` real; `hasInscripciones`/`hasTurnos` siguen en `LogicException`.
+- `CatalogoServiciosExporterContract` extendido con `exportarTarifas`/`exportarCategorias`; `Unavailable...` lanza `LogicException`. Sin ruta ni botón.
+- `ResolveTarifaAplicableQuery` cachea la lista activa con TTL 60 s; `InvalidateCatalogoServiciosCache` la invalida ante altas/ediciones/cierres/cambios de categoría.
+
+### Schema, migraciones y seeders
+
+Migraciones:
+
+- `2026_11_25_000300_create_categoria_tarifa_table.php`.
+- `2026_11_25_000400_create_tarifa_table.php`.
+
+Cambios:
+
+- `categoria_tarifa`: `version`, índice único funcional de nombre.
+- `tarifa`: `version`, índices de solapamiento y vigencia, FK a servicio/categoría/sucursal.
+- Sin `deleted_at`; sin columnas de motivo. `tarifa.activo` es bandera técnica; el cierre usa `vigente_hasta`.
+- Sin `moneda`; todo en Bs con `numeric(12,2)`.
+- No se agrega constraint `EXCLUDE` de PostgreSQL; el no-solapamiento se valida en la Action con bloqueo del servicio.
+
+Seeders: `CategoriaTarifaSeeder` (General, sin tarifas), `CatalogoTarifasPermissionSeeder` y `CatalogoTarifasAccionAuditadaSeeder`.
+
+### Checklist RF-T / RN-T
+
+| RF | Evidencia | Estado |
+|---|---|---|
+| RF-T01 | `CreateCategoriaTarifaAction`, `StoreCategoriaTarifaRequest` | Completo |
+| RF-T02 | `ChangeCategoriaTarifaStatusAction`, `CategoriaTarifaStateRule` | Completo |
+| RF-T03 | `CreateTarifaAction` | Completo |
+| RF-T04 | FK `categoria_tarifa_id` | Completo |
+| RF-T05 | `TarifaOverlapRule` + `TarifaOverlapGuard` | Completo |
+| RF-T06 | `TarifaMontoRule` + cast decimal | Completo |
+| RF-T07 | `TarifaVigenciaRule` | Completo |
+| RF-T08 | `ResolveTarifaAplicableQuery` + endpoint | Completo |
+| RF-T09 | `ListTarifasQuery` + filtros UI | Completo |
+| RF-T10 | `GetTarifaQuery` + ficha | Completo |
+| RF-T11 | `UpdateTarifaAction` | Completo |
+| RF-T12 | `CloseTarifaVigenciaAction` | Completo |
+| RF-T13 | DELETE `409`; `TarifaUsageContract` stub | Completo hoy; integración 06/08 pendiente |
+| RF-T14 | API de categorías activas | Parcial: selección real en 06 |
+| RF-T15 | `RecordCatalogoTarifasAudit` | Completo |
+| RF-T16 | `/tarifas/aplicable` + contract | API completa; consumo 06/08 fuera |
+| RF-T17 | Permisos + `TarifaAccessScope` | Completo con asunción de Administración |
+| RF-T18 | Exportador stub | Pendiente de infraestructura |
+
+| RN | Evidencia | Estado |
+|---|---|---|
+| RN-T01 | `TarifaMontoRule` + `decimal:2` | Completo |
+| RN-T02 | FK `servicio_id` + servicio activo al crear | Completo |
+| RN-T03 | `TarifaVigenciaRule` | Completo |
+| RN-T04 | `TarifaOverlapRule` | Completo |
+| RN-T05 | `ResolveTarifaAplicableQuery` | Completo |
+| RN-T06 | Categoría elegida por el usuario; API no infiere | API; UI en 06 |
+| RN-T07 | Snapshot en inscripción (06) | Fuera de este submódulo |
+| RN-T08 | Cierre no altera históricos | Fuera de este submódulo |
+| RN-T09 | Sin DELETE; cierre de vigencia | Completo |
+| RN-T10 | Categoría inactiva no listada para selección | API; consumo 06 |
+| RN-T11 | Permisos + `TarifaAccessScope` | Completo con asunción |
+| RN-T12 | Motivo en desactivación y cierre | Completo |
+
+**TODOs:** implementar `TarifaUsageContract` con 06/08; exportación PDF/Excel; migración inicial de tarifas desde planilla; confirmar si Administración edita categorías (hoy no).
 
 ---
 

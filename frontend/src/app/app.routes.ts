@@ -66,6 +66,16 @@ export const routes: Routes = [
         pathMatch: 'full',
       },
       {
+        path: 'catalogo-servicios/tarifas',
+        canActivate: [permissionGuard],
+        data: { permissions: ['tarifas.ver', 'categorias.ver'] },
+        loadChildren: () =>
+          import('./pages/catalogo-servicios/tarifas/tarifas.routes').then(
+            (m) => m.TARIFAS_ROUTES,
+          ),
+        title: 'Tarifas y categorías | TalitaCumi',
+      },
+      {
         path: 'catalogo',
         canActivate: [permissionGuard],
         data: { permissions: ['areas.ver', 'servicios.ver'] },

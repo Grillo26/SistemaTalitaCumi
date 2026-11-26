@@ -5,8 +5,12 @@ namespace App\Modules\CatalogoServicios\Providers;
 use App\Modules\CatalogoServicios\Contracts\CatalogoServiciosDirectoryContract;
 use App\Modules\CatalogoServicios\Contracts\CatalogoServiciosExporterContract;
 use App\Modules\CatalogoServicios\Contracts\EloquentCatalogoServiciosDirectory;
+use App\Modules\CatalogoServicios\Contracts\EloquentServicioUsageContract;
+use App\Modules\CatalogoServicios\Contracts\EloquentTarifaAplicableResolver;
 use App\Modules\CatalogoServicios\Contracts\ServicioUsageContract;
-use App\Modules\CatalogoServicios\Contracts\StubServicioUsageContract;
+use App\Modules\CatalogoServicios\Contracts\StubTarifaUsageContract;
+use App\Modules\CatalogoServicios\Contracts\TarifaAplicableResolverContract;
+use App\Modules\CatalogoServicios\Contracts\TarifaUsageContract;
 use App\Modules\CatalogoServicios\Contracts\UnavailableCatalogoServiciosExporter;
 use App\Modules\CatalogoServicios\Events\AreaColorChanged;
 use App\Modules\CatalogoServicios\Events\AreaCreated;
@@ -15,11 +19,18 @@ use App\Modules\CatalogoServicios\Events\AreaUpdated;
 use App\Modules\CatalogoServicios\Events\ServicioCreated;
 use App\Modules\CatalogoServicios\Events\ServicioStatusChanged;
 use App\Modules\CatalogoServicios\Events\ServicioUpdated;
+use App\Modules\CatalogoServicios\Events\CategoriaTarifaCreated;
+use App\Modules\CatalogoServicios\Events\CategoriaTarifaStatusChanged;
+use App\Modules\CatalogoServicios\Events\CategoriaTarifaUpdated;
+use App\Modules\CatalogoServicios\Events\TarifaCreated;
+use App\Modules\CatalogoServicios\Events\TarifaUpdated;
+use App\Modules\CatalogoServicios\Events\TarifaVigenciaClosed;
 use App\Modules\CatalogoServicios\Events\TipoServicioCreated;
 use App\Modules\CatalogoServicios\Events\TipoServicioStatusChanged;
 use App\Modules\CatalogoServicios\Events\TipoServicioUpdated;
 use App\Modules\CatalogoServicios\Listeners\InvalidateCatalogoServiciosCache;
 use App\Modules\CatalogoServicios\Listeners\RecordCatalogoServiciosAudit;
+use App\Modules\CatalogoServicios\Listeners\RecordCatalogoTarifasAudit;
 use App\Modules\CatalogoServicios\Support\CatalogoServiciosModule;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
@@ -39,7 +50,9 @@ final class CatalogoServiciosServiceProvider extends ServiceProvider
             CatalogoServiciosDirectoryContract::class,
             EloquentCatalogoServiciosDirectory::class,
         );
-        $this->app->bind(ServicioUsageContract::class, StubServicioUsageContract::class);
+        $this->app->bind(ServicioUsageContract::class, EloquentServicioUsageContract::class);
+        $this->app->bind(TarifaAplicableResolverContract::class, EloquentTarifaAplicableResolver::class);
+        $this->app->bind(TarifaUsageContract::class, StubTarifaUsageContract::class);
         $this->app->bind(
             CatalogoServiciosExporterContract::class,
             UnavailableCatalogoServiciosExporter::class,
@@ -64,6 +77,18 @@ final class CatalogoServiciosServiceProvider extends ServiceProvider
             Event::listen($event, InvalidateCatalogoServiciosCache::class);
         }
 
+        foreach ([
+            CategoriaTarifaCreated::class,
+            CategoriaTarifaUpdated::class,
+            CategoriaTarifaStatusChanged::class,
+            TarifaCreated::class,
+            TarifaUpdated::class,
+            TarifaVigenciaClosed::class,
+        ] as $event) {
+            Event::listen($event, RecordCatalogoTarifasAudit::class);
+            Event::listen($event, InvalidateCatalogoServiciosCache::class);
+        }
+
         Route::middleware('api')
             ->prefix('api'.CatalogoServiciosModule::MODULE_URL)
             ->name('api.catalogo-servicios.')
@@ -71,6 +96,8 @@ final class CatalogoServiciosServiceProvider extends ServiceProvider
                 Route::prefix('areas')->name('areas.')->group(__DIR__.'/../routes-areas.php');
                 Route::prefix('servicios')->name('servicios.')->group(__DIR__.'/../routes-servicios.php');
                 Route::prefix('tipos-servicio')->name('tipos-servicio.')->group(__DIR__.'/../routes-tipos-servicio.php');
+                Route::prefix('categorias-tarifa')->name('categorias-tarifa.')->group(__DIR__.'/../routes-categorias-tarifa.php');
+                Route::prefix('tarifas')->name('tarifas.')->group(__DIR__.'/../routes-tarifas.php');
             });
     }
 }

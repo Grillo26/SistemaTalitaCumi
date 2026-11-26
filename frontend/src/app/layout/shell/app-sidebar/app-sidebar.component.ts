@@ -92,6 +92,12 @@ export class AppSidebarComponent {
       permission: 'servicios.ver',
     },
     {
+      name: 'Tarifas',
+      path: '/catalogo-servicios/tarifas',
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.25 13.25 12 21.5 2.5 12V2.5H12l8.25 8.25a2.12 2.12 0 0 1 0 3Z"/><circle cx="7" cy="7" r="1.25"/></svg>',
+      permission: 'tarifas.ver',
+    },
+    {
       name: 'Profesionales',
       path: '/profesionales',
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.75" y="7.25" width="18.5" height="13" rx="2.25"/><path d="M8.25 7.25V5.5a1.75 1.75 0 0 1 1.75-1.75h4a1.75 1.75 0 0 1 1.75 1.75v1.75M2.75 12.25h18.5M10 12.25v2h4v-2"/></svg>',

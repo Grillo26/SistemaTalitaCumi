@@ -2,8 +2,10 @@
 
 namespace App\Modules\CatalogoServicios\Support;
 
+use App\Modules\Organizacion\Support\BranchPermission;
+
 /**
- * Banderas `can` del submódulo 01 para la UI.
+ * Banderas `can` del módulo 05 para la UI.
  *
  * La seguridad real la valida Spatie en cada ruta; esto solo oculta
  * acciones no permitidas.
@@ -17,6 +19,8 @@ final class CatalogoServiciosAbilities
     {
         $areaEdit = $user->can(CatalogoServiciosPermission::AREA_EDIT);
         $servicioEdit = $user->can(CatalogoServiciosPermission::SERVICIO_EDIT);
+        $tarifaEdit = $user->can(CatalogoServiciosPermission::TARIFA_EDIT);
+        $categoriaEdit = $user->can(CatalogoServiciosPermission::CATEGORIA_EDIT);
 
         return [
             'areas' => [
@@ -40,7 +44,22 @@ final class CatalogoServiciosAbilities
                 'change_status' => $servicioEdit,
                 'delete' => false,
             ],
-            // RF-C17 pendiente de infraestructura: no se expone exportación.
+            'tarifas' => [
+                'view' => $user->can(CatalogoServiciosPermission::TARIFA_VIEW),
+                'create' => $tarifaEdit,
+                'update' => $tarifaEdit,
+                'close' => $tarifaEdit,
+                'delete' => false,
+                'global_scope' => $user->can(BranchPermission::GLOBAL_SCOPE),
+            ],
+            'categorias' => [
+                'view' => $user->can(CatalogoServiciosPermission::CATEGORIA_VIEW),
+                'create' => $categoriaEdit,
+                'update' => $categoriaEdit,
+                'change_status' => $categoriaEdit,
+                'delete' => false,
+            ],
+            // RF-C17 y RF-T18 pendientes de infraestructura.
             'export' => false,
         ];
     }
