@@ -89,7 +89,8 @@ Todas las rutas están dentro del layout principal y protegidas por `authGuard`.
 | `/inscripciones` | Inscripciones |
 | `/pagos` | Pagos y caja |
 | `/reportes` | Reportes |
-| `/catalogo` | Catálogo |
+| `/catalogo` | Catálogo de servicios: áreas, servicios y tipos |
+| `/catalogo-servicios/servicios` | Redirige a `/catalogo` |
 | `/profesionales` | Profesionales: directorio, especialidades y sucursales |
 | `/inventario` | Inventario |
 | `/configuracion` | Redirige a `/organizacion/configuracion` |
@@ -1090,6 +1091,48 @@ Inputs: `title`, `description`. Estado vacío de los módulos pendientes.
 
 **Estado:** 04.01 Fase 1, 04.02 Fases A y B, 04.03 Fases A/B/C y 04.04 Fases A/B/C implementados en lo que no depende de infraestructura. Incluye búsqueda por tutor, ficha resumen con bloques `no_disponible`, auditoría de lectura, exportación CSV y permisos. Pendientes de 04.03: PDF y vínculo real con la entrevista 06. Pendientes de 04.04: PDF del listado, indicadores reales de 06/07/08/09 y alerta de pago. Pendientes generales: PDF de tutores/ficha de ingreso, consumo del teléfono por la alerta del módulo 09, catálogo 05, filtro/visibilidad 06, ejecución 07/08 e importación CSV.
 
+### 27. Catálogo de servicios
+
+**Ruta:** `/catalogo` (se mantiene la ruta existente; reemplaza el placeholder).
+**Entrada de sidebar:** `Catálogo` (visible con `servicios.ver`).
+**Guard:** `permissionGuard` con `areas.ver` o `servicios.ver`.
+
+**Archivos:**
+
+- `src/app/pages/catalogo-servicios/servicios/servicios.page.ts`
+- `src/app/pages/catalogo-servicios/servicios/servicios.page.html`
+- `src/app/pages/catalogo-servicios/servicios/servicios.routes.ts`
+- `src/app/pages/catalogo-servicios/servicios/servicios.service.ts`
+- `src/app/pages/catalogo-servicios/servicios/servicios.models.ts`
+
+**API consumida:**
+
+| Entidad | Endpoints |
+|---|---|
+| Áreas | `GET/POST /api/catalogo-servicios/areas`, `GET/PATCH /areas/{id}`, `POST /{id}/activar`, `POST /{id}/desactivar`, `DELETE /{id}` → `409` |
+| Servicios | `GET/POST /api/catalogo-servicios/servicios`, `GET/PATCH /servicios/{id}`, `POST /{id}/activar`, `POST /{id}/desactivar`, `DELETE /{id}` → `409` |
+| Tipos de servicio | `GET/POST /api/catalogo-servicios/tipos-servicio`, `GET/PATCH /tipos-servicio/{id}`, `POST /{id}/activar`, `POST /{id}/desactivar`, `DELETE /{id}` → `409` |
+
+**Funcionalidad:**
+
+- Una sola página con tabs propias: **Servicios** (default), **Áreas** y **Tipos de servicio**.
+- Servicios: búsqueda, filtros por área, tipo y estado, orden por nombre/área/tipo/duración/estado y paginación. La tabla muestra área con swatch de color, tipo, duración, estado y última modificación.
+- Ficha de servicio en `app-modal` con área, tipo, duración, estado, descripción y última modificación.
+- Áreas: búsqueda, filtro por estado, orden, servicios activos, color, estado y última modificación.
+- Alta/edición de área con nombre, descripción, color (picker nativo + hex con validación) y estado inicial. El color se usa solo en el swatch/etiqueta del área.
+- Tipos de servicio: búsqueda, filtro por estado, alta/edición y cambio de estado.
+- Cambio de estado con motivo obligatorio; si el área tiene servicios activos se muestra el `409 AREA_CON_SERVICIOS_ACTIVOS` con el conteo y acceso a “Ver servicios del área”.
+- `409 VERSION_CONFLICT` con opción de recargar; `422` por campo; `403`/`401`/`503` con alerta. El formulario conserva lo digitado si falla la red.
+- Controles de escritura ocultos si el `can` correspondiente es `false`. El backend revalida permisos.
+- Sin botón de eliminación: las entidades se desactivan.
+- Sin exportación: RF-C17 pendiente de infraestructura, sin botón.
+
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-pagination`, `app-modal`, `TABLE_IMPORTS`, `input[app-input]`, `app-select-field`, `textarea[app-textarea]`, `app-switch` y `ToastService`.
+
+**Permisos:** `areas.ver`/`servicios.ver` para consultar; `areas.editar`/`servicios.editar` para crear, editar, cambiar color o estado. Administración y Recepción solo consultan; Superadmin administra.
+
+**Estado:** submódulo 01 implementado contra la API real. Pendientes: exportación PDF/Excel, migración inicial desde planilla del cliente y consolidación del mapeo `Area` con 01.02.
+
 ---
 
 ## Paleta de colores
@@ -1134,7 +1177,7 @@ No se agregaron `swiper` ni `jsvectormap` porque sus componentes no forman parte
 - Tasks y Kanban.
 - Coming Soon.
 - Carrusel, mapas vectoriales, avatares, tabs y popovers no solicitados. Los diálogos de las páginas de negocio usan el modal compartido `app-modal`; las tabs de salas/ambientes siguen siendo propias de esa página.
-- Exportación PDF/Excel de parámetros (RF-015): sin librerías instaladas y sin botón en la UI.
+- Exportación PDF/Excel de parámetros (RF-015) y del catálogo de servicios (RF-C17): sin librerías instaladas y sin botón en la UI.
 - Exportaciones de usuarios/matriz/bitácora/profesionales/pacientes y envío automático de contraseña temporal (pendiente de infraestructura).
 - Persistencia real de asignaciones a turnos/diagnósticos (módulo 07). Los contratos/stubs de Fase 3 ya están implementados en backend.
 - Asignación de profesionales a turnos/diagnósticos (módulo 07): solo se documentan los contratos.

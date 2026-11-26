@@ -15,6 +15,9 @@ final class AuditModuleResolver
         'turno_catalogo' => 'organizacion',
         'sala' => 'organizacion',
         'ambiente' => 'organizacion',
+        'area' => 'catalogo_servicios',
+        'servicio' => 'catalogo_servicios',
+        'tipo_servicio' => 'catalogo_servicios',
         'parametro' => 'organizacion',
         'usuario' => 'usuarios',
         'sesion' => 'autenticacion',
@@ -38,6 +41,7 @@ final class AuditModuleResolver
 
     private const MODULE_LABELS = [
         'organizacion' => 'Organización',
+        'catalogo_servicios' => 'Catálogo de servicios',
         'usuarios' => 'Usuarios',
         'autenticacion' => 'Autenticación',
         'roles' => 'Roles y permisos',
@@ -56,6 +60,9 @@ final class AuditModuleResolver
         'turno_catalogo' => 'Turno operativo',
         'sala' => 'Sala',
         'ambiente' => 'Ambiente',
+        'area' => 'Área',
+        'servicio' => 'Servicio',
+        'tipo_servicio' => 'Tipo de servicio',
         'parametro' => 'Parámetro',
         'usuario' => 'Usuario',
         'sesion' => 'Sesión',
@@ -97,6 +104,7 @@ final class AuditModuleResolver
         'CONSULTAR' => 'Consulta',
         'EXPORTAR' => 'Exportación',
         'RESTAURAR' => 'Restauración',
+        'CAMBIAR_COLOR' => 'Cambio de color',
     ];
 
     public static function fromEntity(?string $entity): string

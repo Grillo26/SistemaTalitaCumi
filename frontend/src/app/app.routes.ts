@@ -8,7 +8,6 @@ import { AgendaComponent } from './pages/agenda/agenda.component';
 import { InscripcionesComponent } from './pages/inscripciones/inscripciones.component';
 import { PagosComponent } from './pages/pagos/pagos.component';
 import { ReportesComponent } from './pages/reportes/reportes.component';
-import { CatalogoComponent } from './pages/catalogo/catalogo.component';
 import { InventarioComponent } from './pages/inventario/inventario.component';
 
 export const routes: Routes = [
@@ -62,9 +61,19 @@ export const routes: Routes = [
         title: 'Reportes | TalitaCumi',
       },
       {
+        path: 'catalogo-servicios/servicios',
+        redirectTo: 'catalogo',
+        pathMatch: 'full',
+      },
+      {
         path: 'catalogo',
-        component: CatalogoComponent,
-        title: 'Catálogo | TalitaCumi',
+        canActivate: [permissionGuard],
+        data: { permissions: ['areas.ver', 'servicios.ver'] },
+        loadChildren: () =>
+          import('./pages/catalogo-servicios/servicios/servicios.routes').then(
+            (m) => m.CATALOGO_SERVICIOS_ROUTES,
+          ),
+        title: 'Catálogo de servicios | TalitaCumi',
       },
       {
         path: 'profesionales',

@@ -2082,6 +2082,155 @@ RN-001 a RN-010, CU-01 a CU-03 y CA-001 a CA-010 quedan cubiertos según las dep
 
 ---
 
+## Módulo 05 — Catálogo de servicios y tarifas (submódulo 01)
+
+Este es el primer submódulo del módulo 05. Crea la base del módulo padre para que los submódulos 02 (tarifas/categorías) y 03 (tipos de diagnóstico) reutilicen el provider, el prefijo y los catálogos de auditoría.
+
+### Estructura
+
+```text
+app/Modules/CatalogoServicios/
+├── Actions/
+│   ├── Areas/
+│   ├── Servicios/
+│   └── TiposServicio/
+├── Contracts/       Directorio, uso de servicios y exportador
+├── Events/          Área, servicio y tipo
+├── Exceptions/      Dominio del catálogo
+├── Http/
+│   ├── Controllers/
+│   ├── Requests/
+│   └── Resources/
+├── Listeners/       Bitácora e invalidación de caché
+├── Models/          Area, Servicio, TipoServicio, BitacoraEntry
+├── Providers/       CatalogoServiciosServiceProvider
+├── Queries/         Listados, fichas y directorio cacheado
+├── Rules/           Color, normalización, unicidad, estado y motivo
+├── Support/         Constantes, permisos, abilities, snapshots y guard
+├── routes-areas.php
+├── routes-servicios.php
+└── routes-tipos-servicio.php
+```
+
+`CatalogoServiciosServiceProvider` se registra después de `PacientesServiceProvider`. Prefijo público: `App\Modules\CatalogoServicios\Support\CatalogoServiciosModule::MODULE_URL = '/catalogo-servicios'`. Prefijo real de la API: `/api/catalogo-servicios`.
+
+> **Propiedad de `area`:** la tabla nació en 01.02 como prerequisito de solo lectura de `sala.area_id`. El módulo 05 es el dueño del CRUD y del color. Para no romper 01.02 se conserva su modelo de solo lectura; el modelo canónico es `CatalogoServicios\Models\Area`. Queda como TODO consolidar ambos mapeos en una fase posterior.
+
+### Endpoints
+
+| Entidad | Endpoints |
+|---|---|
+| Áreas | `GET /areas`, `GET /areas/{id}`, `POST /areas`, `PATCH /areas/{id}`, `POST /areas/{id}/activar`, `POST /areas/{id}/desactivar`, `DELETE /areas/{id}` → `409` |
+| Servicios | `GET /servicios`, `GET /servicios/{id}`, `POST /servicios`, `PATCH /servicios/{id}`, `POST /servicios/{id}/activar`, `POST /servicios/{id}/desactivar`, `DELETE /servicios/{id}` → `409` |
+| Tipos de servicio | `GET /tipos-servicio`, `GET /tipos-servicio/{id}`, `POST /tipos-servicio`, `PATCH /tipos-servicio/{id}`, `POST /tipos-servicio/{id}/activar`, `POST /tipos-servicio/{id}/desactivar`, `DELETE /tipos-servicio/{id}` → `409` |
+
+Filtros de servicios: `search`, `area_id`, `tipo_servicio_id`, `estado`, `page`, `per_page` (máx. 50), `sort` (`nombre|area|tipo|duracion_minutos|activo|updated_at`), `direction`.
+Filtros de áreas: `search`, `estado`, `sort`, `direction`.
+Filtros de tipos: `search`, `estado`, `sort`, `direction`.
+
+Todas las rutas usan `auth:sanctum` + `EnsureSessionIsValid` + `PermissionMiddleware`. No hay scoping por sucursal: áreas, servicios y tipos son globales (RN-C01).
+
+### Permisos
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `areas.ver` | sí | sí | sí |
+| `areas.editar` | sí | no | no |
+| `servicios.ver` | sí | sí | sí |
+| `servicios.editar` | sí | no | no |
+
+`areas.editar` gobierna alta, edición, color y cambio de estado de áreas. `servicios.editar` gobierna servicios y tipos de servicio. La API devuelve `can` y la UI oculta acciones. Seeder: `CatalogoServiciosPermissionSeeder`, con asignación inicial única por módulo.
+
+### Eventos y bitácora
+
+| Entidad (`bitacora.entidad`) | Eventos |
+|---|---|
+| `area` | `AreaCreated`, `AreaUpdated`, `AreaColorChanged`, `AreaStatusChanged` |
+| `servicio` | `ServicioCreated`, `ServicioUpdated`, `ServicioStatusChanged` |
+| `tipo_servicio` | `TipoServicioCreated`, `TipoServicioUpdated`, `TipoServicioStatusChanged` |
+
+`RecordCatalogoServiciosAudit` escribe `CREAR`, `ACTUALIZAR`, `ACTIVAR`, `DESACTIVAR` y `CAMBIAR_COLOR`, con snapshots antes/después, actor, IP y `motivo` en los cambios de estado. `sucursal_id` es `NULL` porque el catálogo es global. `InvalidateCatalogoServiciosCache` olvida las claves del directorio.
+
+### Contratos y caché
+
+- **`CatalogoServiciosDirectoryContract`** (RF-C15): `areas()`, `servicios()`, `servicio()`, `asegurarServicioActivo()` y `tiposServicio()`. Devuelve DTOs `AreaResumen`, `ServicioResumen` y `TipoServicioResumen`. Incluye el color del área para la agenda.
+- `CatalogoServiciosDirectoryQuery` cachea las listas completas con TTL de 60 segundos. Driver `file` (no hay Redis ni tags); la invalidación es explícita por listener.
+- **`ServicioUsageContract`** + `StubServicioUsageContract`: `hasTarifas`, `hasInscripciones`, `hasTurnos`. Hoy no se invoca porque no existe endpoint de borrado. Se conectará en el submódulo 02 y en los módulos 06/07.
+- **`CatalogoServiciosExporterContract`** + `UnavailableCatalogoServiciosExporter`: RF-C17 pendiente de infraestructura. No hay ruta ni botón.
+
+### Schema, migraciones y seeders
+
+Migraciones nuevas:
+
+- `2026_11_25_000000_create_tipo_servicio_table.php`.
+- `2026_11_25_000100_create_servicio_table.php`.
+- `2026_11_25_000200_add_descripcion_and_version_to_area_table.php`.
+
+Cambios:
+
+- `area`: `descripcion` nullable, `version` default 1 e índice único funcional `lower(trim(nombre))`.
+- `tipo_servicio`: catálogo configurable con `nombre`, `activo`, `version` e índice único funcional.
+- `servicio`: `area_id` NOT NULL, `tipo_servicio_id` NOT NULL, `nombre`, `descripcion`, `duracion_minutos`, `activo`, `version`; índice único `(area_id, lower(trim(nombre)))`.
+- Sin `deleted_at`: RN-C08 exige no eliminar; se desactiva con motivo. El motivo queda solo en `bitacora.motivo`.
+- No se crean `tarifa`, `categoria_tarifa`, `tipo_diagnostico`, `inscripcion_sala` ni `turno`: son de 02/03/06/07.
+
+Seeders idempotentes: `AreaSeeder` (Intervención Terapéutica `#671C61` y Salas Grupales `#F9733F`), `TipoServicioSeeder` (Entrevista, Diagnóstico / Evaluación, Terapia individual, Sala grupal), `CatalogoServiciosPermissionSeeder` y `CatalogoServiciosAccionAuditadaSeeder`. No se crean servicios de ejemplo.
+
+En una instalación existente, ejecutar `php artisan migrate` y luego `php artisan db:seed --class=CatalogoServiciosPermissionSeeder`. Si la base ya tenía las dos áreas base con otros colores, el seeder **no los sobrescribe**.
+
+### Estado del submódulo
+
+| Cobertura | Estado |
+|---|---|
+| RF-C01 a RF-C12, RF-C14, RF-C15, RF-C16 | Implementados |
+| RF-C13 | Sin DELETE; `409`; contrato de uso en stub hasta 02/06/07 |
+| RF-C17 | Pendiente de infraestructura; contrato stub y sin botón |
+| RN-C01 a RN-C05, RN-C07 a RN-C10 | Implementadas |
+| RN-C06 | API expone `activo`; consumo real en 06/07 |
+
+Tests: unit de reglas (color, normalización, unicidad, motivo, área con servicios activos) y feature de áreas, servicios, tipos, permisos, bitácora, contratos y seeders.
+
+Checklist RF-C:
+
+| RF | Evidencia | Estado |
+|---|---|---|
+| RF-C01 | `CreateAreaAction`, `StoreAreaRequest`, `AreaSeeder` | Completo |
+| RF-C02 | `UpdateAreaAction`, `ChangeAreaStatusAction`, `AreaStateRule` | Completo |
+| RF-C03 | `AreaNombreUnicoRule`, índice funcional | Completo |
+| RF-C04 | `ColorRule`, selector/picker en UI | Completo |
+| RF-C05 | `CreateServicioAction`, `tipo_servicio` | Completo |
+| RF-C06 | `ServicioNombreUnicoRule`, índice por área | Completo |
+| RF-C07 | `servicio.area_id NOT NULL` + FK | Completo |
+| RF-C08 | `ListServiciosQuery` + filtros UI | Completo |
+| RF-C09 | `ListAreasQuery` con color/estado/conteo | Completo |
+| RF-C10 | `GetServicioQuery`, ficha con `updated_at` | Completo |
+| RF-C11 | `UpdateServicioAction`, eventos y bitácora | Completo |
+| RF-C12 | `ChangeServicioStatusAction` | Completo |
+| RF-C13 | DELETE → `409`; `ServicioUsageContract` stub | Parcial: falta chequeo real 02/06/07 |
+| RF-C14 | `RecordCatalogoServiciosAudit` | Completo |
+| RF-C15 | Endpoints + `CatalogoServiciosDirectoryContract` + caché | Completo |
+| RF-C16 | Permisos, seeder, middleware y `can` | Completo |
+| RF-C17 | `CatalogoServiciosExporterContract` stub | Pendiente de infraestructura |
+
+Checklist RN-C:
+
+| RN | Evidencia | Estado |
+|---|---|---|
+| RN-C01 | Sin `sucursal_id`; catálogo global | Completo |
+| RN-C02 | `AreaNombreUnicoRule` + índice | Completo |
+| RN-C03 | `ServicioNombreUnicoRule` + índice por área | Completo |
+| RN-C04 | FK `servicio.area_id` NOT NULL | Completo |
+| RN-C05 | Color solo en swatch/etiqueta y API | Completo |
+| RN-C06 | API expone `activo`; consumo en 06/07 | Parcial, fuera de alcance |
+| RN-C07 | `AreaStateRule` + bloqueo de servicio en área inactiva | Completo |
+| RN-C08 | Sin DELETE; desactivación con motivo | Completo |
+| RN-C09 | `tipo_servicio` + CRUD + seeder | Completo |
+| RN-C10 | `MotivoObligatorioRule` en activar/desactivar | Completo |
+
+**TODOs:** implementar `ServicioUsageContract` cuando existan tarifas/inscripciones/turnos; implementar exportación PDF/Excel; migrar la planilla inicial del cliente; consolidar el modelo `Area` de 01.02 con el de 05; agregar `ambiente_id` a la agenda en el módulo 07.
+
+---
+
 ## Notas
 
 - No se agregaron librerías de PDF/Excel ni se modificó ningún otro módulo de negocio.

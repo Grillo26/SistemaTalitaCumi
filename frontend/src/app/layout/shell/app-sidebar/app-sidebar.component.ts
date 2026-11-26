@@ -89,6 +89,7 @@ export class AppSidebarComponent {
       name: 'Catálogo',
       path: '/catalogo',
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.25" y="3.25" width="7" height="7" rx="1.5"/><rect x="13.75" y="3.25" width="7" height="7" rx="1.5"/><rect x="3.25" y="13.75" width="7" height="7" rx="1.5"/><rect x="13.75" y="13.75" width="7" height="7" rx="1.5"/></svg>',
+      permission: 'servicios.ver',
     },
     {
       name: 'Profesionales',

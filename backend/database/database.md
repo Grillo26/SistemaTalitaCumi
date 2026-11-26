@@ -302,7 +302,10 @@ erDiagram
     area {
         bigint id PK
         varchar nombre UK
+        varchar descripcion
         varchar color
+        boolean activo
+        integer version
     }
     sucursal {
         bigint id PK
@@ -336,9 +339,15 @@ erDiagram
         varchar uso
         boolean activo
     }
+    tipo_servicio {
+        bigint id PK
+        varchar nombre UK
+        boolean activo
+    }
     servicio {
         bigint id PK
         bigint area_id FK
+        bigint tipo_servicio_id FK
         varchar nombre
         int duracion_minutos
     }
@@ -372,6 +381,7 @@ erDiagram
     turno_catalogo ||--o{ sala : "define"
     sucursal ||--o{ ambiente : "tiene"
     area ||--o{ servicio : "clasifica"
+    tipo_servicio ||--o{ servicio : "tipifica"
     servicio ||--o{ tarifa : "tiene"
     categoria_tarifa ||--o{ tarifa : "clasifica"
     sucursal ||--o{ tarifa : "aplica en"
@@ -1291,16 +1301,18 @@ Sin `updated_at`; se escribe una revisión por mutación y no se actualiza ni bo
 
 *Configuración.* Salas Grupales e Intervención Terapéutica. El color es configurable.
 
-> **Implementación actual:** el submódulo 01.02 crea esta tabla como prerequisito de solo lectura para `sala.area_id`. El CRUD y la administración de colores pertenecen al módulo 05; aquí no se modifican.
+> **Implementación actual:** el submódulo 01.02 la usa como prerequisito de solo lectura para `sala.area_id`. El módulo 05 es el dueño del CRUD, la descripción y el color; Administración y Recepción solo consultan.
 
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `nombre` | `varchar(100)` |  | `UK` |  |
+| `nombre` | `varchar(100)` |  | `UK` funcional | Único sin distinguir mayúsculas ni espacios externos |
+| `descripcion` | `text` | sí |  | Descripción del área (RF-C01) |
 | `color` | `varchar(7)` |  | `DEFAULT '#6B7280'` | Hex, para la agenda |
 | `activo` | `boolean` |  | `DEFAULT true` |  |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
 
-Timestamps: `created_at`, `updated_at`.
+Índices: `UNIQUE (nombre)` exacto y `UNIQUE ((lower(trim(nombre))))`. Timestamps: `created_at`, `updated_at`.
 
 #### `tipo_sala` — Tipos de sala
 
@@ -1363,6 +1375,19 @@ Timestamps: `created_at`, `updated_at`.
 
 Índices: `UNIQUE (sucursal_id, lower(trim(nombre)))`, `(sucursal_id)`, `(uso)`. Timestamps: `created_at`, `updated_at`.
 
+#### `tipo_servicio` — Tipos de servicio
+
+*Configuración.* Catálogo configurable (RN-C09). El cliente puede agregar, renombrar o desactivar tipos.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `nombre` | `varchar(100)` |  | `UNIQUE` funcional | Único sin distinguir mayúsculas ni espacios externos |
+| `activo` | `boolean` |  | `DEFAULT true` |  |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
+
+Índices: `UNIQUE ((lower(trim(nombre))))`. Timestamps: `created_at`, `updated_at`.
+
 #### `servicio` — Servicios
 
 *Maestro.* Terapias, entrevista, diagnóstico, sala grupal, venta de materiales.
@@ -1370,13 +1395,15 @@ Timestamps: `created_at`, `updated_at`.
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `area_id` | `bigint` |  | `FK → area` |  |
-| `nombre` | `varchar(150)` |  |  |  |
+| `area_id` | `bigint` |  | `FK → area` | Exactamente un área (RN-C04) |
+| `tipo_servicio_id` | `bigint` |  | `FK → tipo_servicio` | Tipo configurable (RN-C09) |
+| `nombre` | `varchar(150)` |  |  | Único dentro del área |
 | `descripcion` | `text` | sí |  |  |
-| `duracion_minutos` | `int` |  | `DEFAULT 50` |  |
+| `duracion_minutos` | `int` |  | `DEFAULT 50`, `CHECK > 0` | Dato del servicio |
 | `activo` | `boolean` |  | `DEFAULT true` |  |
+| `version` | `integer` |  | `DEFAULT 1` | Concurrencia optimista |
 
-Índices: GIN `(nombre)` con `pg_trgm`. Timestamps: `created_at`, `updated_at`. Soft delete: `deleted_at`.
+Índices: `UNIQUE (area_id, (lower(trim(nombre))))`, `(area_id)`, `(tipo_servicio_id)`, `(activo)`. Timestamps: `created_at`, `updated_at`. Sin `deleted_at`: se desactiva, no se elimina.
 
 #### `categoria_tarifa` — Categorías de tarifa
 

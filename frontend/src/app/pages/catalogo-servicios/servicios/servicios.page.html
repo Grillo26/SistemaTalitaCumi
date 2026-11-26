@@ -1,0 +1,734 @@
+<div>
+  <app-page-breadcrumb pageTitle="Catálogo de servicios" />
+
+  <div class="space-y-5 sm:space-y-6">
+    @if (error(); as apiError) {
+      <app-alert
+        variant="error"
+        title="No se pudo completar la operación"
+        [message]="apiError.message"
+      />
+    }
+
+    <app-component-card [title]="texts.title" [desc]="texts.subtitle">
+      <div class="flex flex-wrap gap-2" role="tablist" aria-label="Secciones del catálogo">
+        @for (section of sectionOptions; track section.value) {
+          <button
+            app-button
+            type="button"
+            [variant]="activeSection() === section.value ? 'default' : 'outline'"
+            [attr.aria-pressed]="activeSection() === section.value"
+            (click)="setSection(section.value)"
+          >
+            {{ section.label }}
+          </button>
+        }
+      </div>
+
+      @switch (activeSection()) {
+        @case ('servicios') {
+          <div class="space-y-4">
+            <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <div class="relative w-full sm:w-64">
+                  <span class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-gray-400" aria-hidden="true">
+                    <svg class="size-5" viewBox="0 0 20 20" fill="none">
+                      <path d="M14.382 14.383l3.325 3.326m-1.249-8.334a7.082 7.082 0 01-7.083 7.081 7.082 7.082 0 110-14.163 7.082 7.082 0 017.083 7.082z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </span>
+                  <input
+                    app-input
+                    type="text"
+                    [formControl]="servicioSearch"
+                    class="ps-10"
+                    placeholder="Buscar servicio..."
+                    aria-label="Buscar servicios"
+                  />
+                </div>
+
+                <div class="w-full sm:w-48">
+                  <app-select-field
+                    [options]="areaFilterOptions()"
+                    [value]="servicioAreaFilter()"
+                    placeholder="Todas las áreas"
+                    ariaLabel="Filtrar por área"
+                    (valueChange)="onServicioArea($event)"
+                  />
+                </div>
+
+                <div class="w-full sm:w-48">
+                  <app-select-field
+                    [options]="tipoFilterOptions()"
+                    [value]="servicioTipoFilter()"
+                    placeholder="Todos los tipos"
+                    ariaLabel="Filtrar por tipo de servicio"
+                    (valueChange)="onServicioTipo($event)"
+                  />
+                </div>
+
+                <div class="w-full sm:w-40">
+                  <app-select-field
+                    [options]="estadoOptions"
+                    [value]="servicioEstado()"
+                    placeholder="Todos los estados"
+                    ariaLabel="Filtrar por estado"
+                    (valueChange)="onServicioEstado($event)"
+                  />
+                </div>
+              </div>
+
+              @if (canCreateServicio()) {
+                <button app-button type="button" (click)="openServicioCreate()">
+                  Nuevo servicio
+                </button>
+              }
+            </div>
+
+            <div class="overflow-x-auto">
+              <table app-table>
+                <thead app-table-header>
+                  <tr app-table-row>
+                    <th app-table-cell [attr.aria-sort]="servicioSort() === 'nombre' ? (servicioDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortServicios('nombre')">
+                        Servicio <span aria-hidden="true">{{ sortIndicator(servicioSort(), 'nombre', servicioDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell [attr.aria-sort]="servicioSort() === 'area' ? (servicioDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortServicios('area')">
+                        Área <span aria-hidden="true">{{ sortIndicator(servicioSort(), 'area', servicioDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell [attr.aria-sort]="servicioSort() === 'tipo' ? (servicioDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortServicios('tipo')">
+                        Tipo <span aria-hidden="true">{{ sortIndicator(servicioSort(), 'tipo', servicioDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell [attr.aria-sort]="servicioSort() === 'duracion_minutos' ? (servicioDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortServicios('duracion_minutos')">
+                        Duración <span aria-hidden="true">{{ sortIndicator(servicioSort(), 'duracion_minutos', servicioDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell [attr.aria-sort]="servicioSort() === 'activo' ? (servicioDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortServicios('activo')">
+                        Estado <span aria-hidden="true">{{ sortIndicator(servicioSort(), 'activo', servicioDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell>Última modificación</th>
+                    <th app-table-cell class="text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody app-table-body>
+                  @if (loading()) {
+                    <tr app-table-row>
+                      <td app-table-cell colspan="7" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">Cargando servicios...</td>
+                    </tr>
+                  } @else {
+                    @for (servicio of servicios(); track servicio.id) {
+                      <tr app-table-row>
+                        <td app-table-cell>
+                          <div class="min-w-44">
+                            <p class="font-medium text-gray-800 dark:text-white/90">{{ servicio.nombre }}</p>
+                            @if (servicio.descripcion) {
+                              <p class="mt-0.5 line-clamp-1 text-xs text-gray-500 dark:text-gray-400">{{ servicio.descripcion }}</p>
+                            }
+                          </div>
+                        </td>
+                        <td app-table-cell>
+                          <span class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                            <span class="inline-block size-2.5 rounded-full" [style.background]="servicio.area?.color || '#6B7280'" aria-hidden="true"></span>
+                            {{ servicio.area?.nombre || '—' }}
+                          </span>
+                        </td>
+                        <td app-table-cell>{{ servicio.tipo_servicio?.nombre || '—' }}</td>
+                        <td app-table-cell>{{ servicio.duracion_minutos }} min</td>
+                        <td app-table-cell>
+                          <app-badge [color]="servicio.activo ? 'success' : 'gray'" variant="light" size="sm">
+                            {{ servicio.activo ? 'Activo' : 'Inactivo' }}
+                          </app-badge>
+                        </td>
+                        <td app-table-cell>{{ formatDate(servicio.updated_at) }}</td>
+                        <td app-table-cell>
+                          <div class="flex flex-wrap justify-end gap-2">
+                            <button app-button type="button" variant="ghost" size="sm" (click)="openServicioDetail(servicio)">Ver</button>
+                            @if (canEditServicio()) {
+                              <button app-button type="button" variant="outline" size="sm" (click)="openServicioEdit(servicio)">Editar</button>
+                            }
+                            @if (canChangeServicioStatus()) {
+                              <button
+                                app-button
+                                type="button"
+                                [variant]="servicio.activo ? 'destructive' : 'outline'"
+                                size="sm"
+                                (click)="openStatus('servicio', servicio, servicio.activo ? 'deactivate' : 'activate')"
+                              >
+                                {{ servicio.activo ? 'Desactivar' : 'Activar' }}
+                              </button>
+                            }
+                          </div>
+                        </td>
+                      </tr>
+                    } @empty {
+                      <tr app-table-row>
+                        <td app-table-cell colspan="7" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.emptyServicios }}</td>
+                      </tr>
+                    }
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            @if (servicioTotal() > 0) {
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p class="text-sm text-gray-500 dark:text-gray-400">
+                  Mostrando {{ servicioFrom() ?? 0 }}–{{ servicioTo() ?? 0 }} de {{ servicioTotal() }}
+                </p>
+                <app-pagination
+                  [currentPage]="servicioPage()"
+                  [totalPages]="servicioLastPage()"
+                  variant="text-icon"
+                  (pageChange)="goToServiciosPage($event)"
+                />
+              </div>
+            }
+          </div>
+        }
+
+        @case ('areas') {
+          <div class="space-y-4">
+            <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+              <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <div class="relative w-full sm:w-64">
+                  <span class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-gray-400" aria-hidden="true">
+                    <svg class="size-5" viewBox="0 0 20 20" fill="none">
+                      <path d="M14.382 14.383l3.325 3.326m-1.249-8.334a7.082 7.082 0 01-7.083 7.081 7.082 7.082 0 110-14.163 7.082 7.082 0 017.083 7.082z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </span>
+                  <input
+                    app-input
+                    type="text"
+                    [formControl]="areaSearch"
+                    class="ps-10"
+                    placeholder="Buscar área..."
+                    aria-label="Buscar áreas"
+                  />
+                </div>
+
+                <div class="w-full sm:w-40">
+                  <app-select-field
+                    [options]="estadoOptions"
+                    [value]="areaEstado()"
+                    placeholder="Todos los estados"
+                    ariaLabel="Filtrar áreas por estado"
+                    (valueChange)="onAreaEstado($event)"
+                  />
+                </div>
+              </div>
+
+              @if (canCreateArea()) {
+                <button app-button type="button" (click)="openAreaCreate()">Nueva área</button>
+              }
+            </div>
+
+            <div class="overflow-x-auto">
+              <table app-table>
+                <thead app-table-header>
+                  <tr app-table-row>
+                    <th app-table-cell [attr.aria-sort]="areaSort() === 'nombre' ? (areaDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortAreas('nombre')">
+                        Área <span aria-hidden="true">{{ sortIndicator(areaSort(), 'nombre', areaDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell>Descripción</th>
+                    <th app-table-cell>Servicios activos</th>
+                    <th app-table-cell [attr.aria-sort]="areaSort() === 'activo' ? (areaDirection() === 'asc' ? 'ascending' : 'descending') : 'none'">
+                      <button type="button" class="inline-flex items-center gap-1 font-medium" (click)="sortAreas('activo')">
+                        Estado <span aria-hidden="true">{{ sortIndicator(areaSort(), 'activo', areaDirection()) }}</span>
+                      </button>
+                    </th>
+                    <th app-table-cell>Última modificación</th>
+                    <th app-table-cell class="text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody app-table-body>
+                  @if (loading()) {
+                    <tr app-table-row>
+                      <td app-table-cell colspan="6" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">Cargando áreas...</td>
+                    </tr>
+                  } @else {
+                    @for (area of areas(); track area.id) {
+                      <tr app-table-row>
+                        <td app-table-cell>
+                          <span class="inline-flex items-center gap-2 font-medium text-gray-800 dark:text-white/90">
+                            <span class="inline-block size-3 rounded-full ring-1 ring-black/10" [style.background]="area.color" aria-hidden="true"></span>
+                            {{ area.nombre }}
+                          </span>
+                        </td>
+                        <td app-table-cell>{{ area.descripcion || '—' }}</td>
+                        <td app-table-cell>{{ area.servicios_activos_count ?? 0 }}</td>
+                        <td app-table-cell>
+                          <app-badge [color]="area.activo ? 'success' : 'gray'" variant="light" size="sm">
+                            {{ area.activo ? 'Activo' : 'Inactivo' }}
+                          </app-badge>
+                        </td>
+                        <td app-table-cell>{{ formatDate(area.updated_at) }}</td>
+                        <td app-table-cell>
+                          <div class="flex flex-wrap justify-end gap-2">
+                            @if (canEditArea()) {
+                              <button app-button type="button" variant="outline" size="sm" (click)="openAreaEdit(area)">Editar</button>
+                            }
+                            @if (canChangeAreaStatus()) {
+                              <button
+                                app-button
+                                type="button"
+                                [variant]="area.activo ? 'destructive' : 'outline'"
+                                size="sm"
+                                (click)="openStatus('area', area, area.activo ? 'deactivate' : 'activate')"
+                              >
+                                {{ area.activo ? 'Desactivar' : 'Activar' }}
+                              </button>
+                            }
+                          </div>
+                        </td>
+                      </tr>
+                    } @empty {
+                      <tr app-table-row>
+                        <td app-table-cell colspan="6" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.emptyAreas }}</td>
+                      </tr>
+                    }
+                  }
+                </tbody>
+              </table>
+            </div>
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.areaDeleteNote }}</p>
+          </div>
+        }
+
+        @case ('tipos') {
+          <div class="space-y-4">
+            <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+              <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <div class="relative w-full sm:w-64">
+                  <span class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-gray-400" aria-hidden="true">
+                    <svg class="size-5" viewBox="0 0 20 20" fill="none">
+                      <path d="M14.382 14.383l3.325 3.326m-1.249-8.334a7.082 7.082 0 01-7.083 7.081 7.082 7.082 0 110-14.163 7.082 7.082 0 017.083 7.082z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </span>
+                  <input
+                    app-input
+                    type="text"
+                    [formControl]="tipoSearch"
+                    class="ps-10"
+                    placeholder="Buscar tipo..."
+                    aria-label="Buscar tipos de servicio"
+                  />
+                </div>
+
+                <div class="w-full sm:w-40">
+                  <app-select-field
+                    [options]="estadoOptions"
+                    [value]="tipoEstado()"
+                    placeholder="Todos los estados"
+                    ariaLabel="Filtrar tipos por estado"
+                    (valueChange)="onTipoEstado($event)"
+                  />
+                </div>
+              </div>
+
+              @if (canCreateTipo()) {
+                <button app-button type="button" (click)="openTipoCreate()">Nuevo tipo</button>
+              }
+            </div>
+
+            <div class="overflow-x-auto">
+              <table app-table>
+                <thead app-table-header>
+                  <tr app-table-row>
+                    <th app-table-cell>Tipo de servicio</th>
+                    <th app-table-cell>Servicios asociados</th>
+                    <th app-table-cell>Estado</th>
+                    <th app-table-cell>Última modificación</th>
+                    <th app-table-cell class="text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody app-table-body>
+                  @if (loading()) {
+                    <tr app-table-row>
+                      <td app-table-cell colspan="5" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">Cargando tipos...</td>
+                    </tr>
+                  } @else {
+                    @for (tipo of tipos(); track tipo.id) {
+                      <tr app-table-row>
+                        <td app-table-cell class="font-medium text-gray-800 dark:text-white/90">{{ tipo.nombre }}</td>
+                        <td app-table-cell>{{ tipo.servicios_total_count ?? 0 }}</td>
+                        <td app-table-cell>
+                          <app-badge [color]="tipo.activo ? 'success' : 'gray'" variant="light" size="sm">
+                            {{ tipo.activo ? 'Activo' : 'Inactivo' }}
+                          </app-badge>
+                        </td>
+                        <td app-table-cell>{{ formatDate(tipo.updated_at) }}</td>
+                        <td app-table-cell>
+                          <div class="flex flex-wrap justify-end gap-2">
+                            @if (canEditTipo()) {
+                              <button app-button type="button" variant="outline" size="sm" (click)="openTipoEdit(tipo)">Editar</button>
+                            }
+                            @if (canChangeTipoStatus()) {
+                              <button
+                                app-button
+                                type="button"
+                                [variant]="tipo.activo ? 'destructive' : 'outline'"
+                                size="sm"
+                                (click)="openStatus('tipo-servicio', tipo, tipo.activo ? 'deactivate' : 'activate')"
+                              >
+                                {{ tipo.activo ? 'Desactivar' : 'Activar' }}
+                              </button>
+                            }
+                          </div>
+                        </td>
+                      </tr>
+                    } @empty {
+                      <tr app-table-row>
+                        <td app-table-cell colspan="5" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">{{ texts.emptyTipos }}</td>
+                      </tr>
+                    }
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        }
+      }
+
+      <div class="mt-4 flex flex-col gap-2 border-t border-gray-100 pt-4 text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between">
+        <span>{{ texts.servicioDeleteNote }}</span>
+        <span>La exportación PDF/Excel está pendiente de infraestructura.</span>
+      </div>
+    </app-component-card>
+  </div>
+
+  <app-modal
+    [open]="areaFormOpen()"
+    [title]="areaFormMode() === 'create' ? 'Nueva área' : 'Editar área'"
+    subtitle="Los campos marcados con * son obligatorios."
+    size="lg"
+    (closed)="closeAreaForm()"
+  >
+    <form class="space-y-4" [formGroup]="areaForm" (ngSubmit)="saveArea()">
+      @if (areaFormError(); as message) {
+        <app-alert variant="error" [message]="message" />
+      }
+      @if (areaConcurrency()) {
+        <app-alert variant="warning" title="Conflicto de edición" message="Otra persona modificó esta área. Cerrá el formulario y volvé a abrirlo para cargar la última versión." />
+      }
+
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="area-nombre">Nombre *</label>
+        <input id="area-nombre" app-input type="text" formControlName="nombre" placeholder="Ej. Intervención Terapéutica" />
+        @if (fieldError('area', 'nombre'); as message) {
+          <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+        }
+      </div>
+
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="area-descripcion">Descripción</label>
+        <textarea id="area-descripcion" app-textarea rows="3" formControlName="descripcion" placeholder="Descripción breve del área"></textarea>
+        @if (fieldError('area', 'descripcion'); as message) {
+          <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+        }
+      </div>
+
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="area-color">Color del área *</label>
+        <div class="flex flex-wrap items-center gap-3">
+          <input
+            type="color"
+            class="h-11 w-14 cursor-pointer rounded-lg border border-gray-300 bg-white p-1 dark:border-gray-700 dark:bg-gray-900"
+            [value]="areaForm.controls.color.value"
+            (input)="onColorPicker($event)"
+            aria-label="Selector visual de color"
+          />
+          <input
+            id="area-color"
+            app-input
+            type="text"
+            formControlName="color"
+            class="w-40 font-mono uppercase"
+            placeholder="#671C61"
+            (blur)="normalizeColor()"
+          />
+          <span class="size-11 rounded-lg border border-gray-200 dark:border-gray-700" [style.background]="areaForm.controls.color.value" aria-hidden="true"></span>
+        </div>
+        <div class="mt-2 flex flex-wrap gap-2">
+          @for (preset of colorPresets; track preset.value) {
+            <button
+              type="button"
+              class="size-7 rounded-full ring-1 ring-black/10 transition hover:scale-105"
+              [style.background]="preset.value"
+              [attr.title]="preset.label"
+              [attr.aria-label]="'Usar color ' + preset.label"
+              (click)="setColorPreset(preset.value)"
+            ></button>
+          }
+        </div>
+        @if (fieldError('area', 'color'); as message) {
+          <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+        }
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">El color es solo visual y se usará en la agenda.</p>
+      </div>
+
+      @if (areaFormMode() === 'create') {
+        <div class="flex items-center justify-between gap-4 rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+          <div>
+            <p class="text-sm font-medium text-gray-800 dark:text-white/90">Estado inicial activo</p>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Por defecto, el área se crea activa.</p>
+          </div>
+          <app-switch [checked]="areaForm.controls.activo.value" (checkedChange)="areaForm.controls.activo.setValue($event)" ariaLabel="Estado inicial del área" />
+        </div>
+      } @else {
+        <p class="text-sm text-gray-500 dark:text-gray-400">El estado se cambia con las acciones Activar o Desactivar.</p>
+      }
+
+      <div class="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+        <button app-button variant="outline" type="button" [disabled]="saving()" (click)="closeAreaForm()">Cancelar</button>
+        <button app-button type="submit" [disabled]="saving()">{{ saving() ? 'Guardando...' : 'Guardar área' }}</button>
+      </div>
+    </form>
+  </app-modal>
+
+  <app-modal
+    [open]="servicioFormOpen()"
+    [title]="servicioFormMode() === 'create' ? 'Nuevo servicio' : 'Editar servicio'"
+    subtitle="Los campos marcados con * son obligatorios."
+    size="lg"
+    (closed)="closeServicioForm()"
+  >
+    <form class="space-y-4" [formGroup]="servicioForm" (ngSubmit)="saveServicio()">
+      @if (servicioFormError(); as message) {
+        <app-alert variant="error" [message]="message" />
+      }
+      @if (servicioConcurrency()) {
+        <app-alert variant="warning" title="Conflicto de edición" message="Otra persona modificó este servicio. Cerrá el formulario y volvé a abrirlo para cargar la última versión." />
+      }
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Área *</label>
+          <app-select-field
+            [options]="areaFormOptions()"
+            [value]="servicioForm.controls.area_id.value"
+            placeholder="Seleccioná un área"
+            ariaLabel="Área del servicio"
+            (valueChange)="servicioForm.controls.area_id.setValue($event)"
+          />
+          @if (fieldError('servicio', 'area_id'); as message) {
+            <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+          }
+        </div>
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Tipo de servicio *</label>
+          <app-select-field
+            [options]="tipoFormOptions()"
+            [value]="servicioForm.controls.tipo_servicio_id.value"
+            placeholder="Seleccioná un tipo"
+            ariaLabel="Tipo de servicio"
+            (valueChange)="servicioForm.controls.tipo_servicio_id.setValue($event)"
+          />
+          @if (fieldError('servicio', 'tipo_servicio_id'); as message) {
+            <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+          }
+        </div>
+      </div>
+
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="servicio-nombre">Nombre *</label>
+        <input id="servicio-nombre" app-input type="text" formControlName="nombre" placeholder="Ej. Terapia de lenguaje" />
+        @if (fieldError('servicio', 'nombre'); as message) {
+          <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+        }
+      </div>
+
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="servicio-descripcion">Descripción</label>
+        <textarea id="servicio-descripcion" app-textarea rows="3" formControlName="descripcion" placeholder="Descripción breve del servicio"></textarea>
+        @if (fieldError('servicio', 'descripcion'); as message) {
+          <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+        }
+      </div>
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="servicio-duracion">Duración por defecto (min) *</label>
+          <input id="servicio-duracion" app-input type="number" min="1" max="480" formControlName="duracion_minutos" />
+          @if (fieldError('servicio', 'duracion_minutos'); as message) {
+            <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+          }
+        </div>
+        <div class="flex items-end text-xs text-gray-500 dark:text-gray-400">
+          La duración es un dato del servicio; la agenda podrá ajustarla por turno.
+        </div>
+      </div>
+
+      @if (servicioFormMode() === 'create') {
+        <div class="flex items-center justify-between gap-4 rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+          <div>
+            <p class="text-sm font-medium text-gray-800 dark:text-white/90">Estado inicial activo</p>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Por defecto, el servicio se crea activo.</p>
+          </div>
+          <app-switch [checked]="servicioForm.controls.activo.value" (checkedChange)="servicioForm.controls.activo.setValue($event)" ariaLabel="Estado inicial del servicio" />
+        </div>
+      } @else {
+        <p class="text-sm text-gray-500 dark:text-gray-400">El estado se cambia con las acciones Activar o Desactivar.</p>
+      }
+
+      <div class="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+        <button app-button variant="outline" type="button" [disabled]="saving()" (click)="closeServicioForm()">Cancelar</button>
+        <button app-button type="submit" [disabled]="saving()">{{ saving() ? 'Guardando...' : 'Guardar servicio' }}</button>
+      </div>
+    </form>
+  </app-modal>
+
+  <app-modal
+    [open]="tipoFormOpen()"
+    [title]="tipoFormMode() === 'create' ? 'Nuevo tipo de servicio' : 'Editar tipo de servicio'"
+    size="md"
+    (closed)="closeTipoForm()"
+  >
+    <form class="space-y-4" [formGroup]="tipoForm" (ngSubmit)="saveTipo()">
+      @if (tipoFormError(); as message) {
+        <app-alert variant="error" [message]="message" />
+      }
+      @if (tipoConcurrency()) {
+        <app-alert variant="warning" title="Conflicto de edición" message="Otra persona modificó este tipo. Cerrá el formulario y volvé a abrirlo para cargar la última versión." />
+      }
+
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="tipo-nombre">Nombre *</label>
+        <input id="tipo-nombre" app-input type="text" formControlName="nombre" placeholder="Ej. Taller grupal" />
+        @if (fieldError('tipo', 'nombre'); as message) {
+          <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+        }
+      </div>
+
+      @if (tipoFormMode() === 'create') {
+        <div class="flex items-center justify-between gap-4 rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+          <p class="text-sm font-medium text-gray-800 dark:text-white/90">Estado inicial activo</p>
+          <app-switch [checked]="tipoForm.controls.activo.value" (checkedChange)="tipoForm.controls.activo.setValue($event)" ariaLabel="Estado inicial del tipo de servicio" />
+        </div>
+      } @else {
+        <p class="text-sm text-gray-500 dark:text-gray-400">El estado se cambia con las acciones Activar o Desactivar.</p>
+      }
+
+      <div class="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+        <button app-button variant="outline" type="button" [disabled]="saving()" (click)="closeTipoForm()">Cancelar</button>
+        <button app-button type="submit" [disabled]="saving()">{{ saving() ? 'Guardando...' : 'Guardar tipo' }}</button>
+      </div>
+    </form>
+  </app-modal>
+
+  @if (detailOpen()) {
+    @if (selectedServicio(); as servicio) {
+      <app-modal
+        [customHeader]="true"
+        [showClose]="false"
+        [ariaLabel]="'Ficha de ' + servicio.nombre"
+        size="lg"
+        (closed)="closeServicioDetail()"
+      >
+        <div modal-header class="flex items-start justify-between gap-4 border-b border-gray-100 p-6 pb-4 dark:border-gray-800">
+          <div>
+            <p class="text-xs font-medium uppercase tracking-wide text-gray-400">Servicio</p>
+            <h3 class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ servicio.nombre }}</h3>
+            <div class="mt-3">
+              <app-badge [color]="servicio.activo ? 'success' : 'gray'" variant="light" size="sm">
+                {{ servicio.activo ? 'Activo' : 'Inactivo' }}
+              </app-badge>
+            </div>
+          </div>
+          <button app-button variant="ghost" size="icon-sm" type="button" ariaLabel="Cerrar ficha" (click)="closeServicioDetail()">✕</button>
+        </div>
+
+        <div class="space-y-4">
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+              <p class="text-xs uppercase tracking-wide text-gray-400">Área</p>
+              <p class="mt-1 inline-flex items-center gap-2 font-medium text-gray-800 dark:text-white/90">
+                <span class="inline-block size-3 rounded-full" [style.background]="servicio.area?.color || '#6B7280'" aria-hidden="true"></span>
+                {{ servicio.area?.nombre || '—' }}
+              </p>
+            </div>
+            <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+              <p class="text-xs uppercase tracking-wide text-gray-400">Tipo de servicio</p>
+              <p class="mt-1 font-medium text-gray-800 dark:text-white/90">{{ servicio.tipo_servicio?.nombre || '—' }}</p>
+            </div>
+            <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+              <p class="text-xs uppercase tracking-wide text-gray-400">Duración por defecto</p>
+              <p class="mt-1 font-medium text-gray-800 dark:text-white/90">{{ servicio.duracion_minutos }} minutos</p>
+            </div>
+            <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+              <p class="text-xs uppercase tracking-wide text-gray-400">Última modificación</p>
+              <p class="mt-1 font-medium text-gray-800 dark:text-white/90">{{ formatDate(servicio.updated_at) }}</p>
+            </div>
+          </div>
+
+          <div>
+            <p class="text-xs uppercase tracking-wide text-gray-400">Descripción</p>
+            <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">{{ servicio.descripcion || 'Sin descripción.' }}</p>
+          </div>
+        </div>
+
+        <div class="mt-5 flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+          <button app-button variant="outline" type="button" (click)="closeServicioDetail()">Cerrar</button>
+          @if (canEditServicio()) {
+            <button app-button type="button" (click)="openServicioEdit(servicio)">Editar servicio</button>
+          }
+        </div>
+      </app-modal>
+    }
+  }
+
+  @if (statusOpen()) {
+    <app-modal
+      [open]="true"
+      [title]="(statusMode() === 'activate' ? 'Activar ' : 'Desactivar ') + entityLabel(statusTarget()?.type ?? 'servicio')"
+      [subtitle]="targetName()"
+      size="md"
+      (closed)="closeStatus()"
+    >
+      <form class="space-y-4" [formGroup]="statusForm" (ngSubmit)="confirmStatus()">
+        <p class="text-sm text-gray-600 dark:text-gray-300">
+          El motivo es obligatorio y quedará registrado en la bitácora con los valores anteriores y nuevos.
+        </p>
+
+        @if (statusError(); as message) {
+          <app-alert variant="error" [message]="message" />
+        }
+
+        @if (statusActiveServicesCount(); as count) {
+          <app-alert
+            variant="warning"
+            title="Área con servicios activos"
+            [message]="'No se puede desactivar el área porque tiene ' + count + ' servicio(s) activo(s). Desactivá primero los servicios.'"
+          />
+          <button app-button variant="outline" type="button" (click)="verServiciosDelArea()">Ver servicios del área</button>
+        }
+
+        @if (statusConcurrency()) {
+          <button app-button variant="outline" type="button" (click)="reloadStatusTarget()">Recargar datos</button>
+        }
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="status-motivo">Motivo *</label>
+          <textarea id="status-motivo" app-textarea rows="3" formControlName="motivo" placeholder="Ej. Cierre temporal del área"></textarea>
+          @if (statusFieldError(); as message) {
+            <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+          }
+        </div>
+
+        <div class="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+          <button app-button variant="outline" type="button" [disabled]="saving()" (click)="closeStatus()">Cancelar</button>
+          <button app-button type="submit" [disabled]="saving()">{{ saving() ? 'Guardando...' : 'Confirmar' }}</button>
+        </div>
+      </form>
+    </app-modal>
+  }
+</div>

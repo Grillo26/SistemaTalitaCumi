@@ -33,6 +33,8 @@ class DatabaseSeeder extends Seeder
 
         $this->call(OrganizacionSucursalesPermissionSeeder::class);
         $this->call(OrganizacionSalasAmbientesPermissionSeeder::class);
+        $this->call(AreaSeeder::class);
+        $this->call(TipoServicioSeeder::class);
         $this->call(OrganizacionSalasAmbientesCatalogSeeder::class);
         $this->call(OrganizacionConfiguracionPermissionSeeder::class);
         $this->call(OrganizacionConfiguracionCatalogSeeder::class);
@@ -57,5 +59,7 @@ class DatabaseSeeder extends Seeder
         $this->call(ObservacionPermissionSeeder::class);
         $this->call(ObservacionAccionAuditadaSeeder::class);
         $this->call(PacienteResumenPermissionSeeder::class);
+        $this->call(CatalogoServiciosPermissionSeeder::class);
+        $this->call(CatalogoServiciosAccionAuditadaSeeder::class);
     }
 }
