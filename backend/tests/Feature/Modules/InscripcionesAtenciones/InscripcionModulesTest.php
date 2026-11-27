@@ -15,7 +15,7 @@ final class InscripcionModulesTest extends InscripcionesAtencionesTestCase
             ->assertOk()
             ->assertJsonPath('can.pago_disponible', false)
             ->assertJsonPath('can.asistencia_disponible', false)
-            ->assertJsonPath('can.turnos_futuros_disponible', false)
+            ->assertJsonPath('can.turnos_futuros_disponible', true)
             ->assertJsonPath('can.pdf', false)
             ->assertJsonPath('can.export', false);
     }
@@ -35,7 +35,7 @@ final class InscripcionModulesTest extends InscripcionesAtencionesTestCase
             ->assertJsonPath('modulo', 'Pagos y caja');
     }
 
-    public function test_attendance_and_future_turns_endpoints_are_unavailable(): void
+    public function test_attendance_is_unavailable_and_future_turns_returns_count(): void
     {
         $scenario = $this->scenario('administracion');
         $created = $this->crearInscripcion($scenario)->assertCreated()->json('data');
@@ -45,8 +45,9 @@ final class InscripcionModulesTest extends InscripcionesAtencionesTestCase
             ->assertJsonPath('modulo', 'Agenda y turnos');
 
         $this->getJson('/api/inscripciones-atenciones/salas-grupales/'.$created['id'].'/turnos-futuros')
-            ->assertStatus(503)
-            ->assertJsonPath('modulo', 'Agenda y turnos');
+            ->assertOk()
+            ->assertJsonPath('data.cantidad', 0)
+            ->assertJsonPath('data.fechas', []);
     }
 
     public function test_receipt_data_uses_center_configuration_and_legend(): void

@@ -16,6 +16,9 @@ import { AgendaToolbarComponent } from './components/agenda-toolbar/agenda-toolb
 import { AgendaVistaAgrupadaComponent } from './components/agenda-vista-agrupada/agenda-vista-agrupada.component';
 import { ResumenSemanaComponent } from './components/resumen-semana/resumen-semana.component';
 import { TurnoDetallePanelComponent } from './components/turno-detalle-panel/turno-detalle-panel.component';
+import { ReprogramarTurnoModalComponent } from '../cambios-turnos/components/reprogramar-turno-modal/reprogramar-turno-modal.component';
+import { CancelarTurnoModalComponent } from '../cambios-turnos/components/cancelar-turno-modal/cancelar-turno-modal.component';
+import { HistorialTurnoComponent } from '../cambios-turnos/components/historial-turno/historial-turno.component';
 import { AGENDA_TEXTS } from './agenda-semanal.constants';
 import {
   EMPTY_FILTROS,
@@ -51,6 +54,9 @@ import {
     AgendaVistaAgrupadaComponent,
     ResumenSemanaComponent,
     TurnoDetallePanelComponent,
+    ReprogramarTurnoModalComponent,
+    CancelarTurnoModalComponent,
+    HistorialTurnoComponent,
     AgendaImpresionComponent,
   ],
   templateUrl: './agenda-semanal.page.html',
@@ -88,6 +94,13 @@ export class AgendaSemanalPageComponent implements OnInit {
   readonly detalleLoading = signal(false);
   readonly detalle = signal<TurnoDetalleVista | null>(null);
   readonly detalleError = signal<string | null>(null);
+
+  readonly reprogramarOpen = signal(false);
+  readonly reprogramarTurnoId = signal<number | null>(null);
+  readonly cancelarOpen = signal(false);
+  readonly cancelarTurnoId = signal<number | null>(null);
+  readonly historialOpen = signal(false);
+  readonly historialTurnoId = signal<number | null>(null);
 
   readonly canExportar = computed(() => this.auth.hasPermission('turno.exportar'));
 
@@ -349,6 +362,62 @@ export class AgendaSemanalPageComponent implements OnInit {
     this.detalleOpen.set(false);
     this.detalle.set(null);
     this.detalleError.set(null);
+  }
+
+  onAccionTurno(codigo: string): void {
+    const turnoId = this.detalle()?.turno.id;
+
+    if (turnoId === undefined) {
+      return;
+    }
+
+    if (codigo === 'reprogramar') {
+      this.reprogramarTurnoId.set(turnoId);
+      this.reprogramarOpen.set(true);
+      return;
+    }
+
+    if (codigo === 'cancelar') {
+      this.cancelarTurnoId.set(turnoId);
+      this.cancelarOpen.set(true);
+      return;
+    }
+
+    if (codigo === 'ver_historial') {
+      this.historialTurnoId.set(turnoId);
+      this.historialOpen.set(true);
+    }
+  }
+
+  onCambioCompletado(): void {
+    this.refreshService.notificarCambio();
+  }
+
+  cerrarReprogramar(): void {
+    this.reprogramarOpen.set(false);
+    this.recargarDetalleSiAbierto();
+  }
+
+  cerrarCancelar(): void {
+    this.cancelarOpen.set(false);
+    this.recargarDetalleSiAbierto();
+  }
+
+  cerrarHistorial(): void {
+    this.historialOpen.set(false);
+  }
+
+  verTurnoDesdeHistorial(turnoId: number): void {
+    this.historialOpen.set(false);
+    this.verDetalle(turnoId);
+  }
+
+  private recargarDetalleSiAbierto(): void {
+    const turnoId = this.detalle()?.turno.id;
+
+    if (this.detalleOpen() && turnoId !== undefined) {
+      this.verDetalle(turnoId);
+    }
   }
 
   exportar(): void {

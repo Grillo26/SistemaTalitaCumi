@@ -36,6 +36,17 @@ final class CantidadRestanteRuleTest extends TestCase
         $this->assertSame(0, (new CantidadRestanteRule)->calcular(1, $turnos));
     }
 
+    public function test_cancelled_with_consume_saldo_consumes_the_session(): void
+    {
+        $turnos = [
+            $this->turno(1, EstadoTurno::ASISTIO),
+            $this->turno(2, EstadoTurno::CANCELADO, consume: true),
+            $this->turno(3, EstadoTurno::CANCELADO),
+        ];
+
+        $this->assertSame(7, (new CantidadRestanteRule)->calcular(9, $turnos));
+    }
+
     public function test_faltantes_only_returns_the_missing_amount(): void
     {
         $rule = new CantidadRestanteRule;
@@ -45,7 +56,7 @@ final class CantidadRestanteRuleTest extends TestCase
         $this->assertSame(0, $rule->faltantes(10, 12));
     }
 
-    private function turno(int $id, EstadoTurno $estado): TurnoExistente
+    private function turno(int $id, EstadoTurno $estado, bool $consume = false): TurnoExistente
     {
         return new TurnoExistente(
             id: $id,
@@ -59,6 +70,8 @@ final class CantidadRestanteRuleTest extends TestCase
             horaFin: '09:50',
             estado: $estado,
             sesionKey: null,
+            turnoOrigenId: null,
+            consumeSaldo: $consume,
         );
     }
 }

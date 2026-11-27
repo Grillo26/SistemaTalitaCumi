@@ -2,6 +2,7 @@
 
 namespace App\Modules\AgendaTurnos\Models;
 
+use App\Models\User;
 use App\Modules\AgendaTurnos\Enums\EstadoTurno;
 use App\Modules\AgendaTurnos\Models\Casts\HoraCast;
 use App\Modules\InscripcionesAtenciones\Models\InscripcionSala;
@@ -15,9 +16,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * Turno de agenda (módulo 07).
  *
- * 7.1 lo dejó como modelo de lectura; 7.2 escribe turnos únicamente por
- * generación y regeneración. La cancelación individual y la asistencia
- * pertenecen a 7.3 y 7.4.
+ * 7.1 lo dejó como modelo de lectura; 7.2 escribe turnos por generación y
+ * regeneración. 7.3 escribe reprogramación y cancelación individual/masiva.
+ * La asistencia pertenece a 7.4.
  */
 class Turno extends Model
 {
@@ -43,6 +44,9 @@ class Turno extends Model
             'lote_generacion_id' => 'integer',
             'cancelado_por_lote_id' => 'integer',
             'cancelado_en' => 'datetime',
+            'motivo_turno_id' => 'integer',
+            'consume_saldo' => 'boolean',
+            'cancelado_por_usuario_id' => 'integer',
             'asistencia_registrada_en' => 'datetime',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
@@ -77,6 +81,27 @@ class Turno extends Model
     public function canceladoPorLote(): BelongsTo
     {
         return $this->belongsTo(TurnoLoteGeneracion::class, 'cancelado_por_lote_id');
+    }
+
+    public function motivoTurno(): BelongsTo
+    {
+        return $this->belongsTo(MotivoTurno::class, 'motivo_turno_id');
+    }
+
+    public function canceladoPorUsuario(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cancelado_por_usuario_id');
+    }
+
+    public function scopeFuturos(Builder $query, string $hoy, string $horaActual): Builder
+    {
+        return $query->where(static function (Builder $sub) use ($hoy, $horaActual): void {
+            $sub->where('fecha', '>', $hoy)
+                ->orWhere(static function (Builder $today) use ($hoy, $horaActual): void {
+                    $today->where('fecha', $hoy)
+                        ->where('hora_inicio', '>', $horaActual);
+                });
+        });
     }
 
     public function scopeVigentes(Builder $query): Builder

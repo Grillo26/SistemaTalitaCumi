@@ -5,9 +5,9 @@ namespace App\Modules\AgendaTurnos\Support;
 /**
  * Permisos del módulo 07 — Agenda y turnos.
  *
- * La aplicación decide por permiso, nunca por nombre de rol. Los permisos de
- * reprogramación/cancelación individual y asistencia pertenecen a 7.3 y 7.4
- * y no se crean en esta entrega.
+ * La aplicación decide por permiso, nunca por nombre de rol. Este catálogo
+ * cubre 7.1 y 7.2; los permisos de reprogramación/cancelación de 7.3 viven
+ * en `CambiosTurnosPermission`, y asistencia pertenece a 7.4.
  */
 final class AgendaTurnosPermission
 {

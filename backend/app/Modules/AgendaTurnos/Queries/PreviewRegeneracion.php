@@ -175,6 +175,19 @@ final class PreviewRegeneracion
             );
         }
 
+        $reprogramados = count(array_filter(
+            $clasificacion->cancelar,
+            static fn (TurnoExistente $turno): bool => $turno->turnoOrigenId !== null,
+        ));
+
+        if ($reprogramados > 0) {
+            $hallazgos[] = new Hallazgo(
+                tipo: 'turnos_reprogramados',
+                severidad: SeveridadHallazgo::INFORMATIVO,
+                mensaje: "{$reprogramados} de los turnos a cancelar fueron creados por reprogramación y no siguen el patrón original.",
+            );
+        }
+
         return $hallazgos;
     }
 

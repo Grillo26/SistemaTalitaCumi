@@ -53,6 +53,16 @@ export const routes: Routes = [
         title: 'Programación de turnos | TalitaCumi',
       },
       {
+        path: 'agenda-turnos/cambios-turnos',
+        canActivate: [permissionGuard],
+        data: { permissions: ['turno.cancelar_masivo', 'turno.reporte_cambios'] },
+        loadChildren: () =>
+          import('./pages/agenda-turnos/cambios-turnos/cambios-turnos.routes').then(
+            (m) => m.CAMBIOS_TURNOS_ROUTES,
+          ),
+        title: 'Cambios de turnos | TalitaCumi',
+      },
+      {
         path: 'pacientes',
         canActivate: [permissionGuard],
         data: { permissions: ['paciente.ver', 'tutor.ver', 'ficha_ingreso.ver'] },

@@ -3432,7 +3432,130 @@ Ruta `/agenda-turnos/programacion-turnos` con `permissionGuard` `turno.ver` y en
 - Feature: generación CA-001, preview sin persistir CA-002, solapamiento paciente/profesional CA-003/CA-004, fuera de vigencia CA-005, sin profesional CA-006, regeneración CA-007, transaccionalidad CA-008, sucursal CA-009, bitácora CA-010, idempotencia/doble envío, origen ya generado, feriados, grupo sin falsos bloqueos, asignación todo o nada, 50 turnos sin N+1, sin DELETE, sala sin patrón y contrato de origen.
 - `OrigenTurnosContractTest` y `SalaPatronContractTest` cubren las conexiones cross-módulo.
 
-**Pendientes:** RF-001 real (patrón de sala), RNF-010 PDF (503 + vista imprimible), implementación real de `TurnosFuturos*`, `ConsumoPaquete*` y `AsistenciaInscripcion` (7.4), y sincronización opcional del profesional del paquete (decisión de Inscripciones).
+**Pendientes:** RF-001 real (patrón de sala), RNF-010 PDF (503 + vista imprimible), `ConsumoPaquete*` y `AsistenciaInscripcion` (7.4), y sincronización opcional del profesional del paquete (decisión de Inscripciones). Los contratos `TurnosFuturos*` se implementaron en 7.3.
+
+---
+
+## Módulo 07 — Agenda y turnos (submódulo 03: reprogramación y cancelación)
+
+Implementación de `docs/07_AGENDA_TURNOS/03_reprogramacion_cancelacion_turnos.md` (RF-001 a RF-015, RN-001 a RN-010, CA-001 a CA-010). Reutiliza `turno`, `EstadoTurno` (que ya incluía `reprogramado`), `turno_origen_id`, `TurnoSolapamientoRule`, `SesionGrupalRule`, `AgendaAccessScope`, `AgendaRefreshService` y la bitácora. No implementa 7.4 (asistencia), 7.5 (multi-profesional) ni generación/regeneración.
+
+### Estructura
+
+```text
+app/Modules/AgendaTurnos/
+├── Actions/Cambios/
+│   ├── ReprogramarTurno.php
+│   ├── CancelarTurno.php
+│   └── CancelarTurnosMasivo.php
+├── Enums/            AccionCambioTurno, OrigenMotivoTurno
+├── Events/           TurnoReprogramado, TurnoCancelado, TurnosCanceladosMasivamente
+├── Exceptions/       TurnoNoModificable, EstadoTurnoDesactualizado, MotivoObligatorio,
+│                     ConflictoDisponibilidad, TurnoFueraDeVigencia, OrigenNoReprogramable,
+│                     CancelacionMasivaFueraDeSucursal, ConjuntoCancelacionCambio, ...
+├── Http/             Controllers/Cambios, Requests/Cambios, Resources/Cambios
+├── Listeners/        RecordCambiosTurnoAudit (bitácora = historial)
+├── Models/           MotivoTurno; Turno ampliado
+├── Providers/        CambiosTurnosServiceProvider
+├── Queries/Cambios/  GetTurnoCambio, PreviewReprogramacion, PreviewCancelacion,
+│                     PreviewCancelacionMasiva, GetOrigenesCancelables, GetHistorialTurno,
+│                     ListMotivosTurno, ReporteCambiosTurnos, ExportCambiosTurnos,
+│                     GetTurnoContactoWhatsApp
+├── Rules/            TurnoModificable, EstadoEsperado, MotivoObligatorio, NuevaFecha,
+│                     DisponibilidadReprogramacion, OrigenReprogramable, EfectoSaldo,
+│                     CancelacionMasiva
+├── Support/          calculadoras compartidas, locks, saldo, motivos, WhatsApp, historial
+├── Contracts/        CambiosTurnosExporter + Unavailable + TurnosFuturos reales
+└── routes-cambios.php
+```
+
+### Schema
+
+- `2026_11_28_000100_create_motivo_turno_table.php`: catálogo configurable; `origen` y `descuenta_saldo` nullable a propósito.
+- `2026_11_28_000200_add_cambios_fields_to_turno_table.php`: `motivo_turno_id`, `motivo_detalle`, `consume_saldo`, `cancelado_por_usuario_id`; índice `(sucursal_id, fecha, estado)`; único parcial `turno_origen_unico` sobre `turno_origen_id`; CHECK `consume_saldo` solo en cancelado.
+- No se cambia el CHECK de estado: `reprogramado` ya existía desde 7.1/7.2.
+- **No se crea tabla de historial**: se reutiliza `bitacora` (`entidad='turno'`, `entidad_id`, `accion`, `datos_anteriores/nuevos`, `usuario_id`), igual que Estados. Es inmutable y 7.4 escribirá `ASISTIO`/`FALTO` en el mismo lugar.
+
+### Máquina de estados y trazabilidad
+
+- `Programado → Reprogramado`: original preservado, nuevo turno Programado con `turno_origen_id`, historial con vínculo bidireccional.
+- `Programado → Cancelado`: `cancelacion_origen='manual'`, motivo, usuario, fecha, snapshot `consume_saldo`; no se borra.
+- `Asistió`/`Faltó`: los escribe 7.4; 7.3 no los modifica.
+- El original reprogramado no se vuelve a reprogramar/cancelar; el turno nuevo Programado sí.
+- Bitácora: `REPROGRAMAR` + `CREAR_POR_REPROGRAMACION`; `CANCELAR`; `CANCELAR_MASIVO` (por turno y por lote `turno_cancelacion_masiva`).
+
+### Saldo
+
+- `consume_saldo` es un snapshot inmutable resuelto al cancelar desde `motivo_turno.descuenta_saldo`; `null/false` = no consume.
+- El preview muestra saldo actual/resultante solo si `ConsumoPaqueteContract` está disponible; con el stub muestra “Efecto en saldo no disponible” y la cancelación funciona igual.
+- `CantidadRestanteRule` de 7.2 ahora resta también `Cancelado` con `consume_saldo=true`; `TurnoExistente` expone `consumeSaldo` y `turnoOrigenId`.
+- `SaldoSesionesRule`/consumo real de Paquetes sigue pendiente de 7.4; no se inventan saldos.
+
+### Motivos
+
+Seeder `MotivosTurnoSeeder`: cinco motivos de la spec (`enfermedad_paciente`, `ausencia_profesional`, `feriado`, `motivo_familiar`, `otro`), idempotente. `origen` y `descuenta_saldo` quedan NULL hasta confirmación funcional. `otro` exige texto. No hay CRUD administrativo de motivos en esta entrega; el catálogo se administra por seeder/DB.
+
+### Endpoints
+
+Prefijo **`/api/agenda-turnos/cambios-turnos`**:
+
+| Método | Ruta | Query/Action | Permiso |
+|---|---|---|---|
+| GET | `/turnos/{id}` | `GetTurnoCambio` | `turno.ver` |
+| GET | `/turnos/{id}/historial` | `GetHistorialTurno` | `turno.historial` |
+| GET | `/turnos/{id}/contacto-whatsapp` | `GetTurnoContactoWhatsApp` | `turno.ver` + `tutor.ver_contacto` |
+| POST | `/turnos/{id}/preview-reprogramacion` | `PreviewReprogramacion` | `turno.reprogramar` |
+| POST | `/turnos/{id}/reprogramar` | `ReprogramarTurno` | `turno.reprogramar` |
+| POST | `/turnos/{id}/preview-cancelacion` | `PreviewCancelacion` | `turno.cancelar` |
+| POST | `/turnos/{id}/cancelar` | `CancelarTurno` | `turno.cancelar` |
+| GET | `/motivos?accion=` | `ListMotivosTurno` | `turno.ver` |
+| GET | `/pacientes/{id}/origenes-cancelables` | `GetOrigenesCancelables` | `turno.cancelar_masivo` |
+| POST | `/cancelacion-masiva/preview` | `PreviewCancelacionMasiva` | `turno.cancelar_masivo` |
+| POST | `/cancelacion-masiva` | `CancelarTurnosMasivo` | `turno.cancelar_masivo` |
+| GET | `/reporte-cambios` | `ReporteCambiosTurnos` | `turno.reporte_cambios` |
+| GET | `/reporte-cambios/exportar` | `ExportCambiosTurnos` | `turno.exportar_cambios` |
+
+No existe `DELETE`. La ejecución exige `estado_esperado` (individual) o el conjunto exacto de ids (masiva); si cambió, 409. La exportación responde 503 con contrato `Unavailable`.
+
+### Permisos
+
+Seeder `CambiosTurnosPermissionSeeder` (marcador `agenda.cambios_turnos`):
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `turno.ver` | sí | sí | sí |
+| `turno.reprogramar` | sí | sí | sí |
+| `turno.cancelar` | sí | sí | sí |
+| `turno.historial` | sí | sí | sí |
+| `turno.cancelar_masivo` | sí | sí | no |
+| `turno.reporte_cambios` | sí | sí | no |
+| `turno.exportar_cambios` | sí | sí | no |
+
+WhatsApp requiere además `tutor.ver_contacto` (Recepción ya lo tiene). El backend revalida permisos y sucursal.
+
+### Eventos y contratos
+
+- `TurnoReprogramado(turnoOriginalId, turnoNuevoId, sucursalId, pacienteId, motivo, original, nuevo, advertencias, actorId, ip)`.
+- `TurnoCancelado(turnoId, sucursalId, pacienteId, fecha, horaInicio, horaFin, motivo, consumeSaldo, advertencias, actorId, ip, masivo, loteId)`.
+- `TurnosCanceladosMasivamente(loteId, pacienteId, entidades, turnoIds, sucursales, motivo, actorId, ip)`.
+- `RecordCambiosTurnoAudit` escribe bitácora/historial fail-closed.
+- `TurnosFuturosInscripcionContract` y `TurnosFuturosPaqueteContract` ahora tienen implementación real en Agenda (`EloquentTurnosFuturos*`) bindeada en Inscripciones; el pre-chequeo de pausa/baja devuelve cantidades reales. `ConsumoPaquete*` y `AsistenciaInscripcionContract` siguen en stub hasta 7.4.
+- `CambiosTurnosExporterContract` + `Unavailable` para PDF/Excel (503).
+
+### Frontend
+
+- Ruta `/agenda-turnos/cambios-turnos`; entrada “Cambios de turnos” en sidebar con `turno.cancelar_masivo`; tabs “Cancelación masiva” y “Reporte de cambios” según permisos.
+- Componentes reutilizables `reprogramar-turno-modal`, `cancelar-turno-modal`, `historial-turno`; se integran en el panel de detalle de 7.1 (botones Reprogramar/Cancelar/Ver historial).
+- Preview con bloqueos/advertencias, confirmación explícita, saldo o “no disponible”, WhatsApp manual, refresco de `AgendaRefreshService`.
+- Reporte con filtros, paginación y exportación 503 clara.
+
+### Tests
+
+- Unit: `TurnoModificableRule`, `EstadoEsperadoRule`, `MotivoObligatorioRule`, `NuevaFechaRule`, `DisponibilidadReprogramacionRule`, `OrigenReprogramableRule`, `EfectoSaldoRule`, `CancelacionMasivaRule`; `CantidadRestanteRule` con cancelado que consume.
+- Feature: CA-001 a CA-010, transacción con fallo, doble envío, sucursal, WhatsApp, reporte/scoping, export 503, snapshot inmutable, no DELETE.
+- Conexiones: tests de 7.1, 7.2 e Inscripciones/Estados actualizados al comportamiento real de `TurnosFuturos*`.
+
+**Pendientes:** RF-008 real (7.4/consumo), RF-009 completo (7.4 asistencias/faltas), exportación PDF/Excel, autorización expresa de Administración para Faltó (fuera de alcance), reprogramación de una sala completa (limitación documentada).
 
 ---
 

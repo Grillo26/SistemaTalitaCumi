@@ -13,7 +13,7 @@ final class PaqueteModulesTest extends PaquetesSesionesTestCase
             ->assertOk()
             ->assertJsonPath('can.pago_disponible', false)
             ->assertJsonPath('can.consumo_disponible', false)
-            ->assertJsonPath('can.turnos_futuros_disponible', false)
+            ->assertJsonPath('can.turnos_futuros_disponible', true)
             ->assertJsonPath('can.pdf', false)
             ->assertJsonPath('can.export', false);
     }
@@ -60,15 +60,15 @@ final class PaqueteModulesTest extends PaquetesSesionesTestCase
             ->assertJsonPath('modulo', 'Pagos y caja');
     }
 
-    public function test_future_turns_endpoint_is_unavailable(): void
+    public function test_future_turns_endpoint_returns_count(): void
     {
         $escenario = $this->escenarioPaquete('recepcion');
         $creado = $this->crearPaquete($escenario)->assertCreated()->json('data');
 
         $this->getJson('/api/inscripciones-atenciones/paquetes-sesiones/'.$creado['id'].'/turnos-futuros')
-            ->assertStatus(503)
-            ->assertJsonPath('code', 'MODULO_NO_DISPONIBLE')
-            ->assertJsonPath('modulo', 'Agenda y turnos');
+            ->assertOk()
+            ->assertJsonPath('data.cantidad', 0)
+            ->assertJsonPath('data.fechas', []);
     }
 
     public function test_receipt_data_uses_center_configuration(): void

@@ -1697,3 +1697,51 @@ Reutiliza `InscripcionPacienteSearchComponent` y `InscripcionDateInputComponent`
 **Permisos:** `turno.ver` para la ruta; `turno.generar`, `turno.regenerar`, `turno.asignar_profesional` y `turno.feriados` para las acciones. El backend revalida permisos, origen y sucursal.
 
 **Estado:** implementado contra API real. Pendiente: generación desde sala cuando Organización exponga el patrón (`SalaPatronContract`), PDF del preview (RNF-010) y la implementación real de los contratos de turnos futuros/consumo de Inscripciones.
+
+### 37. Reprogramación y cancelación de turnos
+
+**Ruta:** `/agenda-turnos/cambios-turnos`.
+**Entrada de sidebar:** `Cambios de turnos` (visible con `turno.cancelar_masivo`).
+**Guard:** `permissionGuard` con cualquiera de `turno.cancelar_masivo` o `turno.reporte_cambios`.
+
+**Archivos:**
+
+- `src/app/pages/agenda-turnos/cambios-turnos/cambios-turnos.page.ts|html|routes.ts|service.ts|models.ts`
+- `components/reprogramar-turno-modal/`
+- `components/cancelar-turno-modal/`
+- `components/historial-turno/`
+- `components/cancelacion-masiva/`
+- `components/reporte-cambios/`
+
+**API consumida:**
+
+| Método | Endpoint | Acción |
+|---|---|---|
+| GET | `/api/agenda-turnos/cambios-turnos/turnos/{id}` | Turno, origen, profesionales, salas y motivos |
+| POST | `.../turnos/{id}/preview-reprogramacion` | Resumen y disponibilidad sin persistir |
+| POST | `.../turnos/{id}/reprogramar` | Reprogramación transaccional |
+| POST | `.../turnos/{id}/preview-cancelacion` | Efecto en saldo y motivo |
+| POST | `.../turnos/{id}/cancelar` | Cancelación individual |
+| GET | `.../turnos/{id}/historial` | Línea de tiempo |
+| GET | `.../turnos/{id}/contacto-whatsapp` | Enlace wa.me |
+| GET | `.../pacientes/{id}/origenes-cancelables` | Orígenes con turnos futuros |
+| POST | `.../cancelacion-masiva/preview` | Elegibles/excluidos |
+| POST | `.../cancelacion-masiva` | Cancelación masiva exacta |
+| GET | `.../reporte-cambios` | Reporte paginado |
+| GET | `.../reporte-cambios/exportar` | PDF/Excel (503 mientras falte infraestructura) |
+
+**Funcionalidad:**
+
+- El panel de detalle de 7.1 ahora muestra botones **Reprogramar**, **Cancelar** y **Ver historial** según estado y permisos; abre los modales de 7.3 sin salir de la agenda.
+- `ReprogramarTurnoModalComponent`: motivo, nueva fecha/hora, profesional con “Sin asignar”, sala; preview con bloqueos/advertencias; confirmación; WhatsApp manual.
+- `CancelarTurnoModalComponent`: motivo, preview de saldo o “Efecto en saldo no disponible”, confirmación y WhatsApp opcional.
+- `HistorialTurnoComponent`: línea de tiempo con usuario, fecha, acción, motivo, snapshot de saldo y vínculo original↔nuevo navegable.
+- **Cancelación masiva:** búsqueda de paciente, selección de inscripciones/paquetes, filtro por servicio, preview de elegibles y excluidos con razón, un solo motivo, confirmación con cantidad y resultado con lote.
+- **Reporte de cambios:** filtros período, sucursal, tipo, motivo, servicio y paciente; conteos, paginación y exportación con error 503 claro.
+- Protección de doble clic, estados con texto/icono, tokens de color de `styles.css`, “No disponible” si fallan contratos y `AgendaRefreshService` tras cada cambio.
+
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-alert`, `app-badge`, `app-select-field`, `input[app-input]`, `textarea[app-textarea]`, `app-modal`, `app-pagination`, `app-inscripcion-paciente-search`, `ToastService`, `AgendaRefreshService`.
+
+**Permisos:** `turno.reprogramar`, `turno.cancelar`, `turno.historial` (Recepción/Administración); `turno.cancelar_masivo`, `turno.reporte_cambios`, `turno.exportar_cambios` (Administración); `tutor.ver_contacto` para WhatsApp. El backend revalida permisos y sucursal.
+
+**Estado:** implementado contra API real. Pendientes: saldo real (7.4/consumo), asistencias/faltas en el historial (7.4), exportación PDF/Excel (infraestructura) y autorización expresa de Administración para reprogramar Faltó (fuera de alcance).

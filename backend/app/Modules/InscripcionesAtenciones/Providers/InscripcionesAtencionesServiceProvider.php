@@ -2,6 +2,8 @@
 
 namespace App\Modules\InscripcionesAtenciones\Providers;
 
+use App\Modules\AgendaTurnos\Contracts\EloquentTurnosFuturosInscripcion;
+use App\Modules\AgendaTurnos\Contracts\EloquentTurnosFuturosPaquete;
 use App\Modules\InscripcionesAtenciones\Contracts\AsistenciaInscripcionContract;
 use App\Modules\InscripcionesAtenciones\Contracts\AtencionExporterContract;
 use App\Modules\InscripcionesAtenciones\Contracts\ComprobanteAtencionPdfExporterContract;
@@ -24,8 +26,6 @@ use App\Modules\InscripcionesAtenciones\Contracts\StubConsumoPaqueteContract;
 use App\Modules\InscripcionesAtenciones\Contracts\StubPagoAtencionContract;
 use App\Modules\InscripcionesAtenciones\Contracts\StubPagoInscripcionContract;
 use App\Modules\InscripcionesAtenciones\Contracts\StubPagoPaqueteContract;
-use App\Modules\InscripcionesAtenciones\Contracts\StubTurnosFuturosInscripcionContract;
-use App\Modules\InscripcionesAtenciones\Contracts\StubTurnosFuturosPaqueteContract;
 use App\Modules\InscripcionesAtenciones\Contracts\TurnosFuturosInscripcionContract;
 use App\Modules\InscripcionesAtenciones\Contracts\TurnosFuturosPaqueteContract;
 use App\Modules\InscripcionesAtenciones\Contracts\UnavailableAtencionExporter;
@@ -78,13 +78,13 @@ final class InscripcionesAtencionesServiceProvider extends ServiceProvider
     {
         $this->app->bind(PagoInscripcionContract::class, StubPagoInscripcionContract::class);
         $this->app->bind(AsistenciaInscripcionContract::class, StubAsistenciaInscripcionContract::class);
-        $this->app->bind(TurnosFuturosInscripcionContract::class, StubTurnosFuturosInscripcionContract::class);
+        $this->app->bind(TurnosFuturosInscripcionContract::class, EloquentTurnosFuturosInscripcion::class);
         $this->app->bind(ComprobantePdfExporterContract::class, UnavailableComprobantePdfExporter::class);
         $this->app->bind(InscripcionExporterContract::class, UnavailableInscripcionExporter::class);
         $this->app->bind(ConsumoPaqueteContract::class, StubConsumoPaqueteContract::class);
         $this->app->bind(ConsumoPaqueteBatchContract::class, StubConsumoPaqueteBatchContract::class);
         $this->app->bind(PagoPaqueteContract::class, StubPagoPaqueteContract::class);
-        $this->app->bind(TurnosFuturosPaqueteContract::class, StubTurnosFuturosPaqueteContract::class);
+        $this->app->bind(TurnosFuturosPaqueteContract::class, EloquentTurnosFuturosPaquete::class);
         $this->app->bind(
             ComprobantePaquetePdfExporterContract::class,
             UnavailableComprobantePaquetePdfExporter::class,

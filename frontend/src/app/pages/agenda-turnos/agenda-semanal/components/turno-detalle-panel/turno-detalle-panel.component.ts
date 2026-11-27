@@ -166,9 +166,15 @@ import {
                   @if (detalle.acciones.length > 0) {
                     <div class="space-y-2">
                       @for (accion of detalle.acciones; track accion.codigo) {
-                        <div class="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 dark:border-gray-800 dark:text-gray-300">
+                        <button
+                          app-button
+                          variant="outline"
+                          type="button"
+                          class="w-full"
+                          (click)="accionSeleccionada.emit(accion.codigo)"
+                        >
                           {{ accion.etiqueta }}
-                        </div>
+                        </button>
                       }
                     </div>
                   }
@@ -192,6 +198,7 @@ export class TurnoDetallePanelComponent {
   @Input() error: string | null = null;
 
   @Output() close = new EventEmitter<void>();
+  @Output() accionSeleccionada = new EventEmitter<string>();
 
   readonly texts = AGENDA_TEXTS;
   readonly formatLongDate = formatLongDate;

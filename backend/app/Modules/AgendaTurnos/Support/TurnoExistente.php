@@ -21,6 +21,8 @@ final readonly class TurnoExistente
         public EstadoTurno $estado,
         public ?string $sesionKey = null,
         public ?int $loteGeneracionId = null,
+        public ?int $turnoOrigenId = null,
+        public bool $consumeSaldo = false,
     ) {}
 
     public static function fromTurno(Turno $turno): self
@@ -46,6 +48,10 @@ final readonly class TurnoExistente
             loteGeneracionId: $turno->lote_generacion_id === null
                 ? null
                 : (int) $turno->lote_generacion_id,
+            turnoOrigenId: $turno->turno_origen_id === null
+                ? null
+                : (int) $turno->turno_origen_id,
+            consumeSaldo: $turno->consume_saldo === true,
         );
     }
 
@@ -68,6 +74,8 @@ final readonly class TurnoExistente
             'servicio_id' => $this->servicioId,
             'sesion_key' => $this->sesionKey,
             'lote_generacion_id' => $this->loteGeneracionId,
+            'turno_origen_id' => $this->turnoOrigenId,
+            'consume_saldo' => $this->consumeSaldo,
         ];
     }
 }

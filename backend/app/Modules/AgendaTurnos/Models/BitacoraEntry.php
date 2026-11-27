@@ -55,4 +55,9 @@ class BitacoraEntry extends Model
     {
         return $this->belongsTo(Branch::class, 'sucursal_id');
     }
+
+    public function turno(): BelongsTo
+    {
+        return $this->belongsTo(Turno::class, 'entidad_id');
+    }
 }

@@ -1,0 +1,219 @@
+<app-modal
+  [open]="open()"
+  size="lg"
+  [title]="texts.reprogramTitle"
+  [subtitle]="turno()?.paciente?.nombre ?? ''"
+  [showFooter]="true"
+  (closed)="cerrar()"
+>
+  <div modal-body class="space-y-4">
+    @if (loading()) {
+      <p class="text-sm text-gray-500 dark:text-gray-400">Cargando turno…</p>
+    }
+
+    @if (error(); as message) {
+      <app-alert variant="error" title="No se pudo completar el cambio" [message]="message" />
+    }
+
+    @if (resultado(); as resultado) {
+      <div class="space-y-3">
+        <app-alert
+          variant="success"
+          title="Turno reprogramado"
+          [message]="texts.successReprogram"
+        />
+        <div class="rounded-xl border border-gray-200 p-4 text-sm dark:border-gray-800">
+          <p class="font-medium text-gray-800 dark:text-white/90">
+            {{ resultado.turno_nuevo.paciente?.nombre ?? turno()?.paciente?.nombre }}
+          </p>
+          <p class="mt-1 text-gray-600 dark:text-gray-300">
+            {{ texts.newDate }}: {{ fechaLegible(resultado.turno_nuevo.fecha) }} ·
+            {{ resultado.turno_nuevo.hora_inicio }}–{{ resultado.turno_nuevo.hora_fin }}
+          </p>
+          <p class="mt-1 text-gray-600 dark:text-gray-300">
+            {{ texts.professional }}:
+            {{ resultado.turno_nuevo.profesional?.nombre ?? texts.unassigned }}
+          </p>
+          <p class="mt-1 text-gray-600 dark:text-gray-300">
+            {{ texts.room }}: {{ resultado.turno_nuevo.sala?.nombre ?? texts.sinSala }}
+          </p>
+        </div>
+
+        @if (whatsapp(); as whatsapp) {
+          @if (whatsapp.disponible && whatsapp.whatsapp_url) {
+            <button app-button variant="outline" type="button" (click)="abrirWhatsapp()">
+              {{ texts.whatsapp }}
+            </button>
+          } @else if (whatsapp.mensaje) {
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ whatsapp.mensaje }}</p>
+          }
+        }
+      </div>
+    } @else if (!loading() && turno(); as turno) {
+      <div class="rounded-xl border border-gray-200 p-4 text-sm dark:border-gray-800">
+        <p class="font-medium text-gray-800 dark:text-white/90">{{ turno.paciente.nombre }}</p>
+        <p class="mt-1 text-gray-600 dark:text-gray-300">
+          {{ turno.servicio.nombre }} · {{ fechaLegible(turno.fecha) }} ·
+          {{ turno.hora_inicio }}–{{ turno.hora_fin }}
+        </p>
+        <p class="mt-1 text-gray-600 dark:text-gray-300">
+          {{ turno.profesional?.nombre ?? texts.unassigned }} ·
+          {{ turno.sala?.nombre ?? texts.sinSala }}
+        </p>
+        @if (detalle()?.origen; as origen) {
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {{ texts.period }}: {{ fechaLegible(origen.fecha_inicio) }} –
+            {{ fechaLegible(origen.fecha_fin) }}
+          </p>
+        }
+      </div>
+
+      <div class="grid gap-3 sm:grid-cols-2">
+        <div class="sm:col-span-2">
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            {{ texts.motive }} *
+          </label>
+          <app-select-field
+            [options]="motivoOpciones()"
+            [value]="motivoId()"
+            [placeholder]="texts.motivePlaceholder"
+            ariaLabel="Motivo de la reprogramación"
+            (valueChange)="motivoId.set($event); confirmarAdvertencias.set(false)"
+          />
+        </div>
+
+        @if (requiereTexto()) {
+          <div class="sm:col-span-2">
+            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              {{ texts.otherDetail }} *
+            </label>
+            <textarea
+              app-textarea
+              rows="2"
+              maxlength="500"
+              [value]="motivoTexto()"
+              (input)="motivoTexto.set($any($event.target).value)"
+            ></textarea>
+          </div>
+        }
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            {{ texts.date }} *
+          </label>
+          <input
+            app-input
+            type="date"
+            [value]="fecha()"
+            (input)="fecha.set($any($event.target).value); confirmarAdvertencias.set(false)"
+          />
+        </div>
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            {{ texts.startTime }} *
+          </label>
+          <input
+            app-input
+            type="time"
+            [value]="horaInicio()"
+            (input)="horaInicio.set($any($event.target).value); confirmarAdvertencias.set(false)"
+          />
+        </div>
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            {{ texts.professional }}
+          </label>
+          <app-select-field
+            [options]="profesionalOpciones()"
+            [value]="profesionalId()"
+            [placeholder]="texts.unassigned"
+            ariaLabel="Profesional del turno"
+            (valueChange)="profesionalId.set($event); confirmarAdvertencias.set(false)"
+          />
+        </div>
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            {{ texts.room }}
+          </label>
+          <app-select-field
+            [options]="salaOpciones()"
+            [value]="salaId()"
+            [placeholder]="texts.sinSala"
+            ariaLabel="Sala del turno"
+            (valueChange)="salaId.set($event); confirmarAdvertencias.set(false)"
+          />
+        </div>
+      </div>
+
+      <div class="flex justify-end">
+        <button app-button variant="outline" type="button" [disabled]="previewLoading()" (click)="previsualizar()">
+          {{ previewLoading() ? texts.processing : texts.preview }}
+        </button>
+      </div>
+
+      @if (preview(); as preview) {
+        <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+          <p class="text-sm font-semibold text-gray-800 dark:text-white/90">
+            {{ texts.previewTitle }}
+          </p>
+          <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
+            {{ fechaLegible(preview.nuevo.fecha) }} · {{ preview.nuevo.hora_inicio }}–{{ preview.nuevo.hora_fin }}
+            · {{ preview.nuevo.profesional?.nombre ?? texts.unassigned }}
+            · {{ preview.nuevo.sala?.nombre ?? texts.sinSala }}
+          </p>
+
+          @for (hallazgo of preview.hallazgos; track hallazgo.tipo + hallazgo.mensaje) {
+            <p
+              class="mt-2 text-sm"
+              [class.text-error-600]="hallazgo.severidad === 'bloqueo'"
+              [class.text-warning-600]="hallazgo.severidad === 'advertencia'"
+              [class.text-gray-500]="hallazgo.severidad === 'informativo'"
+            >
+              <strong>{{ hallazgo.severidad_label }}:</strong> {{ hallazgo.mensaje }}
+            </p>
+          }
+
+          @if (bloqueos().length > 0) {
+            <app-alert
+              class="mt-3"
+              variant="error"
+              title="No se puede confirmar"
+              message="Hay bloqueos de disponibilidad. Elegí otra fecha, hora, profesional o sala."
+            />
+          }
+
+          @if (advertencias().length > 0) {
+            <label class="mt-3 flex items-start gap-2 rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800 dark:border-warning-500/30 dark:bg-warning-500/10 dark:text-warning-300">
+              <input
+                type="checkbox"
+                class="mt-0.5 size-4"
+                [checked]="confirmarAdvertencias()"
+                (change)="confirmarAdvertencias.set($any($event.target).checked)"
+              />
+              <span>{{ texts.confirmWarnings }}</span>
+            </label>
+          }
+        </div>
+      }
+    }
+  </div>
+
+  <div modal-footer class="flex flex-wrap justify-end gap-2">
+    <button app-button variant="outline" type="button" [disabled]="saving()" (click)="cerrar()">
+      {{ resultado() ? texts.close : texts.cancel }}
+    </button>
+    @if (!resultado() && turno() !== null) {
+      <button
+        app-button
+        type="button"
+        [disabled]="saving() || previewLoading() || !puedeConfirmar()"
+        (click)="confirmar()"
+      >
+        {{ saving() ? texts.processing : texts.confirm }}
+      </button>
+    }
+  </div>
+</app-modal>

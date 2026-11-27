@@ -124,6 +124,28 @@
     [loading]="detalleLoading()"
     [error]="detalleError()"
     (close)="cerrarDetalle()"
+    (accionSeleccionada)="onAccionTurno($event)"
+  />
+
+  <app-reprogramar-turno-modal
+    [open]="reprogramarOpen()"
+    [turnoId]="reprogramarTurnoId()"
+    (closed)="cerrarReprogramar()"
+    (completed)="onCambioCompletado()"
+  />
+
+  <app-cancelar-turno-modal
+    [open]="cancelarOpen()"
+    [turnoId]="cancelarTurnoId()"
+    (closed)="cerrarCancelar()"
+    (completed)="onCambioCompletado()"
+  />
+
+  <app-historial-turno
+    [open]="historialOpen()"
+    [turnoId]="historialTurnoId()"
+    (closed)="cerrarHistorial()"
+    (verTurno)="verTurnoDesdeHistorial($event)"
   />
 
   <app-agenda-impresion

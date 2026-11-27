@@ -1,0 +1,56 @@
+<div class="space-y-5 sm:space-y-6">
+  <app-page-breadcrumb [pageTitle]="texts.pageTitle" />
+
+  <div>
+    <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">{{ texts.pageTitle }}</h1>
+    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+      Reprogramaciones y cancelaciones con trazabilidad. La cancelación masiva es manual y siempre
+      pide confirmación.
+    </p>
+  </div>
+
+  <div class="flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-800">
+    @if (puedeMasiva()) {
+      <button
+        type="button"
+        class="border-b-2 px-3 py-2 text-sm font-medium"
+        [class.border-brand-500]="pestana() === 'masiva'"
+        [class.text-brand-600]="pestana() === 'masiva'"
+        [class.border-transparent]="pestana() !== 'masiva'"
+        [class.text-gray-500]="pestana() !== 'masiva'"
+        (click)="cambiarPestana('masiva')"
+      >
+        {{ texts.tabMasiva }}
+      </button>
+    }
+    @if (puedeReporte()) {
+      <button
+        type="button"
+        class="border-b-2 px-3 py-2 text-sm font-medium"
+        [class.border-brand-500]="pestana() === 'reporte'"
+        [class.text-brand-600]="pestana() === 'reporte'"
+        [class.border-transparent]="pestana() !== 'reporte'"
+        [class.text-gray-500]="pestana() !== 'reporte'"
+        (click)="cambiarPestana('reporte')"
+      >
+        {{ texts.tabReporte }}
+      </button>
+    }
+  </div>
+
+  @if (!puedeMasiva() && !puedeReporte()) {
+    <app-alert
+      variant="warning"
+      title="Sin permisos"
+      message="No tenés permisos para ver la cancelación masiva ni el reporte de cambios."
+    />
+  } @else if (pestana() === 'masiva' && puedeMasiva()) {
+    <app-component-card [title]="texts.massTitle" [desc]="texts.massHint">
+      <app-cancelacion-masiva />
+    </app-component-card>
+  } @else if (pestana() === 'reporte' && puedeReporte()) {
+    <app-component-card [title]="texts.reportTitle">
+      <app-reporte-cambios />
+    </app-component-card>
+  }
+</div>

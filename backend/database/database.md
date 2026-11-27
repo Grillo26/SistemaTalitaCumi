@@ -1625,6 +1625,26 @@ Sin `updated_at`.
 
 ### Agenda y turnos
 
+#### `motivo_turno` — Motivos de cambio de turno
+
+*Documento.* Catálogo configurable de motivos de reprogramación y cancelación (07.3, RF-003/RNF-011). `origen` y `descuenta_saldo` son nullable a propósito hasta la validación funcional.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `codigo` | `varchar(40)` |  | `UNIQUE` | `enfermedad_paciente`, `ausencia_profesional`, `feriado`, `motivo_familiar`, `otro` |
+| `nombre` | `varchar(120)` |  |  |  |
+| `aplica_reprogramar` | `boolean` |  | `DEFAULT true` |  |
+| `aplica_cancelar` | `boolean` |  | `DEFAULT true` |  |
+| `origen` | `varchar(20)` | sí | `CHECK IN ('centro','paciente')` | NULL hasta confirmación |
+| `descuenta_saldo` | `boolean` | sí |  | NULL = no consume |
+| `requiere_texto` | `boolean` |  | `DEFAULT false` | true para `otro` |
+| `activo` | `boolean` |  | `DEFAULT true` |  |
+| `orden` | `smallint` |  | `DEFAULT 100` |  |
+| timestamps |  |  |  |  |
+
+Índice: `(activo, orden)`. Seeder `MotivosTurnoSeeder` idempotente; no precarga valores de origen/saldo.
+
 #### `turno` — Turnos
 
 *Documento.* Un turno es de sala, paquete o diagnóstico (exactamente uno). Se puede reprogramar o cancelar.
@@ -1646,20 +1666,26 @@ Sin `updated_at`.
 | `duracion_minutos` | `int` |  | `DEFAULT 50`, `CHECK > 0` |  |
 | `estado` | `varchar(20)` |  | `DEFAULT 'programado'`, `CHECK IN ('programado','asistio','falto','cancelado','reprogramado')` |  |
 | `motivo_cancelacion` | `text` | sí |  |  |
-| `cancelacion_origen` | `varchar(30)` | sí | `CHECK IN ('regeneracion','manual')` | 07.2 escribe `regeneracion`; `manual` es de 7.3 |
+| `cancelacion_origen` | `varchar(30)` | sí | `CHECK IN ('regeneracion','manual')` | 07.2 escribe `regeneracion`; 07.3 escribe `manual` |
 | `cancelado_en` | `timestamptz` | sí |  |  |
-| `turno_origen_id` | `bigint` | sí | `FK → turno` |  |
+| `motivo_turno_id` | `bigint` | sí | `FK → motivo_turno` | 07.3 |
+| `motivo_detalle` | `text` | sí |  | Texto libre de “otro” |
+| `consume_saldo` | `boolean` | sí | `CHECK (NULL OR estado = 'cancelado')` | Snapshot inmutable de 07.3 |
+| `cancelado_por_usuario_id` | `bigint` | sí | `FK → users` | 07.3 |
+| `turno_origen_id` | `bigint` | sí | `FK → turno`, único parcial | Vínculo original↔nuevo de reprogramación |
 | `lote_generacion_id` | `bigint` | sí | `FK → turno_lote_generacion` | Lote que creó el turno |
 | `cancelado_por_lote_id` | `bigint` | sí | `FK → turno_lote_generacion` | Lote de regeneración que lo canceló |
 | `usuario_registro_id` | `bigint` | sí | `FK → usuario` |  |
 | `usuario_asistencia_id` | `bigint` | sí | `FK → usuario` |  |
 | `asistencia_registrada_en` | `timestamptz` | sí |  |  |
 
-Índices: `(fecha)`, `(sucursal_id, fecha)`, `(paciente_id)`, `(profesional_id)`, `(estado)`, `(sala_id, fecha)`, `(inscripcion_sala_id)`, `(lote_generacion_id)`. CHECK: exactamente uno de `sala_id`, `paquete_sesiones_id` o `atencion_diagnostico_id` no nulo; un turno de sala requiere `sala_id` y no admite paquete/diagnóstico. Timestamps: `created_at`, `updated_at`.
+Índices: `(fecha)`, `(sucursal_id, fecha)`, `(paciente_id)`, `(profesional_id)`, `(estado)`, `(sala_id, fecha)`, `(inscripcion_sala_id)`, `(lote_generacion_id)`, `(sucursal_id, fecha, estado)`, `(motivo_turno_id)`. Único parcial `turno_origen_id` donde no es NULL. CHECK: exactamente uno de `sala_id`, `paquete_sesiones_id` o `atencion_diagnostico_id` no nulo; un turno de sala requiere `sala_id` y no admite paquete/diagnóstico; `consume_saldo` solo con estado `cancelado`. Timestamps: `created_at`, `updated_at`.
 
 > **Implementación real 07.1:** la tabla `turno` y el pivote `turno_profesional` ya existen como tablas físicas en la migración `2026_11_26_000600_create_turno_table.php`, con los mismos CHECK e índices de este documento. El submódulo 01 (agenda semanal) solo lee; 7.2 a 7.5 escriben. Las FKs de `usuario_registro_id`/`usuario_asistencia_id` apuntan a `users`, la tabla física real de autenticación. `profesional_id` es nullable («sin asignar») y el estado `reprogramado` también se admite y se muestra.
 
 > **Implementación real 07.2:** la migración `2026_11_27_000200_add_programacion_fields_to_turno_table.php` agrega `inscripcion_sala_id`, `lote_generacion_id`, `cancelado_por_lote_id`, `cancelacion_origen` y `cancelado_en`. Refuerzos en PostgreSQL: índice único parcial `(inscripcion_sala_id, fecha, hora_inicio)` y `(paquete_sesiones_id, fecha, hora_inicio)` para turnos no cancelados/reprogramados; `EXCLUDE USING gist` por paciente sobre `tsrange(fecha + hora_inicio, fecha + hora_fin, '[)')` para turnos no cancelados/reprogramados (RF-004). No hay EXCLUDE de profesional ni de sala porque las sesiones grupales comparten legítimamente ambos.
+
+> **Implementación real 07.3:** la migración `2026_11_28_000200_add_cambios_fields_to_turno_table.php` agrega `motivo_turno_id` (FK a `motivo_turno`), `motivo_detalle`, `consume_saldo` y `cancelado_por_usuario_id`; índice `(sucursal_id, fecha, estado)`, índice `(motivo_turno_id)` y único parcial `turno_origen_unico` sobre `turno_origen_id` donde no es NULL. **No se crea tabla de historial**: el historial del turno se lee de `bitacora` (`entidad='turno'`, `entidad_id`, `accion`, `datos_anteriores/nuevos`, `usuario_id`), igual que el historial de Estados; 7.4 escribirá `ASISTIO`/`FALTO` en la misma bitácora. La reprogramación usa `lockForUpdate`, `estado_esperado` y advisory locks por paciente/profesional de la nueva fecha; los errores 23P01/23505 se mapean a conflicto de disponibilidad.
 
 #### `turno_lote_generacion` — Lotes de generación y regeneración
 

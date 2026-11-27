@@ -23,6 +23,12 @@ final class CantidadRestanteRule
         foreach ($turnos as $turno) {
             if ($turno->estado === EstadoTurno::ASISTIO || $turno->estado === EstadoTurno::FALTO) {
                 $consumidas++;
+
+                continue;
+            }
+
+            if ($turno->estado === EstadoTurno::CANCELADO && $turno->consumeSaldo) {
+                $consumidas++;
             }
         }
 

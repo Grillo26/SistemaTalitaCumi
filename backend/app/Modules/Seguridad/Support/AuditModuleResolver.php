@@ -44,6 +44,8 @@ final class AuditModuleResolver
         'renovacion_multiple' => 'inscripciones',
         'turno' => 'agenda',
         'turno_lote_generacion' => 'agenda',
+        'turno_cancelacion_masiva' => 'agenda',
+        'motivo_turno' => 'agenda',
         'feriado' => 'agenda',
     ];
 
@@ -97,6 +99,8 @@ final class AuditModuleResolver
         'renovacion_multiple' => 'Renovación múltiple',
         'turno' => 'Turno',
         'turno_lote_generacion' => 'Lote de generación de turnos',
+        'turno_cancelacion_masiva' => 'Lote de cancelación masiva',
+        'motivo_turno' => 'Motivo de cambio de turno',
         'feriado' => 'Feriado',
     ];
 
@@ -134,6 +138,11 @@ final class AuditModuleResolver
         'ACTUALIZAR_FERIADO' => 'Actualización de feriado',
         'DESACTIVAR_FERIADO' => 'Desactivación de feriado',
         'CANCELAR' => 'Cancelación',
+        'REPROGRAMAR' => 'Reprogramación',
+        'CANCELAR_MASIVO' => 'Cancelación masiva',
+        'CREAR_POR_REPROGRAMACION' => 'Creado por reprogramación',
+        'ASISTIO' => 'Asistió',
+        'FALTO' => 'Faltó',
     ];
 
     public static function fromEntity(?string $entity): string
