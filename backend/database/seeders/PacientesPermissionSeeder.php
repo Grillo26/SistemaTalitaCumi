@@ -34,6 +34,8 @@ final class PacientesPermissionSeeder extends Seeder
             $administracion->givePermissionTo([
                 PacientesPermission::PATIENT_VIEW,
                 PacientesPermission::PATIENT_EDIT,
+                PacientesPermission::PATIENT_CHANGE_STATUS,
+                PacientesPermission::PATIENT_RETIRE,
                 PacientesPermission::PATIENT_VIEW_SENSITIVE,
                 PacientesPermission::PATIENT_EXPORT,
             ]);
@@ -43,12 +45,39 @@ final class PacientesPermissionSeeder extends Seeder
                 PacientesPermission::PATIENT_VIEW,
                 PacientesPermission::PATIENT_CREATE,
                 PacientesPermission::PATIENT_EDIT,
-                PacientesPermission::PATIENT_CHANGE_STATUS,
                 PacientesPermission::PATIENT_VIEW_SENSITIVE,
                 PacientesPermission::PATIENT_EXPORT,
             ]);
 
             InitialPermissionMatrix::mark('pacientes');
+        }
+
+        /*
+         * Migración de la separación de permisos de 06.05: Recepción deja de
+         * cambiar el estado del paciente y Administración gana pausa,
+         * reactivación y retiro. Marcador propio para no pisar revocaciones
+         * manuales posteriores.
+         */
+        if (InitialPermissionMatrix::shouldAssign(
+            'pacientes.estado_split',
+            [PacientesPermission::PATIENT_RETIRE],
+        )) {
+            $superadmin = Role::findByName('superadmin', 'web');
+            $superadmin->givePermissionTo([
+                PacientesPermission::PATIENT_CHANGE_STATUS,
+                PacientesPermission::PATIENT_RETIRE,
+            ]);
+
+            $administracion = Role::findByName('administracion', 'web');
+            $administracion->givePermissionTo([
+                PacientesPermission::PATIENT_CHANGE_STATUS,
+                PacientesPermission::PATIENT_RETIRE,
+            ]);
+
+            $recepcion = Role::findByName('recepcion', 'web');
+            $recepcion->revokePermissionTo(PacientesPermission::PATIENT_CHANGE_STATUS);
+
+            InitialPermissionMatrix::mark('pacientes.estado_split');
         }
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();

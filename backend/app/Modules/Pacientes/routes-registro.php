@@ -49,7 +49,10 @@ Route::middleware('auth:sanctum')->prefix('pacientes')->group(function (): void 
 
     Route::post('/{id}/estado', [PacienteStatusController::class, 'changeStatus'])
         ->whereNumber('id')
-        ->middleware(PermissionMiddleware::using(PacientesPermission::PATIENT_CHANGE_STATUS, 'sanctum'))
+        ->middleware(PermissionMiddleware::using([
+            PacientesPermission::PATIENT_CHANGE_STATUS,
+            PacientesPermission::PATIENT_RETIRE,
+        ], 'sanctum'))
         ->name('status');
 
     Route::delete('/{id}', [PacienteController::class, 'destroy'])

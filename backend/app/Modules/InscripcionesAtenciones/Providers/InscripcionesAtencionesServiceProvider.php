@@ -10,7 +10,9 @@ use App\Modules\InscripcionesAtenciones\Contracts\ComprobantePdfExporterContract
 use App\Modules\InscripcionesAtenciones\Contracts\ConsumoPaqueteBatchContract;
 use App\Modules\InscripcionesAtenciones\Contracts\ConsumoPaqueteContract;
 use App\Modules\InscripcionesAtenciones\Contracts\EloquentVigenciaEntidad;
+use App\Modules\InscripcionesAtenciones\Contracts\EstadoExporterContract;
 use App\Modules\InscripcionesAtenciones\Contracts\InscripcionExporterContract;
+use App\Modules\InscripcionesAtenciones\Contracts\PacienteEstadoContract;
 use App\Modules\InscripcionesAtenciones\Contracts\PagoAtencionContract;
 use App\Modules\InscripcionesAtenciones\Contracts\PagoInscripcionContract;
 use App\Modules\InscripcionesAtenciones\Contracts\PagoPaqueteContract;
@@ -28,6 +30,7 @@ use App\Modules\InscripcionesAtenciones\Contracts\UnavailableAtencionExporter;
 use App\Modules\InscripcionesAtenciones\Contracts\UnavailableComprobanteAtencionPdfExporter;
 use App\Modules\InscripcionesAtenciones\Contracts\UnavailableComprobantePaquetePdfExporter;
 use App\Modules\InscripcionesAtenciones\Contracts\UnavailableComprobantePdfExporter;
+use App\Modules\InscripcionesAtenciones\Contracts\UnavailableEstadoExporter;
 use App\Modules\InscripcionesAtenciones\Contracts\UnavailableInscripcionExporter;
 use App\Modules\InscripcionesAtenciones\Contracts\UnavailableVigenciaExporter;
 use App\Modules\InscripcionesAtenciones\Contracts\VigenciaEntidadContract;
@@ -38,6 +41,8 @@ use App\Modules\InscripcionesAtenciones\Events\DiagnosticoCreated;
 use App\Modules\InscripcionesAtenciones\Events\EntrevistaCreated;
 use App\Modules\InscripcionesAtenciones\Events\EntrevistaVinculada;
 use App\Modules\InscripcionesAtenciones\Events\InscripcionCreated;
+use App\Modules\InscripcionesAtenciones\Events\InscripcionPausada;
+use App\Modules\InscripcionesAtenciones\Events\InscripcionReactivada;
 use App\Modules\InscripcionesAtenciones\Events\InscripcionRenewed;
 use App\Modules\InscripcionesAtenciones\Events\InscripcionRetirada;
 use App\Modules\InscripcionesAtenciones\Events\InscripcionUpdated;
@@ -48,9 +53,11 @@ use App\Modules\InscripcionesAtenciones\Events\PaqueteUpdated;
 use App\Modules\InscripcionesAtenciones\Events\RenovacionMultipleEjecutada;
 use App\Modules\InscripcionesAtenciones\Listeners\RecordAtencionAudit;
 use App\Modules\InscripcionesAtenciones\Listeners\RecordInscripcionAudit;
+use App\Modules\InscripcionesAtenciones\Listeners\RecordInscripcionEstadoAudit;
 use App\Modules\InscripcionesAtenciones\Listeners\RecordPaqueteAudit;
 use App\Modules\InscripcionesAtenciones\Listeners\RecordRenovacionMultipleAudit;
 use App\Modules\InscripcionesAtenciones\Support\InscripcionesAtencionesModule;
+use App\Modules\Pacientes\Contracts\EloquentPacienteEstado;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -59,9 +66,9 @@ use Illuminate\Support\ServiceProvider;
  * Módulo 06 — Inscripciones y atenciones.
  *
  * Submódulos 01 (salas grupales), 02 (paquetes de sesiones individuales),
- * 03 (entrevistas y diagnósticos) y 04 (vigencias y renovaciones). Los
- * futuros submódulos reutilizan el prefijo, el provider y el catálogo de
- * auditoría.
+ * 03 (entrevistas y diagnósticos), 04 (vigencias y renovaciones) y 05
+ * (estados de paciente e inscripción). Los futuros submódulos reutilizan el
+ * prefijo, el provider y el catálogo de auditoría.
  */
 final class InscripcionesAtencionesServiceProvider extends ServiceProvider
 {
@@ -88,6 +95,8 @@ final class InscripcionesAtencionesServiceProvider extends ServiceProvider
         $this->app->bind(AtencionExporterContract::class, UnavailableAtencionExporter::class);
         $this->app->bind(VigenciaExporterContract::class, UnavailableVigenciaExporter::class);
         $this->app->bind(VigenciaEntidadContract::class, EloquentVigenciaEntidad::class);
+        $this->app->bind(EstadoExporterContract::class, UnavailableEstadoExporter::class);
+        $this->app->bind(PacienteEstadoContract::class, EloquentPacienteEstado::class);
     }
 
     public function boot(): void
@@ -121,6 +130,8 @@ final class InscripcionesAtencionesServiceProvider extends ServiceProvider
         }
 
         Event::listen(RenovacionMultipleEjecutada::class, RecordRenovacionMultipleAudit::class);
+        Event::listen(InscripcionPausada::class, RecordInscripcionEstadoAudit::class);
+        Event::listen(InscripcionReactivada::class, RecordInscripcionEstadoAudit::class);
 
         Route::middleware('api')
             ->prefix('api'.InscripcionesAtencionesModule::MODULE_URL)

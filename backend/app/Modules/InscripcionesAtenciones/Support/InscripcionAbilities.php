@@ -48,7 +48,7 @@ final class InscripcionAbilities
             'view' => $user->can(InscripcionPermission::VIEW),
             'update' => $user->can(InscripcionPermission::EDIT) && $activa,
             'renew' => $user->can(InscripcionPermission::RENEW) && $activa,
-            'withdraw' => $user->can(InscripcionPermission::WITHDRAW) && $activa,
+            'withdraw' => $user->can(InscripcionPermission::WITHDRAW) && $inscripcion->estado->permiteBaja(),
         ];
     }
 

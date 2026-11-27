@@ -1,0 +1,91 @@
+<app-modal
+  [open]="true"
+  [title]="title"
+  [subtitle]="subtitle"
+  size="md"
+  (closed)="closed.emit()"
+>
+  <form class="space-y-4" [formGroup]="form" (ngSubmit)="submit()">
+    @if (error; as message) {
+      <app-alert variant="error" title="No se pudo cambiar el estado" [message]="message" />
+    }
+
+    <div class="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-white/[0.02]">
+      <p class="text-xs text-gray-500">Estado actual</p>
+      <p class="text-sm font-semibold text-gray-800 dark:text-white/90">{{ currentStateLabel }}</p>
+      <p class="mt-1 text-xs text-gray-500">{{ actionLabel }}</p>
+    </div>
+
+    @if (precheck?.turnos; as turnos) {
+      @if (!turnos.disponible) {
+        <app-alert variant="info" title="Verificación de turnos" [message]="texts.noTurns" />
+      } @else if (turnos.data && $any(turnos.data)['cantidad'] > 0) {
+        <app-alert
+          variant="warning"
+          title="Turnos futuros"
+          [message]="'Hay ' + $any(turnos.data)['cantidad'] + ' turno(s) futuro(s). Sugerimos cancelarlos antes.'"
+        />
+      }
+    }
+
+    @if (precheck?.pago; as pago) {
+      @if (!pago.disponible) {
+        <app-alert variant="info" title="Estado de pago" [message]="texts.noPayment" />
+      } @else if (pago.alerta) {
+        <app-alert variant="warning" title="Saldo pendiente" [message]="pago.alerta" />
+      }
+    }
+
+    @if (motiveOptions.length > 0) {
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          {{ texts.motive }}{{ requiresMotive ? ' *' : '' }}
+        </label>
+        <app-select-field
+          [options]="motiveOptions"
+          [value]="form.controls.motivo.value"
+          [placeholder]="texts.motive"
+          ariaLabel="Motivo"
+          (valueChange)="form.controls.motivo.setValue($event)"
+        />
+      </div>
+    }
+
+    @if (otherSelected) {
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          {{ texts.motiveDetail }} *
+        </label>
+        <textarea
+          app-textarea
+          rows="3"
+          maxlength="500"
+          formControlName="motivo_detalle"
+          [placeholder]="texts.motiveDetail"
+        ></textarea>
+      </div>
+    }
+
+    @if (requiresDate) {
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          {{ texts.date }} *
+        </label>
+        <app-inscripcion-date-input
+          formControlName="fecha_baja"
+          [maxDate]="maxDate"
+          ariaLabel="Fecha de retiro"
+        />
+      </div>
+    }
+
+    <div class="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+      <button app-button variant="outline" type="button" [disabled]="saving" (click)="closed.emit()">
+        {{ texts.cancel }}
+      </button>
+      <button app-button type="submit" [disabled]="saving">
+        {{ saving ? texts.saving : texts.confirm }}
+      </button>
+    </div>
+  </form>
+</app-modal>

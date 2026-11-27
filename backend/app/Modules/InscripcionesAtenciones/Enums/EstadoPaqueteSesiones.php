@@ -48,7 +48,7 @@ enum EstadoPaqueteSesiones: string
 
     public function permiteBaja(): bool
     {
-        return $this === self::ACTIVO;
+        return $this === self::ACTIVO || $this === self::EN_PAUSA;
     }
 
     /**

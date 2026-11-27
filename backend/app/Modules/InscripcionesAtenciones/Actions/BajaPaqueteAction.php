@@ -3,14 +3,18 @@
 namespace App\Modules\InscripcionesAtenciones\Actions;
 
 use App\Models\User;
+use App\Modules\InscripcionesAtenciones\Enums\EstadoInscripcion;
 use App\Modules\InscripcionesAtenciones\Enums\EstadoPaqueteSesiones;
 use App\Modules\InscripcionesAtenciones\Enums\MotivoBajaPaquete;
 use App\Modules\InscripcionesAtenciones\Events\PaqueteRetirado;
 use App\Modules\InscripcionesAtenciones\Exceptions\FechaBajaPaqueteInvalidaException;
+use App\Modules\InscripcionesAtenciones\Exceptions\InscripcionVencidaNoRetirableException;
 use App\Modules\InscripcionesAtenciones\Exceptions\PaqueteNotFoundException;
+use App\Modules\InscripcionesAtenciones\Exceptions\TransicionEstadoNoPermitidaException;
 use App\Modules\InscripcionesAtenciones\Models\PaqueteSesiones;
 use App\Modules\InscripcionesAtenciones\Rules\MotivoBajaPaqueteRule;
 use App\Modules\InscripcionesAtenciones\Rules\PaqueteStateTransitionRule;
+use App\Modules\InscripcionesAtenciones\Support\EstadoInscripcionResolver;
 use App\Modules\InscripcionesAtenciones\Support\PaquetePeriod;
 use App\Modules\InscripcionesAtenciones\Support\PaqueteSnapshot;
 use App\Modules\Organizacion\Contracts\UserBranchAccessContract;
@@ -54,6 +58,19 @@ final class BajaPaqueteAction
 
             if (! $this->access->puedeAcceder($actor->id, (int) $paquete->sucursal_id)) {
                 throw new BranchAccessDeniedException;
+            }
+
+            $efectivo = EstadoInscripcionResolver::efectivoPaquete($paquete);
+
+            if ($efectivo === EstadoInscripcion::VENCIDA) {
+                throw new InscripcionVencidaNoRetirableException;
+            }
+
+            if ($efectivo === EstadoInscripcion::RENOVADA) {
+                throw new TransicionEstadoNoPermitidaException(
+                    EstadoInscripcion::RENOVADA,
+                    EstadoInscripcion::RETIRADA,
+                );
             }
 
             PaqueteStateTransitionRule::assertPuedeRetirar($paquete->estado);

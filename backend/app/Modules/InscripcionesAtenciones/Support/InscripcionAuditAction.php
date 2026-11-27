@@ -14,4 +14,8 @@ final class InscripcionAuditAction
     public const RENEW = 'RENOVAR';
 
     public const WITHDRAW = 'RETIRAR';
+
+    public const PAUSE = 'PAUSAR';
+
+    public const REACTIVATE = 'REACTIVAR';
 }

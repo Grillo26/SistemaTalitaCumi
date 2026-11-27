@@ -23,7 +23,15 @@ final class PaqueteStateTransitionRule
 
     public static function assertPuedeRetirar(EstadoPaqueteSesiones $estado): void
     {
-        self::assertActivo($estado);
+        if ($estado === EstadoPaqueteSesiones::ACTIVO || $estado === EstadoPaqueteSesiones::EN_PAUSA) {
+            return;
+        }
+
+        if ($estado === EstadoPaqueteSesiones::RETIRADO) {
+            throw new PaqueteRetiradoException($estado);
+        }
+
+        throw new PaqueteNoGestionableException($estado);
     }
 
     private static function assertActivo(EstadoPaqueteSesiones $estado): void

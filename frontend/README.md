@@ -91,6 +91,7 @@ Todas las rutas están dentro del layout principal y protegidas por `authGuard`.
 | `/inscripciones-atenciones/paquetes-sesiones` | Paquetes de sesiones individuales: listado, ficha, alta, edición, renovación, baja y comprobante |
 | `/inscripciones-atenciones/entrevista-diagnostico` | Entrevistas y diagnósticos: listado, ficha, alta, edición, baja, vinculación de entrevista y comprobante |
 | `/inscripciones-atenciones/vigencias` | Vigencias: panel de vencimientos, renovación individual/múltiple, reportes y ventana de alerta |
+| `/inscripciones-atenciones/estados` | Estados: pacientes, inscripciones, pausa/reactivación/retiro, historial y reportes |
 | `/pagos` | Pagos y caja |
 | `/reportes` | Reportes |
 | `/catalogo` | Catálogo de servicios: áreas, servicios y tipos |
@@ -1537,3 +1538,61 @@ Reutiliza `InscripcionPacienteSearchComponent` y `InscripcionDateInputComponent`
 **Permisos:** `vigencia.ver`, `vigencia.reportes`, `vigencia.exportar`, `vigencia.configurar`; la renovación exige además `inscripcion.renovar` o `paquete.renovar`. Recepción consulta y renueva; Administración consulta reportes, renueva y configura.
 
 **Estado:** implementado contra API real. Pendientes: Agenda (07) para saldo/asistencias reales, Pagos (08), PDF/Excel, integración del componente de alerta en Pacientes y widget del panel al iniciar sesión.
+
+### 34. Estados del paciente y de la inscripción
+
+**Ruta:** `/inscripciones-atenciones/estados`.
+**Entrada de sidebar:** grupo `Inscripciones` → `Estados` (visible con `estado.ver`).
+**Guard:** `permissionGuard` con `estado.ver`.
+
+**Archivos:**
+
+- `src/app/pages/inscripciones-atenciones/estados/estados.page.ts`
+- `src/app/pages/inscripciones-atenciones/estados/estados.page.html`
+- `src/app/pages/inscripciones-atenciones/estados/estados.routes.ts`
+- `src/app/pages/inscripciones-atenciones/estados/estados.service.ts`
+- `src/app/pages/inscripciones-atenciones/estados/estados.models.ts`
+- `src/app/pages/inscripciones-atenciones/estados/estado-badge.component.ts`
+- `src/app/pages/inscripciones-atenciones/estados/cambio-estado-modal.component.*`
+- `src/app/pages/inscripciones-atenciones/estados/retiro-paciente-modal.component.*`
+- `src/app/pages/inscripciones-atenciones/estados/historial-estados.component.ts`
+
+**API consumida:**
+
+| Método | Endpoint | Acción |
+|---|---|---|
+| GET | `/api/inscripciones-atenciones/estados/opciones` | Estados, acciones y motivos |
+| GET | `/api/inscripciones-atenciones/estados/pacientes` | Listado de pacientes por estado |
+| GET | `/api/inscripciones-atenciones/estados/pacientes/{id}/historial` | Historial del paciente |
+| POST | `/api/inscripciones-atenciones/estados/pacientes/{id}/pausar` | Pausa de paciente |
+| POST | `/api/inscripciones-atenciones/estados/pacientes/{id}/reactivar` | Reactivación de paciente |
+| POST | `/api/inscripciones-atenciones/estados/pacientes/{id}/retirar` | Retiro con cascada |
+| GET | `/api/inscripciones-atenciones/estados/pacientes/{id}/retiro/preview` | Inscripciones que se arrastran |
+| GET | `/api/inscripciones-atenciones/estados/pacientes/{id}/retiro/prechequeo` | Advertencias de turnos/pago |
+| GET | `/api/inscripciones-atenciones/estados/inscripciones` | Listado de salas/paquetes por estado efectivo |
+| GET | `/api/inscripciones-atenciones/estados/inscripciones/{tipo}/{id}/historial` | Historial de la inscripción |
+| POST | `/api/inscripciones-atenciones/estados/inscripciones/{tipo}/{id}/pausar` | Pausa |
+| POST | `/api/inscripciones-atenciones/estados/inscripciones/{tipo}/{id}/reactivar` | Reactivación |
+| POST | `/api/inscripciones-atenciones/estados/inscripciones/{tipo}/{id}/retirar` | Retiro delegado |
+| GET | `/api/inscripciones-atenciones/estados/inscripciones/{tipo}/{id}/prechequeo-*` | Advertencias separadas |
+| GET | `/api/inscripciones-atenciones/estados/reportes` | Reporte por estado |
+| GET | `/api/inscripciones-atenciones/estados/reportes/exportar` | Exportación (stub 503) |
+
+**Funcionalidad:**
+
+- Tabs **Pacientes**, **Inscripciones** y **Reportes**.
+- Pacientes: filtros por búsqueda, estado y sucursal; acciones Pausar, Reactivar, Retirar e Historial según permisos.
+- Inscripciones: filtros por tipo, estado efectivo, sucursal, servicio y período; acciones Pausar, Reactivar, Retirar e Historial.
+- Pausa y retiro exigen motivo cerrado + detalle; “Otro” exige texto.
+- Retiro de paciente con preview de inscripciones activas/en pausa, confirmación explícita y mismo motivo/fecha.
+- Prechequeos de turnos y pago como advertencias no bloqueantes; con stubs muestran “verificación no disponible”, nunca “sin turnos” o “sin saldo”.
+- Historial en línea de tiempo con fecha, usuario, estado anterior, estado nuevo y motivo.
+- Reportes con conteos por estado, filtros, paginación y botones PDF/Excel con `503` explícito si falta infraestructura.
+- 409 por estado desactualizado con opción de recargar.
+- Sin datos clínicos; colores solo con tokens `brand`, `success`, `warning`, `error`, `info` y `gray`.
+
+**Componentes reutilizables:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-pagination`, `app-modal`, `TABLE_IMPORTS`, `input[app-input]`, `app-select-field`, `textarea[app-textarea]`, `InscripcionDateInputComponent`, `ToastService`, `SucursalesService` y `CatalogoServiciosService`.
+
+**Permisos:** `estado.ver`, `estado.reportes`, `estado.exportar`, `inscripcion.pausar`, `inscripcion.reactivar`; el retiro de inscripción exige `inscripcion.retirar`/`paquete.retirar`; el paciente exige `paciente.cambiar_estado` o `paciente.retirar`. Recepción consulta y pausa/reactiva inscripciones; Administración ejecuta los cambios de paciente y los retiros.
+
+**Estado:** implementado contra API real. Pendientes: integración de los componentes en las fichas de Pacientes/Salas/Paquetes, motivos administrables en tabla, Agenda (07), Pagos (08), alertas de próximo pago y PDF/Excel.

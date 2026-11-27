@@ -86,6 +86,16 @@ export const routes: Routes = [
         title: 'Vigencias y renovaciones | TalitaCumi',
       },
       {
+        path: 'inscripciones-atenciones/estados',
+        canActivate: [permissionGuard],
+        data: { permission: 'estado.ver' },
+        loadChildren: () =>
+          import('./pages/inscripciones-atenciones/estados/estados.routes').then(
+            (m) => m.ESTADOS_ROUTES,
+          ),
+        title: 'Estados de pacientes e inscripciones | TalitaCumi',
+      },
+      {
         path: 'pagos',
         component: PagosComponent,
         title: 'Pagos y caja | TalitaCumi',

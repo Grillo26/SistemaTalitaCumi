@@ -124,6 +124,11 @@ export class AppSidebarComponent {
           path: '/inscripciones-atenciones/vigencias',
           permission: 'vigencia.ver',
         },
+        {
+          name: 'Estados',
+          path: '/inscripciones-atenciones/estados',
+          permission: 'estado.ver',
+        },
       ],
     },
     {

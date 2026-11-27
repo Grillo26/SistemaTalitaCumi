@@ -21,3 +21,8 @@ Route::middleware('auth:sanctum')
     ->prefix('vigencias')
     ->name('vigencias.')
     ->group(__DIR__.'/routes-vigencias.php');
+
+Route::middleware('auth:sanctum')
+    ->prefix('estados')
+    ->name('estados.')
+    ->group(__DIR__.'/routes-estados.php');

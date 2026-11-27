@@ -26,6 +26,7 @@ final class PermissionCatalog
         'tipos_diagnostico' => 'Tipos de diagnóstico',
         'atencion' => 'Atenciones',
         'vigencia' => 'Vigencias y renovaciones',
+        'estado' => 'Estados de paciente e inscripción',
         'parametro' => 'Configuración',
         'usuario' => 'Usuarios',
         'rol' => 'Roles',
@@ -54,6 +55,7 @@ final class PermissionCatalog
         'tipos_diagnostico' => 29,
         'atencion' => 31,
         'vigencia' => 32,
+        'estado' => 33,
         'parametro' => 30,
         'usuario' => 40,
         'rol' => 41,
@@ -78,6 +80,10 @@ final class PermissionCatalog
         'desbloquear' => 'Desbloquear',
         'cerrar_sesiones' => 'Cerrar sesiones',
         'editar_permisos' => 'Editar permisos',
+        'pausar' => 'Pausar',
+        'reactivar' => 'Reactivar',
+        'retirar' => 'Retirar',
+        'reportes' => 'Reportes',
     ];
 
     private const ACTION_ORDER = [
@@ -97,6 +103,10 @@ final class PermissionCatalog
         'desbloquear' => 110,
         'cerrar_sesiones' => 120,
         'editar_permisos' => 130,
+        'pausar' => 140,
+        'reactivar' => 141,
+        'retirar' => 142,
+        'reportes' => 143,
     ];
 
     public static function moduleKey(string $permissionName): string

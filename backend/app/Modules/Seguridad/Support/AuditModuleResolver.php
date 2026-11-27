@@ -120,6 +120,9 @@ final class AuditModuleResolver
         'CERRAR_VIGENCIA' => 'Cierre de vigencia',
         'VINCULAR' => 'Vinculación',
         'RENOVAR' => 'Renovación',
+        'PAUSAR' => 'Pausa',
+        'REACTIVAR' => 'Reactivación',
+        'RETIRAR_PACIENTE' => 'Retiro del paciente',
     ];
 
     public static function fromEntity(?string $entity): string

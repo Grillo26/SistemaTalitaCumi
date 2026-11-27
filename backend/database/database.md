@@ -1507,7 +1507,7 @@ Sin `deleted_at`: las tarifas no se eliminan; se cierra su vigencia con motivo. 
 
 Índices: `(estado)`, `(fecha_inicio, fecha_fin)`, `(sucursal_id, fecha_inicio, fecha_fin)`, `(sala_id, fecha_inicio, fecha_fin)`, `(paciente_id, estado)`, `(inscripcion_origen_id)`, `(sucursal_id, fecha_fin)` y `(paciente_id, fecha_fin)` (estos dos últimos para el panel de vigencias). Timestamps: `created_at`, `updated_at`.
 
-Concurrencia: en PostgreSQL, `btree_gist` + constraint `EXCLUDE` sobre `(paciente_id, sala_id, daterange(fecha_inicio, fecha_fin, '[]'))` para estados `activa` y `en_pausa`. La migración `2026_11_25_000800_create_inscripcion_sala_table` crea la tabla y la restricción. `estado_inscripcion_historial` queda para el submódulo de estados/pausa; esta entrega no la crea.
+Concurrencia: en PostgreSQL, `btree_gist` + constraint `EXCLUDE` sobre `(paciente_id, sala_id, daterange(fecha_inicio, fecha_fin, '[]'))` para estados `activa` y `en_pausa`. La migración `2026_11_25_000800_create_inscripcion_sala_table` crea la tabla y la restricción. Desde 06.05 se escriben `activa`, `en_pausa` y `retirada`; `vencida` y `renovada` se derivan y no se persisten. `estado_inscripcion_historial` no se creó: el historial se lee de bitácora.
 
 #### `paquete_sesiones` — Paquetes de sesiones individuales
 
@@ -1533,7 +1533,7 @@ Concurrencia: en PostgreSQL, `btree_gist` + constraint `EXCLUDE` sobre `(pacient
 | `estado` | `varchar(20)` |  | `DEFAULT 'activo'`, `CHECK IN ('activo','en_pausa','vencido','renovado','retirado')` |  |
 | `paquete_origen_id` | `bigint` | sí | `FK → paquete_sesiones` | Renovación |
 
-Concurrencia: en PostgreSQL, `btree_gist` + constraint `EXCLUDE` sobre `(paciente_id, servicio_id, daterange(fecha_inicio, fecha_fin, '[]'))` para estados `activo` y `en_pausa`. La migración `2026_11_26_000000_create_paquete_sesiones_table` crea la tabla y la restricción. Índices: `(estado)`, `(fecha_inicio, fecha_fin)`, `(sucursal_id, fecha_inicio, fecha_fin)`, `(paciente_id, estado)`, `(servicio_id, fecha_inicio)`, `(profesional_id, fecha_inicio)`, `(paquete_origen_id)`, `(sucursal_id, fecha_fin)` y `(paciente_id, fecha_fin)` (estos dos últimos para el panel de vigencias). Timestamps: `created_at`, `updated_at`. El parámetro `paquete.cantidad_sesiones_default` (10) se crea con seeder; la duración reutiliza `duracion_sesion_minutos` (50). En el submódulo 02 solo se escriben los estados `activo` y `retirado`; `vencido` se deriva de `fecha_fin` y no se persiste.
+Concurrencia: en PostgreSQL, `btree_gist` + constraint `EXCLUDE` sobre `(paciente_id, servicio_id, daterange(fecha_inicio, fecha_fin, '[]'))` para estados `activo` y `en_pausa`. La migración `2026_11_26_000000_create_paquete_sesiones_table` crea la tabla y la restricción. Índices: `(estado)`, `(fecha_inicio, fecha_fin)`, `(sucursal_id, fecha_inicio, fecha_fin)`, `(paciente_id, estado)`, `(servicio_id, fecha_inicio)`, `(profesional_id, fecha_inicio)`, `(paquete_origen_id)`, `(sucursal_id, fecha_fin)` y `(paciente_id, fecha_fin)` (estos dos últimos para el panel de vigencias). Timestamps: `created_at`, `updated_at`. El parámetro `paquete.cantidad_sesiones_default` (10) se crea con seeder; la duración reutiliza `duracion_sesion_minutos` (50). Desde 06.05 se escriben `activo`, `en_pausa` y `retirado`; `vencido` y `renovado` se derivan de `fecha_fin` y del vínculo con la sucesora, y no se persisten.
 
 #### `atencion_entrevista` — Entrevista con los padres
 
@@ -1616,6 +1616,10 @@ Timestamps: `created_at`, `updated_at`.
 | `created_at` | `timestamptz` |  | `DEFAULT now()` |  |
 
 Sin `updated_at`.
+
+> **Implementación 06.05:** esta tabla no se creó en la entrega. RF-010 (historial en ficha) se resuelve leyendo la bitácora existente, que ya es inmutable, tiene índice `(entidad, entidad_id)` y conserva las transiciones previas reales. No se inventan estados históricos ni se duplican escrituras. La tabla queda como referencia para una evolución futura si se necesita un historial desacoplado de auditoría.
+
+> **Estados 06.05:** no se agregaron columnas ni `CHECK` nuevos. Los `CHECK` de `inscripcion_sala` y `paquete_sesiones` ya admitían `en_pausa`; ahora el submódulo la escribe. El estado efectivo se calcula en `EstadoEfectivoInscripcionRule` con precedencia `Retirada > EnPausa > Renovada > Vencida > Activa`. Los cambios de estado se registran en `bitacora` (`PAUSAR`, `REACTIVAR`, `RETIRAR`, `CAMBIAR_ESTADO`), y la cascada de retiro de paciente usa `paciente.retirar`. No hay tablas nuevas de motivos: los motivos son Enums cerrados en esta entrega.
 
 ---
 

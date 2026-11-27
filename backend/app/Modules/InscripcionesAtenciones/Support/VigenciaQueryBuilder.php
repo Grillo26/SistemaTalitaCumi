@@ -153,6 +153,9 @@ final class VigenciaQueryBuilder
                     "CASE WHEN i.estado IN ('retirada') THEN 1 ELSE 0 END as retirada",
                 ),
                 DB::raw(
+                    "CASE WHEN i.estado = 'en_pausa' THEN 1 ELSE 0 END as en_pausa",
+                ),
+                DB::raw(
                     'CASE WHEN EXISTS ('
                     .'SELECT 1 FROM inscripcion_sala r '
                     .'WHERE r.inscripcion_origen_id = i.id AND r.estado <> \'retirada\''
@@ -197,6 +200,9 @@ final class VigenciaQueryBuilder
                 DB::raw("'paquete_sesiones' as tipo_entidad"),
                 DB::raw(
                     "CASE WHEN p.estado IN ('retirado') THEN 1 ELSE 0 END as retirada",
+                ),
+                DB::raw(
+                    "CASE WHEN p.estado = 'en_pausa' THEN 1 ELSE 0 END as en_pausa",
                 ),
                 DB::raw(
                     'CASE WHEN EXISTS ('
@@ -285,7 +291,17 @@ final class VigenciaQueryBuilder
                 ->where('v.fecha_fin', '<=', (string) $filters['periodo_hasta']);
         }
 
+        /*
+         * RF-015/RN-009: una inscripción vencida de un paciente retirado no
+         * debe aparecer en alertas ni reportes de vencimiento.
+         */
+        $query->where('v.paciente_estado', '!=', 'retirado');
+
         $estado = $filters['estado'] ?? null;
+
+        if ($estado === null || $estado === '') {
+            $query->where('v.en_pausa', 0);
+        }
 
         if (($estado === null || $estado === '') && $panelDefault) {
             $this->applyPanelDefault($query, $hoy, $limite);
@@ -300,6 +316,7 @@ final class VigenciaQueryBuilder
     {
         $query
             ->where('v.retirada', 0)
+            ->where('v.en_pausa', 0)
             ->where('v.renovada', 0)
             ->where(function (Builder $query) use ($hoy, $limite): void {
                 $query
@@ -327,6 +344,7 @@ final class VigenciaQueryBuilder
         if ($estado === 'renovado') {
             $query
                 ->where('v.retirada', 0)
+                ->where('v.en_pausa', 0)
                 ->where('v.renovada', 1);
 
             return;
@@ -334,6 +352,7 @@ final class VigenciaQueryBuilder
 
         $query
             ->where('v.retirada', 0)
+            ->where('v.en_pausa', 0)
             ->where('v.renovada', 0);
 
         if ($estado === 'vencido') {

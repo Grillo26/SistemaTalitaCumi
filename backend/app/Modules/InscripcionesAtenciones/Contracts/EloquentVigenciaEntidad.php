@@ -5,6 +5,8 @@ namespace App\Modules\InscripcionesAtenciones\Contracts;
 use App\Modules\InscripcionesAtenciones\Enums\TipoEntidadVigencia;
 use App\Modules\InscripcionesAtenciones\Models\InscripcionSala;
 use App\Modules\InscripcionesAtenciones\Models\PaqueteSesiones;
+use App\Modules\InscripcionesAtenciones\Rules\InscripcionAdmiteAsistenciaRule;
+use App\Modules\InscripcionesAtenciones\Support\EstadoInscripcionResolver;
 use DateTimeImmutable;
 
 /**
@@ -24,28 +26,34 @@ final class EloquentVigenciaEntidad implements VigenciaEntidadContract
         if ($tipo === TipoEntidadVigencia::INSCRIPCION_SALA) {
             $entidad = InscripcionSala::query()->find($entidadId);
 
-            if ($entidad === null || ! $entidad->estado->permiteEdicion()) {
+            if ($entidad === null) {
                 return false;
             }
 
-            return $this->dentroDelPeriodo(
-                $entidad->fecha_inicio->toDateString(),
-                $entidad->fecha_fin->toDateString(),
-                $fechaTurno,
-            );
+            $efectivo = EstadoInscripcionResolver::efectivoSala($entidad, $fechaTurno);
+
+            return InscripcionAdmiteAsistenciaRule::permite($efectivo)
+                && $this->dentroDelPeriodo(
+                    $entidad->fecha_inicio->toDateString(),
+                    $entidad->fecha_fin->toDateString(),
+                    $fechaTurno,
+                );
         }
 
         $entidad = PaqueteSesiones::query()->find($entidadId);
 
-        if ($entidad === null || ! $entidad->estado->permiteEdicion()) {
+        if ($entidad === null) {
             return false;
         }
 
-        return $this->dentroDelPeriodo(
-            $entidad->fecha_inicio->toDateString(),
-            $entidad->fecha_fin->toDateString(),
-            $fechaTurno,
-        );
+        $efectivo = EstadoInscripcionResolver::efectivoPaquete($entidad, $fechaTurno);
+
+        return InscripcionAdmiteAsistenciaRule::permite($efectivo)
+            && $this->dentroDelPeriodo(
+                $entidad->fecha_inicio->toDateString(),
+                $entidad->fecha_fin->toDateString(),
+                $fechaTurno,
+            );
     }
 
     private function fechaValida(string $fecha): bool

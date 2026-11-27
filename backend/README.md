@@ -2510,32 +2510,40 @@ app/Modules/InscripcionesAtenciones/
 │                     RejectPaqueteDeletionAction
 │                     Vigencias: RenovarDesdePanelAction, RenovarMultipleAction,
 │                     UpdateVentanaAlertaAction
+│                     Estados: CambiarEstadoPacienteAction,
+│                     RetirarPacienteConCascadaAction, PausarInscripcionAction,
+│                     ReactivarInscripcionAction, RetirarInscripcionAction
 ├── Contracts/        PagoInscripcion, AsistenciaInscripcion,
 │                     TurnosFuturosInscripcion, ComprobantePdfExporter,
 │                     InscripcionExporter + stubs/unavailable
 │                     Paquetes: ConsumoPaquete, PagoPaquete, TurnosFuturosPaquete,
 │                     ComprobantePaquetePdfExporter + stubs/unavailable
+│                     Estados: PacienteEstadoContract, EstadoExporterContract
 ├── Enums/            EstadoInscripcionSala, MotivoBaja,
-│                     EstadoPaqueteSesiones, MotivoBajaPaquete, DiaSemana
-├── Events/           InscripcionCreated/Updated/Renewed/Retirada,
-│                     PaqueteCreated/Updated/Renewed/Retirado
+│                     EstadoPaqueteSesiones, MotivoBajaPaquete, DiaSemana,
+│                     EstadoInscripcion, AccionEstado, MotivoPausa, MotivoPaciente
+├── Events/           InscripcionCreated/Updated/Renewed/Retirada/Pausada/Reactivada,
+│                     PaqueteCreated/Updated/Renewed/Retirado, PacienteRetirado
 ├── Exceptions/       Dominio con render HTTP
-├── Http/             Controllers, Requests y Resources de ambos submódulos
-├── Listeners/        RecordInscripcionAudit, RecordPaqueteAudit
+├── Http/             Controllers, Requests y Resources de los submódulos
+├── Listeners/        RecordInscripcionAudit, RecordPaqueteAudit,
+│                     RecordInscripcionEstadoAudit
 ├── Models/           InscripcionSala, PaqueteSesiones, BitacoraEntry
 ├── Providers/        InscripcionesAtencionesServiceProvider
 ├── Queries/          Salas y paquetes: listado, ficha, preview de monto,
 │                     renovación, comprobante, pago y turnos futuros
+│                     Estados: listados, historial, reporte y prechequeos
 ├── Rules/            Reglas puras de período, solapamiento, estado,
 │                     motivo, tarifa, monto, observaciones, días/hora,
-│                     cantidad, duración, saldo y estimación
+│                     cantidad, duración, saldo, estimación y estados efectivos
 ├── Support/          Constantes, permisos, abilities, snapshots, joins,
-│                     guards y cálculos de período
+│                     guards, catálogo de motivos y cálculos de período
 ├── routes.php
 ├── routes-salas-grupales.php
 ├── routes-paquetes-sesiones.php
 ├── routes-entrevista-diagnostico.php
-└── routes-vigencias.php
+├── routes-vigencias.php
+└── routes-estados.php
 ```
 
 Constantes:
@@ -2546,6 +2554,7 @@ InscripcionesAtencionesModule::MODULE_URL_SALAS_GRUPALES = '/inscripciones-atenc
 InscripcionesAtencionesModule::MODULE_URL_PAQUETES = '/inscripciones-atenciones/paquetes-sesiones';
 InscripcionesAtencionesModule::MODULE_URL_ENTREVISTA_DIAGNOSTICO = '/inscripciones-atenciones/entrevista-diagnostico';
 InscripcionesAtencionesModule::MODULE_URL_VIGENCIAS = '/inscripciones-atenciones/vigencias';
+InscripcionesAtencionesModule::MODULE_URL_ESTADOS = '/inscripciones-atenciones/estados';
 InscripcionesAtencionesModule::AUDIT_MODULE = 'inscripciones';
 InscripcionesAtencionesModule::ENTITY_INSCRIPCION_SALA = 'inscripcion_sala';
 InscripcionesAtencionesModule::ENTITY_PAQUETE_SESIONES = 'paquete_sesiones';
@@ -2987,7 +2996,7 @@ Eventos: `EntrevistaCreated`, `DiagnosticoCreated`, `AtencionUpdated`, `Atencion
 
 - `EntrevistaDiagnosticoTest`: alta de entrevista, alta de diagnóstico con profesionales y snapshot, bloqueo por profesionales insuficientes, diagnóstico sin asignar/omitido, obligación de omitir o vincular, baja y bloqueo posterior, permisos, DELETE 409, pago/exportación stub 503, listado/filtros, rango multidía, vinculación, comprobante, actualizaciones y profesional de otra sucursal.
 - `AtencionRulesTest`: fechas, cobertura de profesionales, omisión de entrevista, notas y motivo de baja.
-- `InscripcionesAtenciones` completo: 204 passed, 3 skipped PostgreSQL-only, 809 assertions.
+- `InscripcionesAtenciones` completo: 269 passed, 3 skipped PostgreSQL-only, 1042 assertions.
 
 **Pendientes:** Pagos/Agenda/Reportes reales, PDF/Excel, implementación real de `EntrevistaDirectoryContract` de Pacientes y de los stubs de uso del Catálogo (`hasInscripciones`, `hasDiagnosticosRegistrados`, `hasInscripcionesOrPagos`).
 
@@ -3075,9 +3084,104 @@ Filtros de panel/reportes: `search`, `sucursal_id`, `paciente_id`, `servicio_id`
 - Unit: clasificación con bordes, ventana, elegibilidad, comparación de tarifa.
 - Feature: panel, scoping, tipos visibles, reportes, preview, renovación individual, cambio de tarifa entre preview y ejecución, no traslado, múltiple atómica, contrato de Agenda, resumen del paciente, exportación 503 y configuración.
 - Índices: migración aplicada en PostgreSQL local.
-- Suite completa: **946 passed, 6 skipped (PostgreSQL-only), 4822 assertions** con `make test`.
+- Suite completa: **1013 passed, 6 skipped (PostgreSQL-only), 5060 assertions** con `make test`.
 
 **Pendientes:** Agenda (07) para consumo/asistencias reales, Pagos (08), exportación PDF/Excel, integración en la ficha de Pacientes y widget del panel en el inicio (CA-003).
+
+---
+
+### Submódulo 05 — Estados del paciente y de la inscripción
+
+Implementación de `docs/06_INSCRIPCIONES_ATENCIONES/05_estados_paciente_inscripcion.md` (RF-001 a RF-016, RN-001 a RN-012, CA-001 a CA-012). Es transversal sobre Salas, Paquetes y Pacientes.
+
+#### Modelo de estados
+
+- **Persistidos:** paciente (`activo`, `en_pausa`, `retirado`) e inscripción (`activa/activo`, `en_pausa`, `retirada/retirado`).
+- **Derivados:** `vencida` y `renovada`; no se escriben ni tienen endpoint manual.
+- **Precedencia efectiva:** `Retirada > EnPausa > Renovada > Vencida > Activa`.
+- **Pausa:** opción A. Se usa el `estado` existente; `inscripcion_sala.estado` y `paquete_sesiones.estado` ya admitían `en_pausa` en el `CHECK`. No cambia `fecha_inicio`, `fecha_fin` ni el saldo.
+- **Paciente:** la máquina base sigue en Pacientes (`EstadoPaciente::allowedTransitions` + `ChangePacienteStatusAction`). 06.05 la consume por `PacienteEstadoContract`; no la duplica.
+- **Regla nueva de inscripción:** `EstadoInscripcionTransitionRule`; la regla de retiro existente de Salas/Paquetes se amplió para aceptar `en_pausa`.
+- **Vencida/Renovada:** el estado efectivo se calcula con `EstadoEfectivoInscripcionRule`, que reutiliza `VigenciaClassifierRule` con ventana 0 y recibe `hoy` inyectado.
+- **Bitácora como historial:** RF-010 se resuelve leyendo la bitácora con permisos de estados; no se creó `estado_inscripcion_historial`. Las bajas y renovaciones previas ya están en bitácora y se muestran como legado real, sin inventar datos.
+- **Pacientes:** se separaron permisos: `paciente.cambiar_estado` (pausa/reactivación, Administración) y `paciente.retirar` (solo Administración/Superadmin). Recepción solo consulta estados de paciente. El endpoint histórico de Pacientes exige el permiso específico según el destino.
+- **Motivos:** catálogo cerrado en Enums (`MotivoPausa`, `MotivoPaciente`, más los Enums existentes de Salas/Paquetes). Una tabla administrable queda como evolución posterior para no cambiar el schema en esta entrega.
+- **Fecha:** pausa/reactivación usan el timestamp de auditoría; el retiro de inscripción admite hasta 30 días hacia atrás; el retiro de paciente usa hoy.
+
+#### Endpoints
+
+Prefijo real: **`/api/inscripciones-atenciones/estados`**.
+
+| Método | Ruta | Permiso |
+|---|---|---|
+| GET | `/opciones` | `estado.ver` |
+| GET | `/pacientes` | `estado.ver` + `paciente.ver` |
+| GET | `/pacientes/{id}/historial` | `estado.ver` + `paciente.ver` |
+| POST | `/pacientes/{id}/pausar` | `paciente.cambiar_estado` |
+| POST | `/pacientes/{id}/reactivar` | `paciente.cambiar_estado` |
+| POST | `/pacientes/{id}/retirar` | `paciente.retirar` |
+| GET | `/pacientes/{id}/retiro/preview` | `paciente.retirar` + `paciente.ver` |
+| GET | `/pacientes/{id}/retiro/prechequeo` | `paciente.retirar` + `paciente.ver` |
+| GET | `/inscripciones` | `estado.ver`; tipos filtrados por `inscripcion.ver`/`paquete.ver` |
+| GET | `/inscripciones/{tipo}/{id}/historial` | `estado.ver` + permiso de vista del tipo |
+| POST | `/inscripciones/{tipo}/{id}/pausar` | `inscripcion.pausar` + vista del tipo |
+| POST | `/inscripciones/{tipo}/{id}/reactivar` | `inscripcion.reactivar` + vista del tipo |
+| POST | `/inscripciones/{tipo}/{id}/retirar` | `inscripcion.retirar` o `paquete.retirar` |
+| GET | `/inscripciones/{tipo}/{id}/prechequeo-pausa` | `inscripcion.pausar` |
+| GET | `/inscripciones/{tipo}/{id}/prechequeo-retiro` | permiso de retiro del tipo |
+| GET | `/inscripciones/{tipo}/{id}/prechequeo-reactivacion` | `inscripcion.reactivar` |
+| GET | `/reportes` | `estado.reportes` |
+| GET | `/reportes/exportar` | `estado.exportar`; stub `503` |
+
+#### Matriz de transiciones de inscripción
+
+| Desde | Hacia | Tipo |
+|---|---|---|
+| Activa | En pausa | Manual |
+| Activa | Vencida | Sistema/derivada |
+| Activa | Renovada | Sistema/derivada |
+| Activa | Retirada | Manual |
+| En pausa | Activa | Manual |
+| En pausa | Retirada | Manual |
+| Vencida | Renovada | Sistema/derivada |
+
+El paciente mantiene la matriz de Pacientes: `activo ↔ en_pausa`, `activo → retirado`, `en_pausa → retirado`, `retirado → activo`.
+
+#### Permisos
+
+Seeder `EstadosPermissionSeeder`:
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `estado.ver` | sí | sí | sí |
+| `estado.reportes` | sí | sí | no |
+| `estado.exportar` | sí | sí | no |
+| `inscripcion.pausar` | sí | sí | sí |
+| `inscripcion.reactivar` | sí | sí | sí |
+
+El retiro de inscripción reutiliza `inscripcion.retirar`/`paquete.retirar`. El estado del paciente usa `paciente.cambiar_estado` y `paciente.retirar`; Recepción no los tiene.
+
+#### Eventos y auditoría
+
+- `InscripcionPausada` y `InscripcionReactivada` → `RecordInscripcionEstadoAudit` (`PAUSAR`/`REACTIVAR`).
+- `InscripcionRetirada` y `PaqueteRetirado` se reutilizan; no se duplican.
+- `PacienteStatusChanged` se reutiliza para pausa/reactivación/retiro.
+- `PacienteRetirado` agrega el detalle de la cascada (inscripciones y sucursales) para futuros consumidores.
+- El retiro en cascada es una sola transacción: paciente + inscripciones activas/en pausa, mismo motivo y fecha. Si una baja falla, se revierte todo.
+
+#### Agenda, Pagos y exportación
+
+- `VigenciaEntidadContract` ahora usa el estado efectivo: solo `Activa` admite asistencia; el mensaje “La inscripción no está activa” lo muestra Agenda.
+- Los prechequeos de turnos y pagos son endpoints separados y no bloquean. Con los stubs responden `disponible=false` y la UI muestra “verificación no disponible”/“estado de pago no disponible”, nunca “sin turnos”/“sin saldo”.
+- `EstadoExporterContract` / `UnavailableEstadoExporter` responden `503`; falta infraestructura PDF/Excel.
+
+#### Tests
+
+- Unit: matriz completa de paciente e inscripción, precedencia y bordes de fecha, motivos, asistencia y cascada.
+- Feature: pausa/reactivación, bloqueo de inscripción a paciente en pausa/retirado en Salas/Paquetes/Atenciones, retiro individual y en cascada, rollback, permisos, prechequeos tolerantes a stubs, historial, filtros, 409 y exclusión de Vigencia.
+- Integración: `EstadosVigenciaTest` y `EstadosAsistenciaTest`.
+
+**Pendientes:** motivos administrables en tabla, integración visual de los componentes en las fichas de Pacientes/Salas/Paquetes, Agenda (07), Pagos (08), PDF/Excel, alertas de próximo pago y benchmark RNF-001.
 
 ---
 

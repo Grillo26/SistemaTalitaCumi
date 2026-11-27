@@ -48,7 +48,7 @@ enum EstadoInscripcionSala: string
 
     public function permiteBaja(): bool
     {
-        return $this === self::ACTIVA;
+        return $this === self::ACTIVA || $this === self::EN_PAUSA;
     }
 
     /**

@@ -3,14 +3,18 @@
 namespace App\Modules\InscripcionesAtenciones\Actions;
 
 use App\Models\User;
+use App\Modules\InscripcionesAtenciones\Enums\EstadoInscripcion;
 use App\Modules\InscripcionesAtenciones\Enums\EstadoInscripcionSala;
 use App\Modules\InscripcionesAtenciones\Enums\MotivoBaja;
 use App\Modules\InscripcionesAtenciones\Events\InscripcionRetirada;
 use App\Modules\InscripcionesAtenciones\Exceptions\FechaBajaInvalidaException;
 use App\Modules\InscripcionesAtenciones\Exceptions\InscripcionNotFoundException;
+use App\Modules\InscripcionesAtenciones\Exceptions\InscripcionVencidaNoRetirableException;
+use App\Modules\InscripcionesAtenciones\Exceptions\TransicionEstadoNoPermitidaException;
 use App\Modules\InscripcionesAtenciones\Models\InscripcionSala;
 use App\Modules\InscripcionesAtenciones\Rules\InscripcionStateTransitionRule;
 use App\Modules\InscripcionesAtenciones\Rules\MotivoBajaRule;
+use App\Modules\InscripcionesAtenciones\Support\EstadoInscripcionResolver;
 use App\Modules\InscripcionesAtenciones\Support\InscripcionPeriod;
 use App\Modules\InscripcionesAtenciones\Support\InscripcionSnapshot;
 use App\Modules\Organizacion\Contracts\UserBranchAccessContract;
@@ -53,6 +57,19 @@ final class BajaInscripcionAction
 
             if (! $this->access->puedeAcceder($actor->id, (int) $inscripcion->sucursal_id)) {
                 throw new BranchAccessDeniedException;
+            }
+
+            $efectivo = EstadoInscripcionResolver::efectivoSala($inscripcion);
+
+            if ($efectivo === EstadoInscripcion::VENCIDA) {
+                throw new InscripcionVencidaNoRetirableException;
+            }
+
+            if ($efectivo === EstadoInscripcion::RENOVADA) {
+                throw new TransicionEstadoNoPermitidaException(
+                    EstadoInscripcion::RENOVADA,
+                    EstadoInscripcion::RETIRADA,
+                );
             }
 
             InscripcionStateTransitionRule::assertPuedeRetirar($inscripcion->estado);

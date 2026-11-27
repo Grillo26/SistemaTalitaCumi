@@ -48,7 +48,7 @@ final class PaqueteAbilities
             'view' => $user->can(PaquetePermission::VIEW),
             'update' => $user->can(PaquetePermission::EDIT) && $activo,
             'renew' => $user->can(PaquetePermission::RENEW) && $activo,
-            'withdraw' => $user->can(PaquetePermission::WITHDRAW) && $activo,
+            'withdraw' => $user->can(PaquetePermission::WITHDRAW) && $paquete->estado->permiteBaja(),
         ];
     }
 

@@ -23,7 +23,15 @@ final class InscripcionStateTransitionRule
 
     public static function assertPuedeRetirar(EstadoInscripcionSala $estado): void
     {
-        self::assertActiva($estado);
+        if ($estado === EstadoInscripcionSala::ACTIVA || $estado === EstadoInscripcionSala::EN_PAUSA) {
+            return;
+        }
+
+        if ($estado === EstadoInscripcionSala::RETIRADA) {
+            throw new InscripcionRetiradaException($estado);
+        }
+
+        throw new InscripcionNoGestionableException($estado);
     }
 
     private static function assertActiva(EstadoInscripcionSala $estado): void

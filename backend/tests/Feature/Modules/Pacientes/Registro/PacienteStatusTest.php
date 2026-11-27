@@ -10,7 +10,7 @@ final class PacienteStatusTest extends PacientesTestCase
     public function test_pause_requires_reason_and_is_not_critical(): void
     {
         $branch = $this->branch();
-        $user = $this->actingAsRole('recepcion');
+        $user = $this->actingAsSuperadmin();
         $this->withBranch($user, $branch);
 
         $created = $this->postJson('/api/pacientes/pacientes', $this->pacientePayload([], $branch))
@@ -53,7 +53,7 @@ final class PacienteStatusTest extends PacientesTestCase
     public function test_retirement_and_return_are_critical_and_require_reason(): void
     {
         $branch = $this->branch();
-        $user = $this->actingAsRole('recepcion');
+        $user = $this->actingAsSuperadmin();
         $this->withBranch($user, $branch);
 
         $created = $this->postJson('/api/pacientes/pacientes', $this->pacientePayload([], $branch))
@@ -109,7 +109,7 @@ final class PacienteStatusTest extends PacientesTestCase
     public function test_same_state_and_invalid_transitions_are_rejected(): void
     {
         $branch = $this->branch();
-        $user = $this->actingAsRole('recepcion');
+        $user = $this->actingAsSuperadmin();
         $this->withBranch($user, $branch);
 
         $active = $this->paciente(['sucursal_registro_id' => $branch->id, 'estado' => 'activo']);
@@ -133,7 +133,7 @@ final class PacienteStatusTest extends PacientesTestCase
     public function test_activation_without_principal_tutor_is_blocked(): void
     {
         $branch = $this->branch();
-        $user = $this->actingAsRole('recepcion');
+        $user = $this->actingAsSuperadmin();
         $this->withBranch($user, $branch);
 
         $paciente = $this->paciente([
@@ -151,7 +151,7 @@ final class PacienteStatusTest extends PacientesTestCase
     public function test_stale_version_conflicts(): void
     {
         $branch = $this->branch();
-        $user = $this->actingAsRole('recepcion');
+        $user = $this->actingAsSuperadmin();
         $this->withBranch($user, $branch);
 
         $paciente = $this->paciente(['sucursal_registro_id' => $branch->id]);
@@ -162,5 +162,33 @@ final class PacienteStatusTest extends PacientesTestCase
             'version' => 99,
         ])->assertStatus(409)
             ->assertJsonPath('code', 'PATIENT_VERSION_CONFLICT');
+    }
+
+    public function test_administracion_can_pause_a_patient(): void
+    {
+        $branch = $this->branch();
+        $user = $this->actingAsRole('administracion');
+        $this->withBranch($user, $branch);
+        $paciente = $this->paciente(['sucursal_registro_id' => $branch->id]);
+
+        $this->postJson('/api/pacientes/pacientes/'.$paciente->id.'/estado', [
+            'estado' => 'en_pausa',
+            'motivo' => 'Viaje familiar',
+            'version' => $paciente->version,
+        ])->assertOk()->assertJsonPath('data.estado', 'en_pausa');
+    }
+
+    public function test_recepcion_cannot_change_patient_status(): void
+    {
+        $branch = $this->branch();
+        $user = $this->actingAsRole('recepcion');
+        $this->withBranch($user, $branch);
+        $paciente = $this->paciente(['sucursal_registro_id' => $branch->id]);
+
+        $this->postJson('/api/pacientes/pacientes/'.$paciente->id.'/estado', [
+            'estado' => 'en_pausa',
+            'motivo' => 'Viaje familiar',
+            'version' => $paciente->version,
+        ])->assertStatus(403);
     }
 }

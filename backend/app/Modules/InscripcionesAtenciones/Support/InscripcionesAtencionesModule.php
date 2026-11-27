@@ -6,9 +6,9 @@ namespace App\Modules\InscripcionesAtenciones\Support;
  * Constantes del módulo 06 — Inscripciones y atenciones.
  *
  * Submódulos 01 (salas grupales), 02 (paquetes de sesiones individuales),
- * 03 (entrevistas y diagnósticos) y 04 (vigencias y renovaciones); los
- * futuros submódulos reutilizan el prefijo, el provider y el catálogo de
- * auditoría.
+ * 03 (entrevistas y diagnósticos), 04 (vigencias y renovaciones) y 05
+ * (estados de paciente e inscripción); los futuros submódulos reutilizan el
+ * prefijo, el provider y el catálogo de auditoría.
  */
 final class InscripcionesAtencionesModule
 {
@@ -21,6 +21,8 @@ final class InscripcionesAtencionesModule
     public const MODULE_URL_ENTREVISTA_DIAGNOSTICO = self::MODULE_URL.'/entrevista-diagnostico';
 
     public const MODULE_URL_VIGENCIAS = self::MODULE_URL.'/vigencias';
+
+    public const MODULE_URL_ESTADOS = self::MODULE_URL.'/estados';
 
     public const AUDIT_MODULE = 'inscripciones';
 
