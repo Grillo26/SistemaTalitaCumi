@@ -18,6 +18,21 @@ interface SalaDirectoryContract
 
     public function estaActiva(int $salaId): bool;
 
+    /**
+     * Nombres en lote, incluyendo salas inactivas para turnos históricos.
+     *
+     * @param  list<int>  $salaIds
+     * @return array<int, string>
+     */
+    public function nombres(array $salaIds): array;
+
+    /**
+     * Salas activas de la sucursal para poblar filtros.
+     *
+     * @return array<int, string>
+     */
+    public function nombresPorSucursal(int $sucursalId, bool $soloActivas = true): array;
+
     public function perteneceASucursal(int $salaId, int $sucursalId): bool;
 
     /**

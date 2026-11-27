@@ -78,5 +78,6 @@ class DatabaseSeeder extends Seeder
         $this->call(VigenciasAccionAuditadaSeeder::class);
         $this->call(EstadosPermissionSeeder::class);
         $this->call(EstadosAccionAuditadaSeeder::class);
+        $this->call(AgendaTurnosPermissionSeeder::class);
     }
 }

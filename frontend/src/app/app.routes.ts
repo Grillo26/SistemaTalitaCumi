@@ -4,7 +4,6 @@ import { guestGuard } from './core/guards/guest.guard';
 import { permissionGuard } from './core/guards/permission.guard';
 import { AppLayoutComponent } from './layout/shell/app-layout/app-layout.component';
 import { HomeComponent } from './pages/home/home.component';
-import { AgendaComponent } from './pages/agenda/agenda.component';
 import { PagosComponent } from './pages/pagos/pagos.component';
 import { ReportesComponent } from './pages/reportes/reportes.component';
 import { InventarioComponent } from './pages/inventario/inventario.component';
@@ -30,8 +29,18 @@ export const routes: Routes = [
       },
       {
         path: 'agenda',
-        component: AgendaComponent,
-        title: 'Agenda | TalitaCumi',
+        redirectTo: 'agenda-turnos/agenda-semanal',
+        pathMatch: 'full',
+      },
+      {
+        path: 'agenda-turnos/agenda-semanal',
+        canActivate: [permissionGuard],
+        data: { permission: 'turno.ver' },
+        loadChildren: () =>
+          import('./pages/agenda-turnos/agenda-semanal/agenda-semanal.routes').then(
+            (m) => m.AGENDA_SEMANAL_ROUTES,
+          ),
+        title: 'Agenda semanal | TalitaCumi',
       },
       {
         path: 'pacientes',

@@ -16,6 +16,22 @@ interface ProfessionalDirectoryContract
     public function estaActivo(int $profesionalId): bool;
 
     /**
+     * Nombres completos en lote, incluyendo profesionales inactivos para no
+     * perder turnos históricos.
+     *
+     * @param  list<int>  $profesionalIds
+     * @return array<int, string>
+     */
+    public function nombres(array $profesionalIds): array;
+
+    /**
+     * Profesionales activos con relación activa a la sucursal.
+     *
+     * @return array<int, string>
+     */
+    public function nombresPorSucursal(int $sucursalId, bool $soloActivos = true): array;
+
+    /**
      * @throws ProfesionalNotFoundException
      * @throws ProfesionalInactivoException
      */

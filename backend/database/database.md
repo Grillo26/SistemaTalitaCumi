@@ -1652,7 +1652,7 @@ Sin `updated_at`.
 
 Índices: `(fecha)`, `(sucursal_id, fecha)`, `(paciente_id)`, `(profesional_id)`, `(estado)`, `(sala_id, fecha)`. CHECK: exactamente uno de `sala_id`, `paquete_sesiones_id` o `atencion_diagnostico_id` no nulo. Timestamps: `created_at`, `updated_at`.
 
-> **Implementación real:** la tabla `turno` aún no existe como tabla física; esta definición es referencia para el módulo 07. El módulo 03 no modifica `turno`: deja contratos y stubs. `profesional_id` será nullable («sin asignar») y el estado `programado` se validará en 07.
+> **Implementación real 07.1:** la tabla `turno` y el pivote `turno_profesional` ya existen como tablas físicas en la migración `2026_11_26_000600_create_turno_table.php`, con los mismos CHECK e índices de este documento. El submódulo 01 (agenda semanal) solo lee; 7.2 a 7.5 escriben. Las FKs de `usuario_registro_id`/`usuario_asistencia_id` apuntan a `users`, la tabla física real de autenticación. `profesional_id` es nullable («sin asignar») y el estado `reprogramado` también se admite y se muestra.
 
 #### `turno_profesional` — Profesionales por turno
 

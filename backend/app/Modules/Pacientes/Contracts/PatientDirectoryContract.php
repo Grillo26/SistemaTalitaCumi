@@ -16,6 +16,17 @@ interface PatientDirectoryContract
     public function existe(int $pacienteId): bool;
 
     /**
+     * Nombres completos en lote para agendas y listados operativos.
+     *
+     * No expone fecha de nacimiento, edad, documento, diagnóstico ni
+     * contacto. Incluye pacientes retirados para conservar turnos históricos.
+     *
+     * @param  list<int>  $pacienteIds
+     * @return array<int, string>
+     */
+    public function nombres(array $pacienteIds): array;
+
+    /**
      * @throws PacienteNotFoundException
      */
     public function resumen(int $pacienteId): PacienteResumen;

@@ -77,7 +77,7 @@ app/Modules/Organizacion/
 └── routes-configuracion.php      Configuración (03)
 ```
 
-Módulos actuales: `Organizacion`, `Seguridad`, `Profesionales`, `Pacientes`, `CatalogoServicios` e `InscripcionesAtenciones`.
+Módulos actuales: `Organizacion`, `Seguridad`, `Profesionales`, `Pacientes`, `CatalogoServicios`, `InscripcionesAtenciones` y `AgendaTurnos`.
 
 Reglas de dependencia:
 
@@ -3185,9 +3185,118 @@ El retiro de inscripción reutiliza `inscripcion.retirar`/`paquete.retirar`. El 
 
 ---
 
+## Módulo 07 — Agenda y turnos (submódulo 01: agenda semanal)
+
+Implementación de `docs/07_AGENDA_TURNOS/01_agenda_semanal_sucursal.md` (RF-001 a RF-014, RN-001 a RN-008, CA-001 a CA-008). Este submódulo es de **solo consulta** (RN-007): no crea, programa, reprograma, cancela ni registra asistencia. Deja la base del módulo padre para 7.2 a 7.5.
+
+### Estructura
+
+```text
+app/Modules/AgendaTurnos/
+├── Contracts/        AgendaExporterContract + UnavailableAgendaExporter
+├── Enums/            EstadoTurno (programado, asistio, falto, cancelado, reprogramado)
+├── Exceptions/       Dominio con render HTTP
+├── Http/
+│   ├── Controllers/  AgendaSemanal, TurnoDetalle, AgendaExport
+│   ├── Requests/     Filtros de semana y opciones
+│   └── Resources/    Semana, turno, detalle, opciones y sucursal
+├── Models/           Turno (lectura) + HoraCast
+├── Providers/        AgendaTurnosServiceProvider
+├── Queries/          Semana, detalle, opciones, sucursales y datos de exportación
+├── Rules/            Semana, rango horario, resumen, sin asignar, acciones y contraste
+├── Support/          Scope, resolver batch, DTOs y registry de acciones
+└── routes.php
+```
+
+Constantes:
+
+```php
+AgendaTurnosModule::MODULE_URL = '/agenda-turnos/agenda-semanal';
+AgendaTurnosPermission::VER = 'turno.ver';
+AgendaTurnosPermission::EXPORTAR = 'turno.exportar';
+```
+
+### Schema y migración
+
+`2026_11_26_000600_create_turno_table.php` crea `turno` y `turno_profesional` con el schema de referencia:
+
+- `turno`: sucursal, paciente, sala/paquete/diagnóstico (exactamente uno), servicio, profesional nullable, fecha, horas, duración, estado, motivo de cancelación, origen de reprogramación, usuarios de registro/asistencia y `asistencia_registrada_en`.
+- `turno_profesional`: pivote para diagnósticos con varios profesionales (lo poblará 7.5).
+- CHECK PostgreSQL: estado válido, `hora_fin > hora_inicio`, duración positiva y un solo origen.
+- Índices: `(fecha)`, `(sucursal_id, fecha)`, `(paciente_id)`, `(profesional_id)`, `(estado)`, `(sala_id, fecha)`.
+- FKs de usuario a `users` (tabla física real).
+- `TurnoFactory` solo para tests; `AgendaTurnosDemoSeeder` es local, no está en `DatabaseSeeder`.
+
+El modelo `Turno` es de lectura en esta entrega; incluye casts de fecha/horas/estado, scopes por sucursal, rango, estado, profesional, sala, servicios y orden.
+
+### Endpoints
+
+Prefijo real: **`/api/agenda-turnos/agenda-semanal`**.
+
+| Método | Ruta | Query | Permiso |
+|---|---|---|---|
+| GET | `/` | `GetAgendaSemana` | `turno.ver` |
+| GET | `/opciones` | `GetOpcionesFiltros` | `turno.ver` |
+| GET | `/sucursales` | `GetSucursalesDisponibles` | `turno.ver` |
+| GET | `/turnos/{id}` | `GetTurnoDetalle` | `turno.ver` |
+| GET | `/exportar` | `GetAgendaExportData` + `AgendaExporterContract` | `turno.exportar` |
+
+Parámetros: `sucursal_id`, `semana` (`YYYY-MM-DD`; se normaliza al lunes), `area_id`, `sala_id`, `sala_sin_asignar`, `profesional_id`, `profesional_sin_asignar`, `servicio_id`, `estado`.
+
+La respuesta de semana incluye sucursal, días visibles, rango horario, turnos, resumen por estado, avisos de días ocultos, disponibilidad de datos y zona horaria. El detalle incluye `acciones`, `acciones_disponibles` y `mensaje_acciones`.
+
+### Alcance, semana y colores
+
+- **Scope explícito** en cada Query con `UserBranchAccessContract`; nunca `GlobalScope`. Sin sucursales → `403 SIN_SUCURSALES_ASIGNADAS`; sucursal ajena → `403 BRANCH_ACCESS_DENIED`. La predeterminada es la primera asignada activa ordenada por nombre.
+- **Semana**: lunes a domingo como rango de consulta; los días visibles salen de `agenda.dias_semana_habilitados` (default 1–6). Si hay turnos en días ocultos, se devuelve un aviso con cantidad y fechas.
+- **Rango horario**: `agenda.horario_apertura`/`agenda.horario_cierre` expandido por los turnos visibles y redondeado a 30 minutos.
+- **Colores**: salen del área del servicio en Catálogo; `ContrasteColorRule` calcula el texto. Un color inválido no se aplica.
+- **Resumen**: cuenta sobre turnos filtrados y visibles (`base = turnos_filtrados_visibles`).
+- **Zona horaria**: `config('app.timezone')` / `America/La_Paz`. “Hoy” se inyecta a las reglas.
+
+### Datos de otros módulos
+
+Se agregaron métodos batch aditivos, con tests propios, para evitar N+1:
+
+- `PatientDirectoryContract::nombres(array $ids)`.
+- `ProfessionalDirectoryContract::nombres(array $ids)` y `nombresPorSucursal(int $id, bool $soloActivos = true)`.
+- `SalaDirectoryContract::nombres(array $ids)` y `nombresPorSucursal(int $id, bool $soloActivas = true)`.
+- `BranchDirectoryContract::resumenes(array $ids)` + `BranchResumen`.
+
+`DatosOperativosResolver` resuelve pacientes, profesionales, salas, servicios y áreas una vez por request. Si un contrato falla, el dominio queda `disponible=false`, los campos afectados en `null` y la UI muestra **“No disponible”**. Nunca se inventan datos.
+
+### Permisos y acciones
+
+Seeder `AgendaTurnosPermissionSeeder` (marcador `agenda.agenda_semanal`):
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `turno.ver` | sí | sí | sí |
+| `turno.exportar` | sí | sí | no |
+
+`AccionesTurnoRegistry` es el punto de integración de 7.3/7.4: sus providers registran `AccionTurnoDefinicion` y `AccionesDisponiblesRule` filtra por estado, permisos y acciones ya ejecutadas. En 7.1 no hay acciones registradas; el detalle muestra un aviso. **No se crean permisos de asistencia/reprogramación/cancelación.**
+
+### Frontend e integración
+
+La ruta frontend es `/agenda-turnos/agenda-semanal` (con redirect desde `/agenda`) y usa `turno.ver`. La vista semanal usa FullCalendar 7.0.2 con plugins gratuitos (`timegrid`); las vistas por profesional/sala se resuelven con un tablero agrupado, sin `resource-timegrid` premium.
+
+RF-012 queda preparado con `AgendaRefreshService.notificarCambio()` y refresco periódico configurable (`environment.agendaRefreshSeconds`). No hay websockets.
+
+La exportación PDF usa `AgendaExporterContract` + `UnavailableAgendaExporter`: responde `503 EXPORTACION_NO_DISPONIBLE` hasta instalar infraestructura. La alternativa de vista imprimible se implementa en el frontend con `@media print`.
+
+### Tests
+
+- Unit: semana (incluye 23:30/00:30 en La Paz), resumen, sin asignar, acciones, contraste y rango horario.
+- Feature: 500 turnos sin crecimiento de consultas, navegación, colores, sin asignar, filtros, detalle, scope, domingo oculto/configurable, resumen, exportación 503, permisos, contratos caídos y opciones.
+- Batch contracts: Pacientes, Profesionales, Salas y Sucursales.
+
+**Pendientes:** 7.2 programación, 7.3 reprogramación/cancelación, 7.4 asistencia, 7.5 multi-profesional, implementación real de `TurnosFuturos*`/`ConsumoPaquete*`/`ProfessionalScheduleContract` y PDF backend.
+
+---
+
 ## Notas
 
-- No se agregaron librerías de PDF/Excel ni se modificó ningún otro módulo de negocio.
+- No se agregaron librerías de PDF/Excel. Los únicos cambios en módulos existentes son métodos batch de lectura acordados en `PatientDirectoryContract`, `ProfessionalDirectoryContract`, `SalaDirectoryContract` y `BranchDirectoryContract`, con tests propios; no se alteró su comportamiento previo.
 - El login real está implementado en la Fase 1 del módulo 02 y el alcance real por sucursal está activo desde la Fase 2. La UI obtiene token mediante el interceptor y las páginas de 01/02/03 ya respetan las sucursales asignadas.
 - `database/database.md` y `database/talitacumi_schema.sql` se actualizaron con la implementación real: `users` es la tabla física, Spatie administra roles/permisos y Sanctum usa `personal_access_tokens`. Las definiciones `usuario`/`rol`/`permiso`/`sesion` del SQL quedan como referencia aspiracional.
 - Si se reconstruye la imagen con `--no-dev`, volver a ejecutar `composer install` dentro del contenedor para correr tests.

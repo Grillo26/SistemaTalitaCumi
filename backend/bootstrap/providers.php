@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\AgendaTurnos\Providers\AgendaTurnosServiceProvider;
 use App\Modules\CatalogoServicios\Providers\CatalogoServiciosServiceProvider;
 use App\Modules\InscripcionesAtenciones\Providers\InscripcionesAtencionesServiceProvider;
 use App\Modules\Organizacion\Providers\OrganizacionServiceProvider;
@@ -16,4 +17,5 @@ return [
     PacientesServiceProvider::class,
     CatalogoServiciosServiceProvider::class,
     InscripcionesAtencionesServiceProvider::class,
+    AgendaTurnosServiceProvider::class,
 ];

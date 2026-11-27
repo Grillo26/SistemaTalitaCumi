@@ -24,6 +24,31 @@ final class EloquentBranchDirectory implements BranchDirectoryContract
             ->exists();
     }
 
+    /**
+     * @param  list<int>  $sucursalIds
+     * @return array<int, BranchResumen>
+     */
+    public function resumenes(array $sucursalIds): array
+    {
+        $ids = array_values(array_unique(array_map(
+            static fn (mixed $id): int => (int) $id,
+            array_filter($sucursalIds, static fn (mixed $id): bool => (int) $id > 0),
+        )));
+
+        if ($ids === []) {
+            return [];
+        }
+
+        $resumenes = [];
+
+        foreach (Branch::query()->whereIn('id', $ids)->get() as $branch) {
+            $resumen = BranchResumen::fromBranch($branch);
+            $resumenes[$resumen->id] = $resumen;
+        }
+
+        return $resumenes;
+    }
+
     public function asegurarActiva(int $sucursalId): void
     {
         $branch = Branch::query()

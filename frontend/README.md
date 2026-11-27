@@ -79,7 +79,8 @@ Todas las rutas están dentro del layout principal y protegidas por `authGuard`.
 | Ruta | Módulo |
 |---|---|
 | `/` | Inicio |
-| `/agenda` | Agenda |
+| `/agenda-turnos/agenda-semanal` | Agenda semanal por sucursal (solo consulta) |
+| `/agenda` | Redirige a `/agenda-turnos/agenda-semanal` |
 | `/pacientes` | Pacientes: listado, ficha, alta/edición, estados y tutores principales |
 | `/pacientes/:id` | Ficha del paciente |
 | `/pacientes/:id/resumen` | Ficha resumen de solo lectura con indicadores y acciones frecuentes (04.04) |
@@ -108,7 +109,7 @@ Todas las rutas están dentro del layout principal y protegidas por `authGuard`.
 | `/seguridad/roles-permisos` | Matriz de roles y permisos |
 | `/seguridad/bitacora` | Consulta y reconstrucción de bitácora |
 
-Las rutas `/pacientes`, `/profesionales`, `/organizacion/sucursales`, `/organizacion/salas-ambientes`, `/organizacion/configuracion`, `/seguridad/usuarios`, `/seguridad/roles-permisos`, `/seguridad/bitacora` y `/inscripciones-atenciones/salas-grupales` ya están implementadas y consumen la API real del backend. Los módulos sin implementar muestran un estado vacío reutilizable (`app-module-placeholder`). `/pacientes` usa `permissionGuard` con `paciente.ver` y el sidebar oculta la entrada sin permiso.
+Las rutas `/pacientes`, `/profesionales`, `/organizacion/sucursales`, `/organizacion/salas-ambientes`, `/organizacion/configuracion`, `/seguridad/usuarios`, `/seguridad/roles-permisos`, `/seguridad/bitacora`, `/inscripciones-atenciones/salas-grupales` y `/agenda-turnos/agenda-semanal` ya están implementadas y consumen la API real del backend. Los módulos sin implementar muestran un estado vacío reutilizable (`app-module-placeholder`). `/pacientes` usa `permissionGuard` con `paciente.ver` y el sidebar oculta la entrada sin permiso.
 
 ### Páginas de referencia
 
@@ -1596,3 +1597,51 @@ Reutiliza `InscripcionPacienteSearchComponent` y `InscripcionDateInputComponent`
 **Permisos:** `estado.ver`, `estado.reportes`, `estado.exportar`, `inscripcion.pausar`, `inscripcion.reactivar`; el retiro de inscripción exige `inscripcion.retirar`/`paquete.retirar`; el paciente exige `paciente.cambiar_estado` o `paciente.retirar`. Recepción consulta y pausa/reactiva inscripciones; Administración ejecuta los cambios de paciente y los retiros.
 
 **Estado:** implementado contra API real. Pendientes: integración de los componentes en las fichas de Pacientes/Salas/Paquetes, motivos administrables en tabla, Agenda (07), Pagos (08), alertas de próximo pago y PDF/Excel.
+
+### 35. Agenda semanal por sucursal
+
+**Ruta:** `/agenda-turnos/agenda-semanal` (con redirect desde `/agenda`).
+**Entrada de sidebar:** `Agenda` (visible con `turno.ver`).
+**Guard:** `permissionGuard` con `turno.ver`.
+
+**Archivos:**
+
+- `src/app/pages/agenda-turnos/agenda-semanal/agenda-semanal.page.ts`
+- `src/app/pages/agenda-turnos/agenda-semanal/agenda-semanal.page.html`
+- `src/app/pages/agenda-turnos/agenda-semanal/agenda-semanal.routes.ts`
+- `src/app/pages/agenda-turnos/agenda-semanal/agenda-semanal.service.ts`
+- `src/app/pages/agenda-turnos/agenda-semanal/agenda-semanal.models.ts`
+- `src/app/pages/agenda-turnos/agenda-semanal/agenda-semanal.constants.ts`
+- `src/app/pages/agenda-turnos/agenda-semanal/agenda-semanal.utils.ts`
+- `components/agenda-toolbar`, `agenda-filtros`, `agenda-calendario`, `agenda-vista-agrupada`, `turno-detalle-panel`, `resumen-semana`, `agenda-impresion`
+- `src/app/core/services/agenda-refresh.service.ts`
+
+**API consumida:**
+
+| Método | Endpoint | Acción |
+|---|---|---|
+| GET | `/api/agenda-turnos/agenda-semanal` | Semana, turnos, resumen y avisos |
+| GET | `/api/agenda-turnos/agenda-semanal/opciones` | Áreas, salas, servicios, profesionales y estados |
+| GET | `/api/agenda-turnos/agenda-semanal/sucursales` | Sucursales asignadas y predeterminada |
+| GET | `/api/agenda-turnos/agenda-semanal/turnos/{id}` | Detalle y acciones disponibles |
+| GET | `/api/agenda-turnos/agenda-semanal/exportar` | PDF (503 mientras falta infraestructura) |
+
+**Funcionalidad:**
+
+- Selector de sucursal solo con las asignadas; navegación semana anterior/siguiente/hoy; día actual destacado.
+- Grilla semanal FullCalendar 7 con plugins gratuitos (`timegrid`); sin `resource-timegrid` premium.
+- Vistas **Semana**, **Por profesional** y **Por sala** con el mismo conjunto de datos agrupado. Grupos “Sin asignar” y “Sin sala”.
+- Turnos con paciente, servicio, sala, estado con texto/icono, marca “Sin asignar” y color del área del Catálogo con texto de contraste. El color solo se aplica al bloque y se valida como hex.
+- Filtros por área, sala, profesional (con “Sin asignar”), servicio y estado; debounce de 300 ms. Una sola fuente de verdad en backend.
+- Resumen al pie por estado sobre turnos filtrados visibles.
+- Detalle en panel lateral con datos operativos; sin edición directa ni drag-and-drop. Acciones de 7.3/7.4 vacías por ahora con aviso claro.
+- Exportar PDF solo con `turno.exportar`; si falta infraestructura muestra el error del backend. Botón **Imprimir** con vista `@media print` de respaldo.
+- Refresco sin recargar la página: `AgendaRefreshService` + polling configurable (`environment.agendaRefreshSeconds`, 60 s; 0 lo desactiva). Sin websockets.
+- Mensajes “Sin turnos para esta semana”, “Sin turnos para este profesional” y error de sucursales no asignadas.
+- Si un contrato de Pacientes/Profesionales/Salas falla, los campos muestran “No disponible” y la agenda sigue funcionando.
+
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-select-field`, `input[app-input]`, `ToastService`, `FullCalendarModule` y `AgendaRefreshService`.
+
+**Permisos:** `turno.ver` para la ruta y las consultas; `turno.exportar` para el botón PDF. El backend revalida siempre.
+
+**Estado:** implementado contra API real. Pendientes: acciones reales de 7.3/7.4, PDF backend y 7.5 multi-profesional.

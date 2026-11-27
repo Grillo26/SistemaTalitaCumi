@@ -84,7 +84,8 @@ export class AppSidebarComponent {
     },
     {
       name: 'Agenda',
-      path: '/agenda',
+      path: '/agenda-turnos/agenda-semanal',
+      permission: 'turno.ver',
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.25" y="4.75" width="17.5" height="16" rx="2"/><path d="M7.5 2.75v4M16.5 2.75v4M3.25 9.25h17.5"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/></svg>',
     },
     {
