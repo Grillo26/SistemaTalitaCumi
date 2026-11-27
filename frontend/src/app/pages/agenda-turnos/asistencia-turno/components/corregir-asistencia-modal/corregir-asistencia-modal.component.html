@@ -1,0 +1,109 @@
+<app-modal
+  [open]="open()"
+  size="md"
+  [title]="texts.warningTitle"
+  [subtitle]="data()?.turno?.paciente?.nombre ?? ''"
+  [showFooter]="true"
+  (closed)="cerrar()"
+>
+  <div modal-body class="space-y-4">
+    @if (error(); as message) {
+      <app-alert variant="error" title="No se pudo corregir" [message]="message" />
+    }
+
+    @if (data(); as data) {
+      <app-alert variant="warning" [title]="texts.warningTitle" [message]="texts.warning" />
+
+      <div class="rounded-xl border border-gray-200 p-4 text-sm dark:border-gray-800">
+        <p class="font-medium text-gray-800 dark:text-white/90">
+          {{ data.turno.paciente.nombre }} · {{ fecha(data.turno.fecha) }}
+          {{ data.turno.hora_inicio }}–{{ data.turno.hora_fin }}
+        </p>
+        <p class="mt-1 text-gray-600 dark:text-gray-300">
+          {{ texts.current }}:
+          <strong>{{ estadoLabel[data.turno.estado] ?? data.turno.estado }}</strong>
+          → <strong>{{ data.correccion.destino_label ?? '—' }}</strong>
+        </p>
+        @if (data.correccion.fuera_ventana) {
+          <p class="mt-1 text-xs text-warning-600 dark:text-warning-400">
+            {{ texts.windowClosed }}
+          </p>
+        } @else {
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {{ texts.windowOpen }}
+          </p>
+        }
+      </div>
+
+      <div class="grid gap-3 sm:grid-cols-2">
+        <div class="rounded-xl border border-gray-200 p-3 text-sm dark:border-gray-800">
+          <p class="text-xs font-medium uppercase tracking-wide text-gray-400">{{ texts.balance }}</p>
+          @if (data.efecto?.saldo?.disponible) {
+            <p class="mt-1 text-gray-700 dark:text-gray-300">
+              {{ data.efecto?.saldo?.mensaje }}
+            </p>
+          } @else {
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ data.efecto?.saldo?.mensaje ?? texts.balanceUnavailable }}
+            </p>
+          }
+        </div>
+
+        <div class="rounded-xl border border-gray-200 p-3 text-sm dark:border-gray-800">
+          <p class="text-xs font-medium uppercase tracking-wide text-gray-400">{{ texts.indicators }}</p>
+          @if (data.efecto?.indicadores?.disponible) {
+            <p class="mt-1 text-gray-700 dark:text-gray-300">
+              {{ data.efecto?.indicadores?.porcentaje_actual?.toFixed(2) }}% →
+              {{ data.efecto?.indicadores?.porcentaje_resultante?.toFixed(2) }}%
+            </p>
+          } @else {
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ data.efecto?.indicadores?.mensaje ?? texts.indicatorsUnavailable }}
+            </p>
+          }
+        </div>
+      </div>
+
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          {{ texts.reason }} @if (requiereMotivo()) { * }
+        </label>
+        <textarea
+          app-textarea
+          rows="2"
+          maxlength="500"
+          [value]="motivo()"
+          [placeholder]="texts.reasonPlaceholder"
+          (input)="motivo.set($any($event.target).value)"
+        ></textarea>
+        @if (requiereMotivo()) {
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ texts.reasonRequired }}</p>
+        }
+      </div>
+
+      <label class="flex items-start gap-2 rounded-xl border border-gray-200 p-3 text-sm text-gray-700 dark:border-gray-800 dark:text-gray-300">
+        <input
+          type="checkbox"
+          class="mt-0.5 size-4"
+          [checked]="confirmar()"
+          (change)="confirmar.set($any($event.target).checked)"
+        />
+        <span>{{ texts.confirmCheck }}</span>
+      </label>
+    }
+  </div>
+
+  <div modal-footer class="flex flex-wrap justify-end gap-2">
+    <button app-button variant="outline" type="button" [disabled]="saving()" (click)="cerrar()">
+      {{ texts.cancel }}
+    </button>
+    <button
+      app-button
+      type="button"
+      [disabled]="!puedeConfirmar()"
+      (click)="confirmarCorreccion()"
+    >
+      {{ saving() ? texts.saving : texts.confirm }}
+    </button>
+  </div>
+</app-modal>

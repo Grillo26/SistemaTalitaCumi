@@ -2840,9 +2840,9 @@ Listener `RecordPaqueteAudit`, síncrono y fail-closed (`503 AUDIT_UNAVAILABLE`)
 
 Contratos nuevos, sin tocar los de Salas:
 
-- `ConsumoPaqueteContract` / `StubConsumoPaqueteContract` (503: Agenda y turnos).
+- `ConsumoPaqueteContract` / implementación real de Agenda (07.04).
 - `PagoPaqueteContract` / `StubPagoPaqueteContract` (503: Pagos y caja).
-- `TurnosFuturosPaqueteContract` / `StubTurnosFuturosPaqueteContract` (503: Agenda y turnos).
+- `TurnosFuturosPaqueteContract` / implementación real de Agenda (07.03).
 - `ComprobantePaquetePdfExporterContract` / `UnavailableComprobantePaquetePdfExporter` (503: PDF).
 - `ExportPaquetesQuery` reutiliza `InscripcionExporterContract`; sin infraestructura responde 503.
 
@@ -2866,8 +2866,8 @@ Contratos nuevos, sin tocar los de Salas:
 | RF-006 | `PatientDirectoryContract::asegurarPermiteInscripcion` | Completo |
 | RF-007 | `TarifaAplicableResolverContract` + categoría | Completo |
 | RF-008 | `PreviewMontoPaqueteQuery` + `MontoPaqueteRule` | Completo |
-| RF-009 | `GetConsumoPaqueteQuery` + pestaña Consumo | Completo con contrato stub |
-| RF-010 | `ConsumoPaqueteContract` preparado para Agenda | Pendiente módulo 07 |
+| RF-009 | `GetConsumoPaqueteQuery` + pestaña Consumo | Completo con contrato real de Agenda |
+| RF-010 | `ConsumoPaqueteContract` implementado por 07.04 | Completo |
 | RF-011 | `ListPaquetesQuery` + filtros frontend | Completo |
 | RF-012 | `UpdatePaqueteAction` + bitácora antes/después | Completo |
 | RF-013 | `RenovarPaqueteAction` + `paquete_origen_id` | Completo |
@@ -3274,7 +3274,7 @@ Seeder `AgendaTurnosPermissionSeeder` (marcador `agenda.agenda_semanal`):
 | `turno.ver` | sí | sí | sí |
 | `turno.exportar` | sí | sí | no |
 
-`AccionesTurnoRegistry` es el punto de integración de 7.3/7.4: sus providers registran `AccionTurnoDefinicion` y `AccionesDisponiblesRule` filtra por estado, permisos y acciones ya ejecutadas. En 7.1 no hay acciones registradas; el detalle muestra un aviso. **No se crean permisos de asistencia/reprogramación/cancelación.**
+`AccionesTurnoRegistry` es el punto de integración de 7.3/7.4: 7.3 registra reprogramar/cancelar/historial; 07.04 integra la asistencia desde su propio componente en el panel de detalle y desde FullCalendar. `AccionesDisponiblesRule` sigue filtrando por estado, permisos y acciones ya ejecutadas.
 
 ### Frontend e integración
 
@@ -3290,7 +3290,7 @@ La exportación PDF usa `AgendaExporterContract` + `UnavailableAgendaExporter`: 
 - Feature: 500 turnos sin crecimiento de consultas, navegación, colores, sin asignar, filtros, detalle, scope, domingo oculto/configurable, resumen, exportación 503, permisos, contratos caídos y opciones.
 - Batch contracts: Pacientes, Profesionales, Salas y Sucursales.
 
-**Pendientes:** 7.2 programación, 7.3 reprogramación/cancelación, 7.4 asistencia, 7.5 multi-profesional, implementación real de `TurnosFuturos*`/`ConsumoPaquete*`/`ProfessionalScheduleContract` y PDF backend.
+**Pendientes:** 7.5 multi-profesional, `ProfessionalScheduleContract` y PDF backend. 7.2, 7.3 y 7.4 están implementados.
 
 ---
 
@@ -3413,7 +3413,7 @@ Además, cada endpoint de origen exige el permiso de vista del origen (`inscripc
 ### Conexiones pendientes con Inscripciones
 
 - `TurnosFuturosInscripcionContract` y `TurnosFuturosPaqueteContract` todavía apuntan a stubs; pueden implementarse contra `turno` sin depender de 7.4. No se reemplazaron en esta entrega para no alterar el comportamiento de pausa/baja.
-- `ConsumoPaqueteContract`, `ConsumoPaqueteBatchContract` y `AsistenciaInscripcionContract` dependen de Asistió/Faltó (7.4); deben esperar.
+- `ConsumoPaqueteContract`, `ConsumoPaqueteBatchContract` y `AsistenciaInscripcionContract` fueron implementados por 07.04 sobre `turno`; no escriben contadores de 06.
 - Los botones “Generar turnos” de las fichas de Salas y Paquetes navegan a `/agenda-turnos/programacion-turnos?tipo=...&id=...&accion=generar`. No se generan turnos automáticamente al crear, renovar o editar.
 - El seeder demo de 7.1 (`AgendaTurnosDemoSeeder`) sigue siendo solo local y no es fuente de turnos de 7.2. Para pruebas manuales conviene generar desde un paquete real.
 
@@ -3432,7 +3432,7 @@ Ruta `/agenda-turnos/programacion-turnos` con `permissionGuard` `turno.ver` y en
 - Feature: generación CA-001, preview sin persistir CA-002, solapamiento paciente/profesional CA-003/CA-004, fuera de vigencia CA-005, sin profesional CA-006, regeneración CA-007, transaccionalidad CA-008, sucursal CA-009, bitácora CA-010, idempotencia/doble envío, origen ya generado, feriados, grupo sin falsos bloqueos, asignación todo o nada, 50 turnos sin N+1, sin DELETE, sala sin patrón y contrato de origen.
 - `OrigenTurnosContractTest` y `SalaPatronContractTest` cubren las conexiones cross-módulo.
 
-**Pendientes:** RF-001 real (patrón de sala), RNF-010 PDF (503 + vista imprimible), `ConsumoPaquete*` y `AsistenciaInscripcion` (7.4), y sincronización opcional del profesional del paquete (decisión de Inscripciones). Los contratos `TurnosFuturos*` se implementaron en 7.3.
+**Pendientes:** RF-001 real (patrón de sala), RNF-010 PDF (503 + vista imprimible), sincronización opcional del profesional del paquete (decisión de Inscripciones). Los contratos `TurnosFuturos*`, `ConsumoPaquete*` y `AsistenciaInscripcion` quedaron implementados en 7.3/07.04.
 
 ---
 
@@ -3539,7 +3539,7 @@ WhatsApp requiere además `tutor.ver_contacto` (Recepción ya lo tiene). El back
 - `TurnoCancelado(turnoId, sucursalId, pacienteId, fecha, horaInicio, horaFin, motivo, consumeSaldo, advertencias, actorId, ip, masivo, loteId)`.
 - `TurnosCanceladosMasivamente(loteId, pacienteId, entidades, turnoIds, sucursales, motivo, actorId, ip)`.
 - `RecordCambiosTurnoAudit` escribe bitácora/historial fail-closed.
-- `TurnosFuturosInscripcionContract` y `TurnosFuturosPaqueteContract` ahora tienen implementación real en Agenda (`EloquentTurnosFuturos*`) bindeada en Inscripciones; el pre-chequeo de pausa/baja devuelve cantidades reales. `ConsumoPaquete*` y `AsistenciaInscripcionContract` siguen en stub hasta 7.4.
+- `TurnosFuturosInscripcionContract` y `TurnosFuturosPaqueteContract` ahora tienen implementación real en Agenda (`EloquentTurnosFuturos*`) bindeada en Inscripciones; el pre-chequeo de pausa/baja devuelve cantidades reales. `ConsumoPaquete*` y `AsistenciaInscripcionContract` fueron implementados por 07.04.
 - `CambiosTurnosExporterContract` + `Unavailable` para PDF/Excel (503).
 
 ### Frontend
@@ -3555,7 +3555,157 @@ WhatsApp requiere además `tutor.ver_contacto` (Recepción ya lo tiene). El back
 - Feature: CA-001 a CA-010, transacción con fallo, doble envío, sucursal, WhatsApp, reporte/scoping, export 503, snapshot inmutable, no DELETE.
 - Conexiones: tests de 7.1, 7.2 e Inscripciones/Estados actualizados al comportamiento real de `TurnosFuturos*`.
 
-**Pendientes:** RF-008 real (7.4/consumo), RF-009 completo (7.4 asistencias/faltas), exportación PDF/Excel, autorización expresa de Administración para Faltó (fuera de alcance), reprogramación de una sala completa (limitación documentada).
+**Pendientes:** exportación PDF/Excel, autorización expresa de Administración para Faltó (fuera de alcance), reprogramación de una sala completa (limitación documentada) y decisión sobre cancelaciones 07.03 con `consume_saldo` en el saldo de 06.02.
+
+---
+
+## Módulo 07 — Agenda y turnos (submódulo 04: registro de asistencia)
+
+Implementación de `docs/07_AGENDA_TURNOS/04_registro_asistencia_turno.md` (07.04/RF-001 a 07.04/RF-015, 07.04/RN-001 a 07.04/RN-010, 07.04/CU-01 a 07.04/CU-03, 07.04/CA-001 a 07.04/CA-010). Reutiliza `turno`, `EstadoTurno`, `AccionCambioTurno`, `AgendaAccessScope`, `bitacora`, `AgendaRefreshService` y los contratos de lectura de 06.01/06.02 y 04.04. No implementa 07.03 ni 07.05.
+
+### Estructura
+
+```text
+app/Modules/AgendaTurnos/
+├── Actions/Asistencia/          RegistrarAsistencia, CorregirAsistencia
+├── Contracts/                   EloquentAsistenciaInscripcion, EloquentConsumoPaquete,
+│                                EloquentConsumoPaqueteBatch, EloquentPatientAttendanceSummary,
+│                                AsistenciaPdfExporterContract, UnavailableAsistenciaPdfExporter
+├── Enums/                       AsistenciaEvento
+├── Events/                      AsistenciaRegistrada, AsistenciaCorregida
+├── Exceptions/                  TurnoNoAsistible, AsistenciaYaRegistrada,
+│                                AsistenciaFueraDeVentana, MotivoAsistenciaRequerido,
+│                                TurnoVersionConflicto, ConfiguracionAsistenciaNoDisponible,
+│                                ExportacionAsistenciaNoDisponible
+├── Http/                        Controllers/Asistencia, Requests/Asistencia, Resources/Asistencia
+├── Listeners/                   RecordAsistenciaAudit
+├── Providers/                   AsistenciaTurnosServiceProvider
+├── Queries/Asistencia/          GetAsistenciaTurno, GetIndicadoresAsistencia,
+│                                GetResumenDiarioAsistencia, ExportarAsistenciaCsv
+├── Rules/                       TransicionAsistencia, TurnoAsistible, VentanaEdicionAsistencia,
+│                                MotivoAsistencia, PorcentajeAsistencia, RangoIndicadores
+├── Support/                     AsistenciaAcceso, AsistenciaCalculadora, AsistenciaClock,
+│                                AsistenciaTurnosModule, AsistenciaTurnosPermission,
+│                                SaldoAsistenciaResolver, IndicadorAsistenciaResolver
+└── routes-asistencia.php
+```
+
+### Schema
+
+- `2026_11_29_000100_add_version_to_turno_table.php`: agrega `turno.version` (`unsignedInteger`, default 1). Es la versión optimista de 07.04; 07.03 no la incrementa, pero el estado `cancelado/reprogramado` bloquea la asistencia.
+- No se crean columnas de asistencia: `usuario_asistencia_id` y `asistencia_registrada_en` ya existen desde la tabla base.
+- No se crea tabla de historial: la bitácora es el historial (`entidad='turno'`, `accion=ASISTIO|FALTO`, `datos_nuevos.evento`, `fuera_ventana`, `motivo`).
+- El saldo sigue siendo derivado de 06.02; 07.04 no escribe contadores ni tablas de Inscripciones.
+
+### Máquina de estados
+
+| Desde | Hacia | Quién |
+|---|---|---|
+| `programado` | `asistio` / `falto` | 07.04 |
+| `asistio` | `falto` | 07.04 (corrección) |
+| `falto` | `asistio` | 07.04 (corrección) |
+| `cancelado` / `reprogramado` | cualquier asistencia | bloqueado |
+| `asistio` / `falto` | `programado` | no permitido |
+
+`reprogramado` es terminal para el turno original; el turno nuevo nace `programado`. 07.04 solo escribe `ASISTIO`/`FALTO`.
+
+### Ventana y motivo
+
+- `ventana_edicion_asistencia_horas` se lee de Configuración. `0` = sin ventana: toda corrección requiere permiso especial.
+- La ventana corre desde `asistencia_registrada_en` (primer registro) y no se reinicia con cada corrección.
+- Primer registro: desde `fecha + hora_inicio` en `zona_horaria`; no se permite antes. Sin límite superior por defecto (registro tardío permitido).
+- Dentro de ventana: `asistencia.registrar`, motivo opcional.
+- Fuera de ventana: `asistencia.corregir_fuera_ventana`, motivo obligatorio, bitácora crítica.
+- `zona_horaria` se lee con `ParameterReaderContract`; `asistencia_registrada_en` se guarda como timestamp UTC.
+
+### Endpoints
+
+Prefijo **`/api/agenda-turnos/asistencia`**:
+
+| Método | Ruta | Query/Action | Permiso |
+|---|---|---|---|
+| GET | `/turnos/{id}` | `GetAsistenciaTurno` | `asistencia.ver` |
+| POST | `/turnos/{id}/registrar` | `RegistrarAsistencia` | `asistencia.registrar` |
+| POST | `/turnos/{id}/corregir` | `CorregirAsistencia` | `asistencia.registrar`; fuera de ventana exige `asistencia.corregir_fuera_ventana` |
+| GET | `/indicadores` | `GetIndicadoresAsistencia` | `asistencia.ver_indicadores` |
+| GET | `/resumen-diario` | `GetResumenDiarioAsistencia` | `asistencia.resumen_diario` |
+| GET | `/exportar` | `ExportarAsistenciaCsv` / PDF 503 | `asistencia.exportar` |
+
+El historial se reutiliza de 07.03: `GET /api/agenda-turnos/cambios-turnos/turnos/{id}/historial` (`turno.historial`). La bitácora ya incluía `ASISTIO`/`FALTO`; 07.04 agrega `evento` y `fuera_ventana` al presenter. No existe `DELETE`.
+
+### Permisos
+
+Seeder `AsistenciaTurnosPermissionSeeder` (marcador `agenda.asistencia_turnos`):
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `asistencia.ver` | sí | sí | sí |
+| `asistencia.registrar` | sí | sí | sí |
+| `asistencia.corregir_fuera_ventana` | sí | sí | no |
+| `asistencia.ver_indicadores` | sí | sí | sí |
+| `asistencia.resumen_diario` | sí | sí | sí |
+| `asistencia.exportar` | sí | sí | no (SUPUESTO: FP-04 menciona Recepción) |
+
+El backend revalida permisos, sucursal, estado y ventana; `can` por turno se calcula en backend y un turno fuera de alcance responde 404.
+
+### Contratos
+
+- Implementa `AsistenciaInscripcionContract` (06.01), `ConsumoPaqueteContract` y `ConsumoPaqueteBatchContract` (06.02) y `PatientAttendanceSummaryContract` (04.04).
+- Los bindings se hacen en `InscripcionesAtencionesServiceProvider` y `PacientesServiceProvider`.
+- `OrigenTurnosContract` aporta estado efectivo, período y cantidad de sesiones.
+- No hay escritura cruzada: 06.02 sigue calculando el saldo.
+
+### Bitácora
+
+- Registro: `ASISTIO`/`FALTO`, `datos_nuevos.evento=registro`.
+- Corrección: `evento=correccion` o `correccion_fuera_ventana`; `fuera_ventana`; `motivo`.
+- `RecordAsistenciaAudit` es síncrono y fail-closed.
+- No guarda nombres de pacientes, servicios ni datos clínicos. Las lecturas del listado no se auditan.
+- Catálogo `accion_auditada`: `(agenda, turno, ASISTIO)` y `(agenda, turno, FALTO)`.
+
+### Frontend
+
+- Registro rápido en `app-agenda-calendario` (FullCalendar) con botones ✓/✕ en turnos `programado` ya iniciados; refresco con `AgendaRefreshService`.
+- Panel de detalle: `AsistenciaTurnoAccionesComponent` con estado actual, registro, corrección e historial.
+- Corrección: `CorregirAsistenciaModalComponent` con motivo, confirmación y efecto en saldo/indicadores.
+- Ruta `/agenda-turnos/asistencia` con tabs **Indicadores** y **Resumen diario**; exportación CSV solo agregada, sin PDF.
+- Sin dependencias nuevas, sin NgModules.
+
+### Tests
+
+- Unit: transiciones, turno asistible (futuro, origen, período), ventana (borde exacto y 0), motivo, porcentaje, rango.
+- Feature: registro, idempotencia, conflicto de versión, cancelado/reprogramado, futuro, sucursal 404, bitácora fail-closed, corrección dentro/fuera de ventana, motivo, ventana 0, contratos 06.01/06.02/04.04, indicadores, resumen diario, CSV, PDF 503.
+- SQLite y `phpunit.pgsql.xml` para locks/constraints.
+
+### Checklist 07.04
+
+| RF | Estado | Evidencia |
+|---|---|---|
+| 07.04/RF-001 | Completo | `RegistrarAsistencia` + UI agenda/detalle |
+| 07.04/RF-002 | Completo | Saldo derivado + `EloquentConsumoPaquete` |
+| 07.04/RF-003 | Completo | `EstadoTurno` + `TransicionAsistenciaRule` |
+| 07.04/RF-004 | Completo | `VentanaEdicionAsistenciaRule` |
+| 07.04/RF-005 | Completo | `CorregirAsistencia` + `MotivoAsistenciaRule` |
+| 07.04/RF-006 | Completo | Bitácora + historial de 07.03 |
+| 07.04/RF-007 | Completo | Botones ✓/✕ en FullCalendar |
+| 07.04/RF-008 | Completo | `TurnoNoAsistibleException` |
+| 07.04/RF-009 | Completo | `GetIndicadoresAsistencia` |
+| 07.04/RF-010 | Parcial | CSV; PDF 503 |
+| 07.04/RF-011 | Completo | `RecordAsistenciaAudit` |
+| 07.04/RF-012 | Completo | `AsistenciaAcceso` 404 + filtros |
+| 07.04/RF-013 | Completo | Efecto saldo/indicadores en GET |
+| 07.04/RF-014 | Completo | `GetResumenDiarioAsistencia` |
+| 07.04/RF-015 | Completo | `EloquentPatientAttendanceSummary` |
+
+| RN/CU/CA | Estado |
+|---|---|
+| 07.04/RN-001, 07.04/RN-002, 07.04/RN-003, 07.04/RN-005, 07.04/RN-006, 07.04/RN-007, 07.04/RN-008, 07.04/RN-009 | Completos |
+| 07.04/RN-004 | Completo |
+| 07.04/RN-010 | Completo |
+| 07.04/CU-01, 07.04/CU-02, 07.04/CU-03 | Completos |
+| 07.04/CA-001 a 07.04/CA-010 | Completos; 07.04/CA-002/003 visibles vía 06.02 |
+
+**Pendientes:** PDF de 07.04/RF-010 (503), exportación por paciente (privacidad; requiere decisión), “pasar lista” masivo en sala grupal (no implementado), fórmula/período de indicadores marcados PROPUESTO - VALIDAR, y decisión sobre cancelaciones 07.03 con `consume_saldo` en el saldo de 06.02.
 
 ---
 

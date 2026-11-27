@@ -85,5 +85,7 @@ class DatabaseSeeder extends Seeder
         $this->call(CambiosTurnosPermissionSeeder::class);
         $this->call(CambiosTurnosAccionAuditadaSeeder::class);
         $this->call(CambiosTurnosConfiguracionSeeder::class);
+        $this->call(AsistenciaTurnosPermissionSeeder::class);
+        $this->call(AsistenciaTurnosAccionAuditadaSeeder::class);
     }
 }

@@ -63,6 +63,16 @@ export const routes: Routes = [
         title: 'Cambios de turnos | TalitaCumi',
       },
       {
+        path: 'agenda-turnos/asistencia',
+        canActivate: [permissionGuard],
+        data: { permissions: ['asistencia.ver_indicadores', 'asistencia.resumen_diario'] },
+        loadChildren: () =>
+          import('./pages/agenda-turnos/asistencia/asistencia.routes').then(
+            (m) => m.ASISTENCIA_ROUTES,
+          ),
+        title: 'Asistencia | TalitaCumi',
+      },
+      {
         path: 'pacientes',
         canActivate: [permissionGuard],
         data: { permissions: ['paciente.ver', 'tutor.ver', 'ficha_ingreso.ver'] },

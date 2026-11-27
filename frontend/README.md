@@ -1634,7 +1634,7 @@ Reutiliza `InscripcionPacienteSearchComponent` y `InscripcionDateInputComponent`
 - Turnos con paciente, servicio, sala, estado con texto/icono, marca “Sin asignar” y color del área del Catálogo con texto de contraste. El color solo se aplica al bloque y se valida como hex.
 - Filtros por área, sala, profesional (con “Sin asignar”), servicio y estado; debounce de 300 ms. Una sola fuente de verdad en backend.
 - Resumen al pie por estado sobre turnos filtrados visibles.
-- Detalle en panel lateral con datos operativos; sin edición directa ni drag-and-drop. Acciones de 7.3/7.4 vacías por ahora con aviso claro.
+- Detalle en panel lateral con datos operativos; sin edición directa ni drag-and-drop. Las acciones de 7.3 y 7.4 ya están integradas.
 - Exportar PDF solo con `turno.exportar`; si falta infraestructura muestra el error del backend. Botón **Imprimir** con vista `@media print` de respaldo.
 - Refresco sin recargar la página: `AgendaRefreshService` + polling configurable (`environment.agendaRefreshSeconds`, 60 s; 0 lo desactiva). Sin websockets.
 - Mensajes “Sin turnos para esta semana”, “Sin turnos para este profesional” y error de sucursales no asignadas.
@@ -1644,7 +1644,7 @@ Reutiliza `InscripcionPacienteSearchComponent` y `InscripcionDateInputComponent`
 
 **Permisos:** `turno.ver` para la ruta y las consultas; `turno.exportar` para el botón PDF. El backend revalida siempre.
 
-**Estado:** implementado contra API real. Pendientes: acciones reales de 7.3/7.4, PDF backend y 7.5 multi-profesional.
+**Estado:** implementado contra API real. Pendientes: PDF backend y 7.5 multi-profesional. Las acciones de asistencia, reprogramación y cancelación están integradas.
 
 ### 36. Programación de turnos y patrones de días
 
@@ -1744,4 +1744,43 @@ Reutiliza `InscripcionPacienteSearchComponent` y `InscripcionDateInputComponent`
 
 **Permisos:** `turno.reprogramar`, `turno.cancelar`, `turno.historial` (Recepción/Administración); `turno.cancelar_masivo`, `turno.reporte_cambios`, `turno.exportar_cambios` (Administración); `tutor.ver_contacto` para WhatsApp. El backend revalida permisos y sucursal.
 
-**Estado:** implementado contra API real. Pendientes: saldo real (7.4/consumo), asistencias/faltas en el historial (7.4), exportación PDF/Excel (infraestructura) y autorización expresa de Administración para reprogramar Faltó (fuera de alcance).
+**Estado:** implementado contra API real. Pendientes: exportación PDF/Excel (infraestructura) y autorización expresa de Administración para reprogramar Faltó (fuera de alcance). El saldo real y el historial de asistencias/faltas quedaron integrados con 07.04.
+
+### 38. Registro de asistencia por turno
+
+**Ruta:** `/agenda-turnos/asistencia`.
+**Entrada de sidebar:** `Asistencia` (visible con `asistencia.ver_indicadores`).
+**Guard:** `permissionGuard` con cualquiera de `asistencia.ver_indicadores` o `asistencia.resumen_diario`.
+
+**Archivos:**
+
+- `src/app/pages/agenda-turnos/asistencia-turno/asistencia-turno.models.ts|service.ts`
+- `.../components/asistencia-turno-acciones/`
+- `.../components/corregir-asistencia-modal/`
+- `src/app/pages/agenda-turnos/asistencia/asistencia.page.ts|html|routes.ts`
+- `.../components/indicadores-asistencia/`
+- `.../components/resumen-diario-asistencia/`
+
+**API consumida:**
+
+| Método | Endpoint | Acción |
+|---|---|---|
+| GET | `/api/agenda-turnos/asistencia/turnos/{id}` | Estado, `can` por ventana y efecto de corrección |
+| POST | `.../turnos/{id}/registrar` | Asistió/Faltó en un clic |
+| POST | `.../turnos/{id}/corregir` | Corrección con versión y motivo |
+| GET | `.../indicadores` | Agregados por paciente/sala/servicio/profesional/sucursal/día |
+| GET | `.../resumen-diario` | Atendidos, faltados, cancelados y pendientes |
+| GET | `.../exportar` | CSV compatible con Excel; PDF 503 |
+
+**Funcionalidad:**
+
+- Botones ✓/✕ directamente en el evento de FullCalendar para turnos `programado` ya iniciados. Un clic, botón bloqueado durante el envío, toast y refresco de la agenda.
+- `AsistenciaTurnoAccionesComponent` en el panel de detalle: estado actual, registro, corrección e historial. Si la ventana venció y el usuario no tiene permiso, muestra “Contactá a Administración”.
+- `CorregirAsistenciaModalComponent`: aviso de efecto en saldo/indicadores, motivo obligatorio fuera de ventana, confirmación explícita y manejo de 409 por versión.
+- Página de indicadores con filtros de período, sucursal y agrupación; tabla, totales y paginación; sin resultados sugiere ampliar el rango. Resumen diario con tarjetas y detalle por sala.
+- Exportación CSV solo por agregados (no por paciente), con BOM UTF-8 y `;`. Sin botón PDF; si se pide PDF, el backend responde 503.
+- Errores 401/403/404/409/422/503 con `app-alert` y mensajes del backend. Reutiliza `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-alert`, `app-badge`, `app-modal`, `app-pagination`, `app-select-field`, `input[app-input]`, `textarea[app-textarea]`, `ToastService` y `AgendaRefreshService`.
+
+**Permisos:** `asistencia.ver`, `asistencia.registrar` (Recepción/Administración); `asistencia.corregir_fuera_ventana` y `asistencia.exportar` (Administración); `asistencia.ver_indicadores` y `asistencia.resumen_diario` (Recepción/Administración). El backend revalida permisos, sucursal, estado y ventana.
+
+**Estado:** implementado contra API real. Pendientes: PDF (infraestructura), exportación por paciente (decisión de privacidad), “pasar lista” masivo en sala grupal y validación funcional de la fórmula/período de indicadores.

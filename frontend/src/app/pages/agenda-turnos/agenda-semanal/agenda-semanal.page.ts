@@ -19,6 +19,8 @@ import { TurnoDetallePanelComponent } from './components/turno-detalle-panel/tur
 import { ReprogramarTurnoModalComponent } from '../cambios-turnos/components/reprogramar-turno-modal/reprogramar-turno-modal.component';
 import { CancelarTurnoModalComponent } from '../cambios-turnos/components/cancelar-turno-modal/cancelar-turno-modal.component';
 import { HistorialTurnoComponent } from '../cambios-turnos/components/historial-turno/historial-turno.component';
+import { AsistenciaTurnoService } from '../asistencia-turno/asistencia-turno.service';
+import type { AsistenciaApiError, EstadoAsistencia } from '../asistencia-turno/asistencia-turno.models';
 import { AGENDA_TEXTS } from './agenda-semanal.constants';
 import {
   EMPTY_FILTROS,
@@ -64,6 +66,7 @@ import {
 export class AgendaSemanalPageComponent implements OnInit {
   private readonly service = inject(AgendaSemanalService);
   private readonly refreshService = inject(AgendaRefreshService);
+  private readonly asistenciaService = inject(AsistenciaTurnoService);
   private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
   private readonly document = inject(DOCUMENT);
@@ -101,8 +104,13 @@ export class AgendaSemanalPageComponent implements OnInit {
   readonly cancelarTurnoId = signal<number | null>(null);
   readonly historialOpen = signal(false);
   readonly historialTurnoId = signal<number | null>(null);
+  readonly guardandoAsistencia = signal<number | null>(null);
 
   readonly canExportar = computed(() => this.auth.hasPermission('turno.exportar'));
+  readonly puedeRegistrarAsistencia = computed(() => this.auth.hasPermission('asistencia.registrar'));
+  readonly puedeRegistrarAhora = computed(
+    () => this.puedeRegistrarAsistencia() && this.guardandoAsistencia() === null,
+  );
 
   readonly weekLabel = computed(() => {
     const agenda = this.data();
@@ -391,6 +399,47 @@ export class AgendaSemanalPageComponent implements OnInit {
 
   onCambioCompletado(): void {
     this.refreshService.notificarCambio();
+  }
+
+  onAsistenciaRapida(event: { turnoId: number; estado: EstadoAsistencia }): void {
+    if (this.guardandoAsistencia() !== null) {
+      return;
+    }
+
+    this.guardandoAsistencia.set(event.turnoId);
+
+    this.asistenciaService.registrar(event.turnoId, event.estado).subscribe({
+      next: (response) => {
+        this.guardandoAsistencia.set(null);
+        this.toast.success(
+          'Asistencia',
+          response.data.sin_cambios
+            ? 'La asistencia ya estaba registrada.'
+            : event.estado === 'asistio'
+              ? 'Turno marcado como Asistió.'
+              : 'Turno marcado como Faltó.',
+        );
+        this.refreshService.notificarCambio();
+      },
+      error: (error: AsistenciaApiError) => {
+        this.guardandoAsistencia.set(null);
+        this.toast.error('No se pudo registrar la asistencia', error.message);
+
+        if (error.status === 409) {
+          this.cargarSemana(false);
+        }
+      },
+    });
+  }
+
+  onAsistenciaActualizada(): void {
+    this.refreshService.notificarCambio();
+    this.recargarDetalleSiAbierto();
+  }
+
+  verHistorialAsistencia(turnoId: number): void {
+    this.historialTurnoId.set(turnoId);
+    this.historialOpen.set(true);
   }
 
   cerrarReprogramar(): void {

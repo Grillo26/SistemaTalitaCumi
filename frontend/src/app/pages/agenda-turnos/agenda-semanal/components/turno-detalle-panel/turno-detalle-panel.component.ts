@@ -8,6 +8,7 @@ import {
   ESTADO_BADGES,
 } from '../../agenda-semanal.constants';
 import type { TurnoDetalleVista } from '../../agenda-semanal.models';
+import { AsistenciaTurnoAccionesComponent } from '../../../asistencia-turno/components/asistencia-turno-acciones/asistencia-turno-acciones.component';
 import {
   formatLongDate,
   formatTimeRange,
@@ -20,7 +21,13 @@ import {
 
 @Component({
   selector: 'app-turno-detalle-panel',
-  imports: [A11yModule, AlertComponent, BadgeComponent, ButtonComponent],
+  imports: [
+    A11yModule,
+    AlertComponent,
+    BadgeComponent,
+    ButtonComponent,
+    AsistenciaTurnoAccionesComponent,
+  ],
   host: { class: 'contents' },
   template: `
     @if (open) {
@@ -183,6 +190,17 @@ import {
                     <app-alert variant="info" [message]="detalle.mensaje" />
                   }
                 </section>
+
+                <section>
+                  <h3 class="mb-2 text-sm font-semibold text-gray-800 dark:text-white/90">
+                    Asistencia
+                  </h3>
+                  <app-asistencia-turno-acciones
+                    [turnoId]="detalle.turno.id"
+                    (actualizado)="asistenciaActualizada.emit()"
+                    (verHistorial)="verHistorialAsistencia.emit($event)"
+                  />
+                </section>
               </div>
             }
           </div>
@@ -199,6 +217,8 @@ export class TurnoDetallePanelComponent {
 
   @Output() close = new EventEmitter<void>();
   @Output() accionSeleccionada = new EventEmitter<string>();
+  @Output() asistenciaActualizada = new EventEmitter<void>();
+  @Output() verHistorialAsistencia = new EventEmitter<number>();
 
   readonly texts = AGENDA_TEXTS;
   readonly formatLongDate = formatLongDate;

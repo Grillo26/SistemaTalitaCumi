@@ -4,7 +4,7 @@ namespace Tests\Feature\Modules\InscripcionesAtenciones;
 
 final class PaqueteModulesTest extends PaquetesSesionesTestCase
 {
-    public function test_ficha_works_while_optional_modules_are_unavailable(): void
+    public function test_ficha_works_while_payment_is_unavailable(): void
     {
         $escenario = $this->escenarioPaquete('recepcion');
         $creado = $this->crearPaquete($escenario)->assertCreated()->json('data');
@@ -12,7 +12,7 @@ final class PaqueteModulesTest extends PaquetesSesionesTestCase
         $this->getJson('/api/inscripciones-atenciones/paquetes-sesiones/'.$creado['id'])
             ->assertOk()
             ->assertJsonPath('can.pago_disponible', false)
-            ->assertJsonPath('can.consumo_disponible', false)
+            ->assertJsonPath('can.consumo_disponible', true)
             ->assertJsonPath('can.turnos_futuros_disponible', true)
             ->assertJsonPath('can.pdf', false)
             ->assertJsonPath('can.export', false);
@@ -34,15 +34,18 @@ final class PaqueteModulesTest extends PaquetesSesionesTestCase
             ->assertJsonPath('data.saldo', 4);
     }
 
-    public function test_consumo_is_unavailable_until_agenda_exists(): void
+    public function test_consumo_returns_zero_counts_without_turns(): void
     {
         $escenario = $this->escenarioPaquete('recepcion');
         $creado = $this->crearPaquete($escenario)->assertCreated()->json('data');
 
         $this->getJson('/api/inscripciones-atenciones/paquetes-sesiones/'.$creado['id'].'/consumo')
-            ->assertStatus(503)
-            ->assertJsonPath('code', 'MODULO_NO_DISPONIBLE')
-            ->assertJsonPath('modulo', 'Agenda y turnos');
+            ->assertOk()
+            ->assertJsonPath('data.pactadas', 10)
+            ->assertJsonPath('data.realizadas', 0)
+            ->assertJsonPath('data.faltadas', 0)
+            ->assertJsonPath('data.canceladas', 0)
+            ->assertJsonPath('data.saldo', 10);
     }
 
     public function test_payment_endpoints_return_clear_module_unavailable_error(): void

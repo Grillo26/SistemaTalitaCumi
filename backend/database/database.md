@@ -1665,6 +1665,7 @@ Sin `updated_at`.
 | `hora_fin` | `time` |  | `CHECK > hora_inicio` |  |
 | `duracion_minutos` | `int` |  | `DEFAULT 50`, `CHECK > 0` |  |
 | `estado` | `varchar(20)` |  | `DEFAULT 'programado'`, `CHECK IN ('programado','asistio','falto','cancelado','reprogramado')` |  |
+| `version` | `int` |  | `DEFAULT 1` | Versión optimista de 07.04 para correcciones concurrentes |
 | `motivo_cancelacion` | `text` | sí |  |  |
 | `cancelacion_origen` | `varchar(30)` | sí | `CHECK IN ('regeneracion','manual')` | 07.2 escribe `regeneracion`; 07.3 escribe `manual` |
 | `cancelado_en` | `timestamptz` | sí |  |  |
@@ -1686,6 +1687,8 @@ Sin `updated_at`.
 > **Implementación real 07.2:** la migración `2026_11_27_000200_add_programacion_fields_to_turno_table.php` agrega `inscripcion_sala_id`, `lote_generacion_id`, `cancelado_por_lote_id`, `cancelacion_origen` y `cancelado_en`. Refuerzos en PostgreSQL: índice único parcial `(inscripcion_sala_id, fecha, hora_inicio)` y `(paquete_sesiones_id, fecha, hora_inicio)` para turnos no cancelados/reprogramados; `EXCLUDE USING gist` por paciente sobre `tsrange(fecha + hora_inicio, fecha + hora_fin, '[)')` para turnos no cancelados/reprogramados (RF-004). No hay EXCLUDE de profesional ni de sala porque las sesiones grupales comparten legítimamente ambos.
 
 > **Implementación real 07.3:** la migración `2026_11_28_000200_add_cambios_fields_to_turno_table.php` agrega `motivo_turno_id` (FK a `motivo_turno`), `motivo_detalle`, `consume_saldo` y `cancelado_por_usuario_id`; índice `(sucursal_id, fecha, estado)`, índice `(motivo_turno_id)` y único parcial `turno_origen_unico` sobre `turno_origen_id` donde no es NULL. **No se crea tabla de historial**: el historial del turno se lee de `bitacora` (`entidad='turno'`, `entidad_id`, `accion`, `datos_anteriores/nuevos`, `usuario_id`), igual que el historial de Estados; 7.4 escribirá `ASISTIO`/`FALTO` en la misma bitácora. La reprogramación usa `lockForUpdate`, `estado_esperado` y advisory locks por paciente/profesional de la nueva fecha; los errores 23P01/23505 se mapean a conflicto de disponibilidad.
+>
+> **Implementación real 07.04:** la migración `2026_11_29_000100_add_version_to_turno_table.php` agrega `version` (`int`, default 1) para concurrencia optimista en correcciones. No se agregan columnas de asistencia porque `usuario_asistencia_id` y `asistencia_registrada_en` ya existen desde la tabla base. No se crea tabla de historial: la bitácora sigue siendo el historial (`ASISTIO`/`FALTO`, `datos_nuevos.evento`, `fuera_ventana`, `motivo`). El saldo sigue siendo derivado de 06.02; 07.04 no escribe contadores.
 
 #### `turno_lote_generacion` — Lotes de generación y regeneración
 

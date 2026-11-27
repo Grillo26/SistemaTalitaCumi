@@ -72,7 +72,7 @@ final class CancelacionTurnoTest extends CambiosTurnosTestCase
         ]);
     }
 
-    public function test_sin_consumo_disponible_muestra_no_disponible_y_cancela_igual(): void
+    public function test_sin_consumo_muestra_saldo_real_y_cancela_igual(): void
     {
         $escenario = $this->escenario();
         $this->actorCambios($escenario['branch']);
@@ -87,8 +87,10 @@ final class CancelacionTurnoTest extends CambiosTurnosTestCase
 
         $preview
             ->assertOk()
-            ->assertJsonPath('data.saldo.disponible', false)
-            ->assertJsonPath('data.saldo.mensaje', 'Efecto en saldo no disponible.');
+            ->assertJsonPath('data.saldo.disponible', true)
+            ->assertJsonPath('data.saldo.saldo_actual', 10)
+            ->assertJsonPath('data.saldo.saldo_resultante', 10)
+            ->assertJsonPath('data.consume_saldo', false);
 
         $this->postJson(
             $this->cambiosUrl("/turnos/{$turno->id}/cancelar"),

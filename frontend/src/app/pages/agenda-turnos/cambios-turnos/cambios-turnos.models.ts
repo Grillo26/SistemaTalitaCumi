@@ -163,6 +163,10 @@ export interface HistorialItem {
   motivo_codigo: string | null;
   motivo_nombre: string | null;
   motivo_texto: string | null;
+  evento: string | null;
+  evento_label: string | null;
+  fuera_ventana: boolean;
+  version: number | null;
   turno_vinculado_id: number | null;
   consume_saldo: boolean | null;
   advertencias: string[];

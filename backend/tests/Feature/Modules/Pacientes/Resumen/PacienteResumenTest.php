@@ -57,7 +57,7 @@ final class PacienteResumenTest extends PacientesTestCase
             ->assertJsonPath('data.bloques.servicios_vigentes.motivo', 'MODULO_NO_IMPLEMENTADO')
             ->assertJsonPath('data.bloques.estado_pago.estado', 'no_disponible')
             ->assertJsonPath('data.bloques.estado_pago.data', null)
-            ->assertJsonPath('data.bloques.asistencia.motivo', 'MODULO_NO_IMPLEMENTADO')
+            ->assertJsonPath('data.bloques.asistencia.motivo', 'SIN_SERVICIOS_VIGENTES')
             ->assertJsonPath('data.bloques.proximo_vencimiento.motivo', 'MODULO_NO_IMPLEMENTADO')
             ->assertJsonPath('data.bloques.sucursales.motivo', 'MODULO_NO_IMPLEMENTADO')
             ->assertJsonPath('data.bloques.alerta_pago.motivo', 'MODULO_NO_IMPLEMENTADO')
@@ -173,7 +173,7 @@ final class PacienteResumenTest extends PacientesTestCase
             ->assertOk()
             ->assertJsonMissingPath('data.paciente')
             ->assertJsonPath('data.bloques.estado_pago.motivo', 'MODULO_NO_IMPLEMENTADO')
-            ->assertJsonPath('data.bloques.asistencia.motivo', 'MODULO_NO_IMPLEMENTADO');
+            ->assertJsonPath('data.bloques.asistencia.motivo', 'SIN_SERVICIOS_VIGENTES');
 
         $this->assertSame(
             1,
@@ -233,7 +233,6 @@ final class PacienteResumenTest extends PacientesTestCase
         $contracts = [
             app(PatientServicesSummaryContract::class),
             app(PatientPaymentStatusContract::class),
-            app(PatientAttendanceSummaryContract::class),
             app(TutorContactContract::class),
             app(PatientPaymentAlertContract::class),
         ];
@@ -241,6 +240,8 @@ final class PacienteResumenTest extends PacientesTestCase
         foreach ($contracts as $contract) {
             $this->assertFalse($contract->disponible());
         }
+
+        $this->assertTrue(app(PatientAttendanceSummaryContract::class)->disponible());
 
         $this->expectException(\LogicException::class);
         $contracts[0]->serviciosVigentes(1);

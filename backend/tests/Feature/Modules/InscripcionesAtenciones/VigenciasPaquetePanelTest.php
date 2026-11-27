@@ -7,7 +7,7 @@ use App\Modules\InscripcionesAtenciones\Contracts\ConsumoPaqueteResumen;
 
 final class VigenciasPaquetePanelTest extends VigenciasTestCase
 {
-    public function test_package_panel_shows_no_available_balance_without_agenda(): void
+    public function test_package_panel_shows_derived_balance_with_agenda(): void
     {
         $escenario = $this->escenarioPaquete('recepcion');
         $this->crearPaquete($escenario, [
@@ -20,7 +20,8 @@ final class VigenciasPaquetePanelTest extends VigenciasTestCase
             ->assertJsonPath('meta.total', 1)
             ->assertJsonPath('data.0.tipo_entidad', 'paquete_sesiones')
             ->assertJsonPath('data.0.estado_vigencia', 'vencido')
-            ->assertJsonPath('data.0.saldo_disponible', false);
+            ->assertJsonPath('data.0.saldo_disponible', true)
+            ->assertJsonPath('data.0.saldo', 10);
     }
 
     public function test_user_with_only_package_permission_only_sees_packages(): void

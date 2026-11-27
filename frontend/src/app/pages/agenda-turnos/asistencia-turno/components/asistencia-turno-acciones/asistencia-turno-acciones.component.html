@@ -1,0 +1,80 @@
+<div class="space-y-3">
+  @if (puedeVer()) {
+    @if (loading()) {
+      <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.loading }}</p>
+    }
+
+    @if (error(); as message) {
+      <app-alert variant="error" title="No se pudo cargar la asistencia" [message]="message" />
+    }
+
+    @if (data(); as data) {
+      <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p class="text-xs font-medium uppercase tracking-wide text-gray-400">
+              {{ texts.current }}
+            </p>
+            <div class="mt-1 flex flex-wrap items-center gap-2">
+              <app-badge
+                [color]="data.turno.estado === 'asistio' ? 'success' : data.turno.estado === 'falto' ? 'error' : 'gray'"
+                variant="light"
+                size="sm"
+              >
+                {{ estadoLabel() }}
+              </app-badge>
+              @if (data.turno.asistencia_registrada_en) {
+                <span class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ fechaHora(data.turno.asistencia_registrada_en) }}
+                  @if (data.turno.usuario_asistencia) {
+                    · {{ data.turno.usuario_asistencia }}
+                  }
+                </span>
+              }
+            </div>
+          </div>
+
+          @if (data.can.ver_historial) {
+            <button app-button variant="link" size="xs" type="button" class="px-0" (click)="abrirHistorial()">
+              {{ texts.history }}
+            </button>
+          }
+        </div>
+
+        @if (data.mensaje; as mensaje) {
+          <app-alert
+            class="mt-3"
+            [variant]="data.correccion.fuera_ventana ? 'warning' : 'info'"
+            [message]="mensaje"
+          />
+        }
+
+        @if (data.can.registrar) {
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button app-button type="button" [disabled]="saving()" (click)="registrar('asistio')">
+              ✓ {{ texts.attended }}
+            </button>
+            <button app-button variant="outline" type="button" [disabled]="saving()" (click)="registrar('falto')">
+              ✕ {{ texts.missed }}
+            </button>
+          </div>
+        }
+
+        @if (data.can.corregir) {
+          <div class="mt-3">
+            <button app-button variant="outline" type="button" [disabled]="saving()" (click)="corregir()">
+              {{ texts.correct }}
+            </button>
+          </div>
+        }
+      </div>
+
+      <app-corregir-asistencia-modal
+        [open]="correccionOpen()"
+        [data]="data"
+        (closed)="correccionOpen.set(false)"
+        (completed)="onCorregido($event)"
+      />
+    }
+  }
+</div>

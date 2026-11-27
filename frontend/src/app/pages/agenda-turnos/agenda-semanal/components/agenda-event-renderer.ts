@@ -20,7 +20,11 @@ function text(value: string | null | undefined, fallback = 'No disponible'): str
   return escapeHtml(value && value.trim() !== '' ? value : fallback);
 }
 
-export function renderAgendaEvent(eventInfo: any): { html: string } {
+export function renderAgendaEvent(
+  eventInfo: any,
+  puedeRegistrar = false,
+  zonaHoraria = 'America/La_Paz',
+): { html: string } {
   const turno = eventInfo.event.extendedProps?.['turno'] as TurnoAgenda | undefined;
 
   if (turno === undefined) {
@@ -30,6 +34,11 @@ export function renderAgendaEvent(eventInfo: any): { html: string } {
       )}</div>`,
     };
   }
+
+  const mostrarAcciones =
+    puedeRegistrar &&
+    turno.estado === 'programado' &&
+    turnoYaInicio(turno, zonaHoraria);
 
   const rawColor = sanitizeHexColor(turno.servicio.area_color);
   const color = rawColor !== null && isValidHexColor(rawColor) ? rawColor : null;
@@ -70,7 +79,33 @@ export function renderAgendaEvent(eventInfo: any): { html: string } {
           <span class="agenda-evento-state font-medium">${escapeHtml(turno.estado_label)}</span>
           ${sinAsignar}
         </div>
+        ${
+          mostrarAcciones
+            ? `<div class="agenda-evento-actions mt-1 flex items-center gap-1">
+                <button type="button" data-asistencia="asistio" title="Marcar Asistió" aria-label="Marcar Asistió" class="rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-bold text-success-700 shadow-sm hover:bg-white">✓</button>
+                <button type="button" data-asistencia="falto" title="Marcar Faltó" aria-label="Marcar Faltó" class="rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-bold text-error-700 shadow-sm hover:bg-white">✕</button>
+              </div>`
+            : ''
+        }
       </div>
     `,
   };
+}
+
+function turnoYaInicio(turno: TurnoAgenda, zonaHoraria: string): boolean {
+  try {
+    const ahora = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: zonaHoraria,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(new Date());
+
+    return `${turno.fecha} ${turno.hora_inicio}` <= ahora;
+  } catch {
+    return false;
+  }
 }

@@ -14,6 +14,7 @@ import themePlugin from 'fullcalendar/themes/classic';
 import timeGridPlugin from 'fullcalendar/timegrid';
 import { environment } from '../../../../../../environments/environment';
 import type { AgendaSemanalData, TurnoAgenda } from '../../agenda-semanal.models';
+import type { EstadoAsistencia } from '../../../asistencia-turno/asistencia-turno.models';
 import {
   buildTurnoTooltip,
   calendarStart,
@@ -33,12 +34,17 @@ import { renderAgendaEvent } from '../agenda-event-renderer';
 })
 export class AgendaCalendarioComponent implements OnChanges {
   @Input() data: AgendaSemanalData | null = null;
+  @Input() puedeRegistrar = false;
   @Output() turnoClick = new EventEmitter<number>();
+  @Output() asistenciaRapida = new EventEmitter<{
+    turnoId: number;
+    estado: EstadoAsistencia;
+  }>();
 
   calendarOptions: CalendarOptions = this.buildOptions(null);
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['data']) {
+    if (changes['data'] || changes['puedeRegistrar']) {
       this.calendarOptions = this.buildOptions(this.data);
     }
   }
@@ -82,8 +88,33 @@ export class AgendaCalendarioComponent implements OnChanges {
       eventDisplay: 'block',
       dayMaxEvents: false,
       events,
-      eventContent: (arg) => renderAgendaEvent(arg),
+      eventContent: (arg) =>
+        renderAgendaEvent(
+          arg,
+          this.puedeRegistrar,
+          data?.zona_horaria ?? environment.timezone,
+        ),
       eventClick: (info: EventClickInfo) => {
+        const target = info.jsEvent?.target;
+        const boton = target instanceof Element
+          ? (target.closest('[data-asistencia]') as HTMLElement | null)
+          : null;
+
+        if (boton !== null) {
+          info.jsEvent?.preventDefault();
+          info.jsEvent?.stopPropagation();
+          const estado = boton.dataset['asistencia'];
+
+          if (estado === 'asistio' || estado === 'falto') {
+            this.asistenciaRapida.emit({
+              turnoId: Number(info.event.id),
+              estado,
+            });
+          }
+
+          return;
+        }
+
         info.jsEvent?.preventDefault();
         this.turnoClick.emit(Number(info.event.id));
       },

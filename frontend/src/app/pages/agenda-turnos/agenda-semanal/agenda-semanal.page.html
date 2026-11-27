@@ -81,7 +81,9 @@
           @case ('semana') {
             <app-agenda-calendario
               [data]="agenda"
+              [puedeRegistrar]="puedeRegistrarAhora()"
               (turnoClick)="verDetalle($event)"
+              (asistenciaRapida)="onAsistenciaRapida($event)"
             />
           }
           @case ('profesional') {
@@ -125,6 +127,8 @@
     [error]="detalleError()"
     (close)="cerrarDetalle()"
     (accionSeleccionada)="onAccionTurno($event)"
+    (asistenciaActualizada)="onAsistenciaActualizada()"
+    (verHistorialAsistencia)="verHistorialAsistencia($event)"
   />
 
   <app-reprogramar-turno-modal

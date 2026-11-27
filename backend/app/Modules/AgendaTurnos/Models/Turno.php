@@ -40,6 +40,7 @@ class Turno extends Model
             'hora_fin' => HoraCast::class,
             'duracion_minutos' => 'integer',
             'estado' => EstadoTurno::class,
+            'version' => 'integer',
             'inscripcion_sala_id' => 'integer',
             'lote_generacion_id' => 'integer',
             'cancelado_por_lote_id' => 'integer',
@@ -91,6 +92,11 @@ class Turno extends Model
     public function canceladoPorUsuario(): BelongsTo
     {
         return $this->belongsTo(User::class, 'cancelado_por_usuario_id');
+    }
+
+    public function usuarioAsistencia(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'usuario_asistencia_id');
     }
 
     public function scopeFuturos(Builder $query, string $hoy, string $horaActual): Builder

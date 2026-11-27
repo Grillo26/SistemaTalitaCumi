@@ -38,6 +38,7 @@ class TurnoFactory extends Factory
             'hora_fin' => '08:50',
             'duracion_minutos' => 50,
             'estado' => EstadoTurno::PROGRAMADO->value,
+            'version' => 1,
             'motivo_cancelacion' => null,
             'turno_origen_id' => null,
             'usuario_registro_id' => null,
