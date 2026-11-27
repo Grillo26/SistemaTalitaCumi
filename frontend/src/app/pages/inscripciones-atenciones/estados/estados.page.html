@@ -1,0 +1,373 @@
+<div class="space-y-5 sm:space-y-6">
+  <app-page-breadcrumb [pageTitle]="texts.title" />
+
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+      <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">{{ texts.title }}</h1>
+      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ texts.subtitle }}</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <button
+        app-button
+        type="button"
+        size="sm"
+        [variant]="activeTab() === 'pacientes' ? 'default' : 'outline'"
+        (click)="setTab('pacientes')"
+      >
+        {{ texts.patients }}
+      </button>
+      <button
+        app-button
+        type="button"
+        size="sm"
+        [variant]="activeTab() === 'inscripciones' ? 'default' : 'outline'"
+        (click)="setTab('inscripciones')"
+      >
+        {{ texts.inscriptions }}
+      </button>
+      @if (abilities().reports) {
+        <button
+          app-button
+          type="button"
+          size="sm"
+          [variant]="activeTab() === 'reportes' ? 'default' : 'outline'"
+          (click)="setTab('reportes')"
+        >
+          {{ texts.reports }}
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (optionsError(); as message) {
+    <app-alert variant="error" title="No se pudieron cargar las opciones" [message]="message" />
+  }
+
+  @if (activeTab() === 'pacientes') {
+    @if (patientError(); as message) {
+      <app-alert variant="error" title="No se pudieron cargar los pacientes" [message]="message" />
+    }
+
+    <app-component-card [title]="texts.patientTitle">
+      <form class="grid gap-4 lg:grid-cols-4" [formGroup]="patientForm" (ngSubmit)="loadPatients(1)">
+        <div class="relative lg:col-span-2">
+          <span class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-gray-400" aria-hidden="true">
+            <svg class="size-5" viewBox="0 0 20 20" fill="none">
+              <path d="M14.382 14.383l3.325 3.326m-1.249-8.334a7.082 7.082 0 01-7.083 7.081 7.082 7.082 0 110-14.163 7.082 7.082 0 017.083 7.082z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </span>
+          <input app-input type="text" formControlName="search" class="ps-10" [placeholder]="texts.searchPatient" aria-label="Buscar paciente" />
+        </div>
+        <app-select-field
+          [options]="estadoPacienteOptions"
+          [value]="patientForm.controls.estado.value"
+          [placeholder]="texts.allStates"
+          ariaLabel="Filtrar pacientes por estado"
+          (valueChange)="patientForm.controls.estado.setValue($event)"
+        />
+        <app-select-field
+          [options]="branchOptions()"
+          [value]="patientForm.controls.sucursal_id.value"
+          [placeholder]="texts.allBranches"
+          ariaLabel="Filtrar pacientes por sucursal"
+          (valueChange)="patientForm.controls.sucursal_id.setValue($event)"
+        />
+        <div class="flex items-end gap-2 lg:col-span-4">
+          <button app-button type="submit" [disabled]="patientLoading()">{{ texts.filter }}</button>
+          <button app-button variant="outline" type="button" (click)="clearPatients()">{{ texts.clear }}</button>
+        </div>
+      </form>
+    </app-component-card>
+
+    <app-component-card>
+      <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+        <table app-table class="min-w-full">
+          <thead app-table-header class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
+            <tr app-table-row>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500">Paciente</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500">Estado</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500">Sucursal</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500">Tutor</th>
+              <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500">Acciones</th>
+            </tr>
+          </thead>
+          <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+            @if (patientLoading()) {
+              <tr app-table-row><td app-table-cell colspan="5" class="px-4 py-12 text-center text-sm text-gray-500">{{ texts.loading }}</td></tr>
+            } @else {
+              @for (row of patients(); track row.id) {
+                <tr app-table-row class="hover:bg-gray-50/70 dark:hover:bg-white/[0.02]">
+                  <td app-table-cell class="px-4 py-4">
+                    <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ row.nombre_completo }}</p>
+                    <p class="text-xs text-gray-500">{{ row.codigo || 'Sin código' }}</p>
+                  </td>
+                  <td app-table-cell class="px-4 py-4">
+                    <app-estado-badge [estado]="row.estado" [label]="row.estado_label" />
+                  </td>
+                  <td app-table-cell class="px-4 py-4 text-sm text-gray-600 dark:text-gray-300">{{ row.sucursal_registro.nombre || '—' }}</td>
+                  <td app-table-cell class="px-4 py-4 text-sm text-gray-600 dark:text-gray-300">{{ row.tutor_principal || '—' }}</td>
+                  <td app-table-cell class="px-4 py-4 text-end">
+                    <div class="flex flex-wrap justify-end gap-1">
+                      @if (row.can.pause) {
+                        <button app-button size="sm" variant="outline" type="button" (click)="openPausePatient(row)">{{ texts.pause }}</button>
+                      }
+                      @if (row.can.reactivate) {
+                        <button app-button size="sm" type="button" (click)="openReactivatePatient(row)">{{ texts.reactivate }}</button>
+                      }
+                      @if (row.can.retire) {
+                        <button app-button size="sm" variant="destructive" type="button" (click)="openRetirePatient(row)">{{ texts.retire }}</button>
+                      }
+                      @if (row.can.history) {
+                        <button app-button size="sm" variant="ghost" type="button" (click)="openHistoryPatient(row)">{{ texts.history }}</button>
+                      }
+                    </div>
+                  </td>
+                </tr>
+              } @empty {
+                <tr app-table-row><td app-table-cell colspan="5" class="px-4 py-12 text-center text-sm text-gray-500">{{ texts.noPatients }}</td></tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+      @if (patientMeta().total > 0) {
+        <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p class="text-sm text-gray-500">Mostrando {{ patientMeta().from ?? 0 }}–{{ patientMeta().to ?? 0 }} de {{ patientMeta().total }}</p>
+          <app-pagination [currentPage]="patientMeta().current_page" [totalPages]="patientMeta().last_page" variant="text-icon" (pageChange)="goToPatientPage($event)" />
+        </div>
+      }
+    </app-component-card>
+  }
+
+  @if (activeTab() === 'inscripciones') {
+    @if (inscriptionError(); as message) {
+      <app-alert variant="error" title="No se pudieron cargar las inscripciones" [message]="message" />
+    }
+
+    <app-component-card [title]="texts.inscriptionTitle">
+      <form class="grid gap-4 lg:grid-cols-6" [formGroup]="inscriptionForm" (ngSubmit)="loadInscriptions(1)">
+        <div class="relative lg:col-span-2">
+          <input app-input type="text" formControlName="search" [placeholder]="texts.searchInscription" aria-label="Buscar inscripción" />
+        </div>
+        <app-select-field [options]="typeOptions()" [value]="inscriptionForm.controls.tipo_entidad.value" [placeholder]="texts.allTypes" ariaLabel="Filtrar por tipo" (valueChange)="inscriptionForm.controls.tipo_entidad.setValue($event)" />
+        <app-select-field [options]="estadoInscripcionOptions" [value]="inscriptionForm.controls.estado.value" [placeholder]="texts.allStates" ariaLabel="Filtrar por estado" (valueChange)="inscriptionForm.controls.estado.setValue($event)" />
+        <app-select-field [options]="branchOptions()" [value]="inscriptionForm.controls.sucursal_id.value" [placeholder]="texts.allBranches" ariaLabel="Filtrar por sucursal" (valueChange)="inscriptionForm.controls.sucursal_id.setValue($event)" />
+        <app-select-field [options]="serviceOptions()" [value]="inscriptionForm.controls.servicio_id.value" [placeholder]="texts.allServices" ariaLabel="Filtrar por servicio" (valueChange)="inscriptionForm.controls.servicio_id.setValue($event)" />
+        <app-inscripcion-date-input formControlName="periodo_desde" ariaLabel="Período desde" />
+        <app-inscripcion-date-input formControlName="periodo_hasta" ariaLabel="Período hasta" />
+        <div class="flex items-end gap-2 lg:col-span-6">
+          <button app-button type="submit" [disabled]="inscriptionLoading()">{{ texts.filter }}</button>
+          <button app-button variant="outline" type="button" (click)="clearInscriptions()">{{ texts.clear }}</button>
+        </div>
+      </form>
+    </app-component-card>
+
+    <app-component-card>
+      <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+        <table app-table class="min-w-full">
+          <thead app-table-header class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
+            <tr app-table-row>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500">Paciente</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500">Tipo / Servicio</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500">Sucursal</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500">Período</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500">Vence</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500">Estado</th>
+              <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500">Acciones</th>
+            </tr>
+          </thead>
+          <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+            @if (inscriptionLoading()) {
+              <tr app-table-row><td app-table-cell colspan="7" class="px-4 py-12 text-center text-sm text-gray-500">{{ texts.loading }}</td></tr>
+            } @else {
+              @for (row of inscriptions(); track row.tipo_entidad + '-' + row.id) {
+                <tr app-table-row class="hover:bg-gray-50/70 dark:hover:bg-white/[0.02]">
+                  <td app-table-cell class="px-4 py-4">
+                    <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ row.paciente.nombre_completo }}</p>
+                    <p class="text-xs text-gray-500">{{ row.paciente.codigo || 'Sin código' }} · {{ row.tutor.nombre_completo }}</p>
+                  </td>
+                  <td app-table-cell class="px-4 py-4">
+                    <p class="text-sm text-gray-700 dark:text-gray-300">{{ row.servicio.nombre }}</p>
+                    <p class="text-xs text-gray-500">{{ row.tipo_entidad_label }}@if (row.sala) { · {{ row.sala.nombre }}}@if (row.profesional) { · {{ row.profesional.nombre_completo }}}</p>
+                  </td>
+                  <td app-table-cell class="px-4 py-4 text-sm text-gray-600 dark:text-gray-300">{{ row.sucursal.nombre }}</td>
+                  <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-600 dark:text-gray-300">{{ formatDate(row.fecha_inicio) }} — {{ formatDate(row.fecha_fin) }}</td>
+                  <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-600 dark:text-gray-300">{{ formatDate(row.fecha_fin) }}<span class="block text-xs text-gray-500">{{ diasLabel(row.dias_para_vencer) }}</span></td>
+                  <td app-table-cell class="px-4 py-4"><app-estado-badge [estado]="row.estado_efectivo" [label]="row.estado_efectivo_label" /></td>
+                  <td app-table-cell class="px-4 py-4 text-end">
+                    <div class="flex flex-wrap justify-end gap-1">
+                      @if (row.can.pause) {
+                        <button app-button size="sm" variant="outline" type="button" (click)="openPauseInscription(row)">{{ texts.pause }}</button>
+                      }
+                      @if (row.can.reactivate) {
+                        <button app-button size="sm" type="button" (click)="openReactivateInscription(row)">{{ texts.reactivate }}</button>
+                      }
+                      @if (row.can.retire) {
+                        <button app-button size="sm" variant="destructive" type="button" (click)="openRetireInscription(row)">{{ texts.retire }}</button>
+                      }
+                      @if (row.can.history) {
+                        <button app-button size="sm" variant="ghost" type="button" (click)="openHistoryInscription(row)">{{ texts.history }}</button>
+                      }
+                    </div>
+                  </td>
+                </tr>
+              } @empty {
+                <tr app-table-row><td app-table-cell colspan="7" class="px-4 py-12 text-center text-sm text-gray-500">{{ texts.noInscriptions }}</td></tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+      @if (inscriptionMeta().total > 0) {
+        <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p class="text-sm text-gray-500">Mostrando {{ inscriptionMeta().from ?? 0 }}–{{ inscriptionMeta().to ?? 0 }} de {{ inscriptionMeta().total }}</p>
+          <app-pagination [currentPage]="inscriptionMeta().current_page" [totalPages]="inscriptionMeta().last_page" variant="text-icon" (pageChange)="goToInscriptionPage($event)" />
+        </div>
+      }
+    </app-component-card>
+  }
+
+  @if (activeTab() === 'reportes' && abilities().reports) {
+    @if (reportError(); as message) {
+      <app-alert variant="error" title="No se pudo cargar el reporte" [message]="message" />
+    }
+
+    <app-component-card [title]="texts.reportsTitle">
+      <form class="grid gap-4 lg:grid-cols-6" [formGroup]="reportForm" (ngSubmit)="loadReport(1)">
+        <app-select-field
+          [options]="[{ value: 'inscripciones', label: 'Inscripciones' }, { value: 'pacientes', label: 'Pacientes' }]"
+          [value]="reportForm.controls.tipo.value"
+          ariaLabel="Tipo de reporte"
+          (valueChange)="reportForm.controls.tipo.setValue($event); loadReport(1)"
+        />
+        <app-select-field [options]="reportForm.controls.tipo.value === 'pacientes' ? estadoPacienteOptions : estadoInscripcionOptions" [value]="reportForm.controls.estado.value" [placeholder]="texts.allStates" ariaLabel="Filtrar reporte por estado" (valueChange)="reportForm.controls.estado.setValue($event)" />
+        <app-select-field [options]="branchOptions()" [value]="reportForm.controls.sucursal_id.value" [placeholder]="texts.allBranches" ariaLabel="Filtrar reporte por sucursal" (valueChange)="reportForm.controls.sucursal_id.setValue($event)" />
+        <app-select-field [options]="serviceOptions()" [value]="reportForm.controls.servicio_id.value" [placeholder]="texts.allServices" ariaLabel="Filtrar reporte por servicio" (valueChange)="reportForm.controls.servicio_id.setValue($event)" />
+        <app-inscripcion-date-input formControlName="periodo_desde" ariaLabel="Reporte desde" />
+        <app-inscripcion-date-input formControlName="periodo_hasta" ariaLabel="Reporte hasta" />
+        <div class="flex flex-wrap items-end gap-2 lg:col-span-6">
+          <button app-button type="submit" [disabled]="reportLoading()">{{ texts.filter }}</button>
+          <button app-button variant="outline" type="button" (click)="clearReport()">{{ texts.clear }}</button>
+          <span class="flex-1"></span>
+          @if (abilities().export) {
+            <button app-button variant="outline" type="button" [disabled]="exporting() !== null" (click)="exportar('pdf')">{{ exporting() === 'pdf' ? texts.saving : texts.exportPdf }}</button>
+            <button app-button variant="outline" type="button" [disabled]="exporting() !== null" (click)="exportar('excel')">{{ exporting() === 'excel' ? texts.saving : texts.exportExcel }}</button>
+          }
+        </div>
+      </form>
+    </app-component-card>
+
+    @if (reportData(); as report) {
+      <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        @if (report.tipo === 'pacientes') {
+          <div class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03]"><p class="text-sm text-gray-500">Activos</p><p class="text-2xl font-semibold">{{ patientCount('activo') }}</p></div>
+          <div class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03]"><p class="text-sm text-gray-500">En pausa</p><p class="text-2xl font-semibold">{{ patientCount('en_pausa') }}</p></div>
+          <div class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03]"><p class="text-sm text-gray-500">Retirados</p><p class="text-2xl font-semibold">{{ patientCount('retirado') }}</p></div>
+        } @else {
+          <div class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03]"><p class="text-sm text-gray-500">Activas</p><p class="text-2xl font-semibold">{{ inscriptionCount('activa') }}</p></div>
+          <div class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03]"><p class="text-sm text-gray-500">En pausa</p><p class="text-2xl font-semibold">{{ inscriptionCount('en_pausa') }}</p></div>
+          <div class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03]"><p class="text-sm text-gray-500">Vencidas</p><p class="text-2xl font-semibold">{{ inscriptionCount('vencida') }}</p></div>
+          <div class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03]"><p class="text-sm text-gray-500">Renovadas</p><p class="text-2xl font-semibold">{{ inscriptionCount('renovada') }}</p></div>
+          <div class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03]"><p class="text-sm text-gray-500">Retiradas</p><p class="text-2xl font-semibold">{{ inscriptionCount('retirada') }}</p></div>
+        }
+      </div>
+
+      <app-component-card>
+        <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+          <table app-table class="min-w-full">
+            <thead app-table-header class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900">
+              <tr app-table-row>
+                <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500">Paciente</th>
+                <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500">Tipo / Servicio</th>
+                <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500">Sucursal</th>
+                <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500">Período</th>
+                <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500">Estado</th>
+              </tr>
+            </thead>
+            <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+              @if (reportLoading()) {
+                <tr app-table-row><td app-table-cell colspan="5" class="px-4 py-12 text-center text-sm text-gray-500">{{ texts.loading }}</td></tr>
+              } @else if (reportIsPatients()) {
+                @for (row of reportRows(); track $any(row).id) {
+                  <tr app-table-row>
+                    <td app-table-cell class="px-4 py-4"><p class="text-sm font-medium">{{ $any(row).nombre_completo }}</p><p class="text-xs text-gray-500">{{ $any(row).codigo || 'Sin código' }}</p></td>
+                    <td app-table-cell class="px-4 py-4 text-sm">Paciente</td>
+                    <td app-table-cell class="px-4 py-4 text-sm">{{ $any(row).sucursal_registro.nombre || '—' }}</td>
+                    <td app-table-cell class="px-4 py-4 text-sm">—</td>
+                    <td app-table-cell class="px-4 py-4"><app-estado-badge [estado]="$any(row).estado" [label]="$any(row).estado_label" /></td>
+                  </tr>
+                } @empty {
+                  <tr app-table-row><td app-table-cell colspan="5" class="px-4 py-12 text-center text-sm text-gray-500">{{ texts.noPatients }}</td></tr>
+                }
+              } @else {
+                @for (row of reportRows(); track $any(row).tipo_entidad + '-' + $any(row).id) {
+                  <tr app-table-row>
+                    <td app-table-cell class="px-4 py-4"><p class="text-sm font-medium">{{ $any(row).paciente.nombre_completo }}</p><p class="text-xs text-gray-500">{{ $any(row).paciente.codigo || 'Sin código' }}</p></td>
+                    <td app-table-cell class="px-4 py-4 text-sm">{{ $any(row).tipo_entidad_label }} · {{ $any(row).servicio.nombre }}</td>
+                    <td app-table-cell class="px-4 py-4 text-sm">{{ $any(row).sucursal.nombre }}</td>
+                    <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm">{{ formatDate($any(row).fecha_inicio) }} — {{ formatDate($any(row).fecha_fin) }}</td>
+                    <td app-table-cell class="px-4 py-4"><app-estado-badge [estado]="$any(row).estado_efectivo" [label]="$any(row).estado_efectivo_label" /></td>
+                  </tr>
+                } @empty {
+                  <tr app-table-row><td app-table-cell colspan="5" class="px-4 py-12 text-center text-sm text-gray-500">{{ texts.noInscriptions }}</td></tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+        @if (report.meta.total > 0) {
+          <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p class="text-sm text-gray-500">Mostrando {{ report.meta.from ?? 0 }}–{{ report.meta.to ?? 0 }} de {{ report.meta.total }}</p>
+            <app-pagination [currentPage]="report.meta.current_page" [totalPages]="report.meta.last_page" variant="text-icon" (pageChange)="goToReportPage($event)" />
+          </div>
+        }
+      </app-component-card>
+    }
+  }
+</div>
+
+@if (cambioOpen() && cambio(); as state) {
+  <app-cambio-estado-modal
+    [title]="state.action === 'pausar' ? texts.pause : state.action === 'reactivar' ? texts.reactivate : texts.retire"
+    [subtitle]="state.nombre"
+    [actionLabel]="state.action"
+    [currentStateLabel]="state.estadoActualLabel"
+    [motiveOptions]="state.motivoOptions"
+    [requiresMotive]="state.requiresMotive"
+    [requiresDate]="state.requiresDate"
+    [maxDate]="today"
+    [precheck]="cambioPrecheck()"
+    [saving]="cambioSaving()"
+    [error]="cambioError()"
+    (confirmed)="confirmCambio($event)"
+    (closed)="closeCambio()"
+  />
+}
+
+@if (retiroOpen() && retiroPreview(); as preview) {
+  <app-retiro-paciente-modal
+    [preview]="preview"
+    [precheck]="retiroPrecheck()"
+    [motiveOptions]="opciones()?.motivos.paciente.retirar ?? []"
+    [saving]="retiroSaving()"
+    [error]="retiroError()"
+    [maxDate]="today"
+    (confirmed)="confirmRetiro($event)"
+    (closed)="closeRetiro()"
+  />
+}
+
+@if (historialOpen()) {
+  <app-modal [open]="true" [title]="historialTitle()" size="lg" (closed)="closeHistory()">
+    @if (historialError(); as message) {
+      <app-alert variant="error" title="No se pudo cargar el historial" [message]="message" />
+    } @else if (historialLoading()) {
+      <p class="text-sm text-gray-500">{{ texts.loading }}</p>
+    } @else {
+      <app-historial-estados [items]="historialItems()" />
+    }
+    <div class="mt-4 flex justify-end border-t border-gray-100 pt-4 dark:border-gray-800">
+      <button app-button variant="outline" type="button" (click)="closeHistory()">{{ texts.close }}</button>
+    </div>
+  </app-modal>
+}

@@ -1,0 +1,27 @@
+<?php
+
+namespace App\Modules\InscripcionesAtenciones\Exceptions;
+
+use Throwable;
+
+final class PaqueteAuditUnavailableException extends InscripcionesAtencionesDomainException
+{
+    public function __construct(Throwable $previous)
+    {
+        parent::__construct(
+            'No se pudo registrar la operación del paquete en la bitácora. La operación fue cancelada.',
+            0,
+            $previous,
+        );
+    }
+
+    public function status(): int
+    {
+        return 503;
+    }
+
+    public function errorCode(): string
+    {
+        return 'AUDIT_UNAVAILABLE';
+    }
+}

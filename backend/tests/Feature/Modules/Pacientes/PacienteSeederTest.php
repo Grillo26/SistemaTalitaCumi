@@ -24,9 +24,11 @@ final class PacienteSeederTest extends PacientesTestCase
         $this->assertTrue($superadmin->hasPermissionTo('paciente.crear'));
         $this->assertFalse($administracion->hasPermissionTo('paciente.crear'));
         $this->assertTrue($administracion->hasPermissionTo('paciente.editar'));
-        $this->assertFalse($administracion->hasPermissionTo('paciente.cambiar_estado'));
+        $this->assertTrue($administracion->hasPermissionTo('paciente.cambiar_estado'));
+        $this->assertTrue($administracion->hasPermissionTo('paciente.retirar'));
         $this->assertTrue($recepcion->hasPermissionTo('paciente.crear'));
-        $this->assertTrue($recepcion->hasPermissionTo('paciente.cambiar_estado'));
+        $this->assertFalse($recepcion->hasPermissionTo('paciente.cambiar_estado'));
+        $this->assertFalse($recepcion->hasPermissionTo('paciente.retirar'));
         $this->assertTrue($recepcion->hasPermissionTo('tutor.crear'));
         $this->assertTrue($recepcion->hasPermissionTo('paciente.ver_contacto_emergencia'));
         $this->assertTrue($recepcion->hasPermissionTo('paciente.editar_contacto_emergencia'));
@@ -73,7 +75,7 @@ final class PacienteSeederTest extends PacientesTestCase
         $this->seed(ObservacionAccionAuditadaSeeder::class);
 
         $this->assertSame(
-            29,
+            30,
             AccionAuditada::query()
                 ->where('modulo', 'pacientes')
                 ->count(),

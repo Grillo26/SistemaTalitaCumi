@@ -9,7 +9,7 @@ use Tests\Feature\Modules\Pacientes\PacientesTestCase;
 
 final class PacienteAuthorizationTest extends PacientesTestCase
 {
-    public function test_administracion_cannot_create_or_change_status_but_can_edit(): void
+    public function test_administracion_can_edit_and_change_status_but_cannot_create(): void
     {
         $branch = $this->branch();
         $user = $this->actingAsRole('administracion');
@@ -29,10 +29,10 @@ final class PacienteAuthorizationTest extends PacientesTestCase
             'estado' => 'en_pausa',
             'motivo' => 'Viaje',
             'version' => 2,
-        ])->assertStatus(403);
+        ])->assertOk()->assertJsonPath('data.estado', 'en_pausa');
     }
 
-    public function test_recepcion_can_create_and_change_status(): void
+    public function test_recepcion_can_create_but_not_change_status(): void
     {
         $branch = $this->branch();
         $user = $this->actingAsRole('recepcion');
@@ -46,8 +46,7 @@ final class PacienteAuthorizationTest extends PacientesTestCase
             'estado' => 'en_pausa',
             'motivo' => 'Viaje familiar',
             'version' => $created['version'],
-        ])->assertOk()
-            ->assertJsonPath('data.estado', 'en_pausa');
+        ])->assertForbidden();
     }
 
     public function test_sensitive_fields_require_permission(): void

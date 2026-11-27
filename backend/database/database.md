@@ -452,6 +452,12 @@ erDiagram
         bigint atencion_diagnostico_id FK
         bigint profesional_id FK
     }
+    atencion_diagnostico_requisito {
+        bigint atencion_diagnostico_id FK
+        bigint especialidad_id FK
+        varchar especialidad_nombre
+        smallint cantidad_minima
+    }
     estado_inscripcion_historial {
         bigint id PK
         varchar tipo_entidad
@@ -472,6 +478,8 @@ erDiagram
     tipo_diagnostico ||--o{ atencion_diagnostico : "es"
     atencion_diagnostico ||--o{ atencion_diagnostico_profesional : "participan"
     profesional ||--o{ atencion_diagnostico_profesional : "participa"
+    atencion_diagnostico ||--o{ atencion_diagnostico_requisito : "exige"
+    especialidad ||--o{ atencion_diagnostico_requisito : "requiere"
 ```
 
 ### Agenda y turnos
@@ -927,6 +935,8 @@ Timestamps: solo `updated_at`. Las altas y cambios se reconstruyen desde `bitaco
 Índices: `clave` único, `categoria`, `visible_recepcion`. El catálogo inicial tiene 23 claves y se carga con `OrganizacionConfiguracionCatalogSeeder`; cada alta deja un registro `CREAR` en bitácora.
 
 > **Módulo 02 (Fases 1–4):** se agregaron 12 claves de seguridad (categoría `seguridad`), por lo que el catálogo pasa a 35 claves. `sesion_inactividad_minutos` se reutiliza en `operacion`. Las fases 2 y 3 no agregan tablas; la Fase 4 agrega `accion_auditada` y reutiliza `bitacora`.
+>
+> **Módulo 06.04 (Vigencias):** se agrega `vigencia.ventana_alerta_dias` (categoría `operacion`, entero, valor inicial 7, rango 1–365). Es un parámetro global; no se agregan columnas ni tablas de vigencia.
 
 #### `accion_auditada` — Catálogo de acciones auditadas
 
@@ -1495,7 +1505,9 @@ Sin `deleted_at`: las tarifas no se eliminan; se cierra su vigencia con motivo. 
 | `inscripcion_origen_id` | `bigint` | sí | `FK → inscripcion_sala` | Renovación |
 | `observaciones` | `text` | sí |  |  |
 
-Índices: `(estado)`, `(fecha_inicio, fecha_fin)`, `(paciente_id)`. Timestamps: `created_at`, `updated_at`.
+Índices: `(estado)`, `(fecha_inicio, fecha_fin)`, `(sucursal_id, fecha_inicio, fecha_fin)`, `(sala_id, fecha_inicio, fecha_fin)`, `(paciente_id, estado)`, `(inscripcion_origen_id)`, `(sucursal_id, fecha_fin)` y `(paciente_id, fecha_fin)` (estos dos últimos para el panel de vigencias). Timestamps: `created_at`, `updated_at`.
+
+Concurrencia: en PostgreSQL, `btree_gist` + constraint `EXCLUDE` sobre `(paciente_id, sala_id, daterange(fecha_inicio, fecha_fin, '[]'))` para estados `activa` y `en_pausa`. La migración `2026_11_25_000800_create_inscripcion_sala_table` crea la tabla y la restricción. Desde 06.05 se escriben `activa`, `en_pausa` y `retirada`; `vencida` y `renovada` se derivan y no se persisten. `estado_inscripcion_historial` no se creó: el historial se lee de bitácora.
 
 #### `paquete_sesiones` — Paquetes de sesiones individuales
 
@@ -1512,20 +1524,20 @@ Sin `deleted_at`: las tarifas no se eliminan; se cierra su vigencia con motivo. 
 | `tarifa_id` | `bigint` |  | `FK → tarifa` |  |
 | `categoria_tarifa_id` | `bigint` |  | `FK → categoria_tarifa` |  |
 | `cantidad_sesiones` | `int` |  | `CHECK > 0` |  |
-| `dias_semana` | `varchar(50)` |  |  | `"lunes,miercoles,viernes"` |
+| `dias_semana` | `varchar(50)` |  | `CHECK ~ '^[1-6](,[1-6])*$'` | CSV numérico `"1,3,5"` (lunes a sábado) |
 | `hora` | `time` |  |  |  |
-| `duracion_minutos` | `int` |  | `DEFAULT 50` |  |
+| `duracion_minutos` | `int` |  | `DEFAULT 50`, `CHECK > 0` |  |
 | `fecha_inicio` | `date` |  |  |  |
 | `fecha_fin` | `date` |  | `CHECK >= fecha_inicio` |  |
 | `monto_esperado` | `numeric(12,2)` |  | `CHECK >= 0` |  |
 | `estado` | `varchar(20)` |  | `DEFAULT 'activo'`, `CHECK IN ('activo','en_pausa','vencido','renovado','retirado')` |  |
 | `paquete_origen_id` | `bigint` | sí | `FK → paquete_sesiones` | Renovación |
 
-Índices: `(estado)`, `(fecha_inicio, fecha_fin)`, `(paciente_id)`, `(profesional_id)`. Timestamps: `created_at`, `updated_at`.
+Concurrencia: en PostgreSQL, `btree_gist` + constraint `EXCLUDE` sobre `(paciente_id, servicio_id, daterange(fecha_inicio, fecha_fin, '[]'))` para estados `activo` y `en_pausa`. La migración `2026_11_26_000000_create_paquete_sesiones_table` crea la tabla y la restricción. Índices: `(estado)`, `(fecha_inicio, fecha_fin)`, `(sucursal_id, fecha_inicio, fecha_fin)`, `(paciente_id, estado)`, `(servicio_id, fecha_inicio)`, `(profesional_id, fecha_inicio)`, `(paquete_origen_id)`, `(sucursal_id, fecha_fin)` y `(paciente_id, fecha_fin)` (estos dos últimos para el panel de vigencias). Timestamps: `created_at`, `updated_at`. El parámetro `paquete.cantidad_sesiones_default` (10) se crea con seeder; la duración reutiliza `duracion_sesion_minutos` (50). Desde 06.05 se escriben `activo`, `en_pausa` y `retirado`; `vencido` y `renovado` se derivan de `fecha_fin` y del vínculo con la sucesora, y no se persisten.
 
 #### `atencion_entrevista` — Entrevista con los padres
 
-*Documento.* Atención con costo menor. Una sola entrevista por paciente.
+*Documento.* Atención con costo menor. No se impone unicidad por paciente; el sistema avisa si ya existe una entrevista previa y permite decidir.
 
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
@@ -1537,7 +1549,7 @@ Sin `deleted_at`: las tarifas no se eliminan; se cierra su vigencia con motivo. 
 | `tarifa_id` | `bigint` |  | `FK → tarifa` |  |
 | `categoria_tarifa_id` | `bigint` |  | `FK → categoria_tarifa` |  |
 | `fecha` | `date` |  |  |  |
-| `monto_esperado` | `numeric(12,2)` |  |  |  |
+| `monto_esperado` | `numeric(12,2)` |  | `CHECK >= 0` |  |
 | `estado` | `varchar(20)` |  | `DEFAULT 'activa'`, `CHECK IN ('activa','retirada')` |  |
 | `notas_admin` | `text` | sí |  |  |
 
@@ -1558,9 +1570,10 @@ Timestamps: `created_at`, `updated_at`.
 | `categoria_tarifa_id` | `bigint` |  | `FK → categoria_tarifa` |  |
 | `fecha_inicio` | `date` |  |  |  |
 | `fecha_fin` | `date` |  | `CHECK >= fecha_inicio` |  |
-| `monto_esperado` | `numeric(12,2)` |  |  |  |
+| `monto_esperado` | `numeric(12,2)` |  | `CHECK >= 0` |  |
 | `entrevista_previa_id` | `bigint` | sí | `FK → atencion_entrevista` |  |
 | `omitio_entrevista` | `boolean` |  | `DEFAULT false` |  |
+| `motivo_omision_entrevista` | `text` | sí |  | Máximo 500 en aplicación |
 | `estado_general` | `varchar(20)` |  | `DEFAULT 'incompleto'`, `CHECK IN ('incompleto','en_proceso','completo','cancelado')` |  |
 | `estado` | `varchar(20)` |  | `DEFAULT 'activa'`, `CHECK IN ('activa','retirada')` |  |
 | `notas_admin` | `text` | sí |  |  |
@@ -1572,6 +1585,20 @@ Timestamps: `created_at`, `updated_at`.
 *Pivot.* Profesionales asignados al diagnóstico.
 
 `PRIMARY KEY (atencion_diagnostico_id, profesional_id)`. Sin timestamps.
+
+#### `atencion_diagnostico_requisito` — Snapshot de especialidades requeridas
+
+*Snapshot.* Copia de las especialidades y cantidades exigidas por el tipo al crear el diagnóstico (RN-D11). Los cambios posteriores del Catálogo no alteran diagnósticos ya realizados.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `atencion_diagnostico_id` | `bigint` |  | `FK → atencion_diagnostico`, `ON DELETE CASCADE` |  |
+| `especialidad_id` | `bigint` |  | `FK → especialidad` |  |
+| `especialidad_nombre` | `varchar(150)` |  |  | Nombre conservado como snapshot |
+| `cantidad_minima` | `smallint` |  | `DEFAULT 1`, `CHECK > 0` |  |
+| `created_at` | `timestamptz` |  | `DEFAULT now()` |  |
+
+`PRIMARY KEY (atencion_diagnostico_id, especialidad_id)`. Índice `(especialidad_id)`.
 
 #### `estado_inscripcion_historial` — Historial del estado de inscripción/paquete
 
@@ -1589,6 +1616,10 @@ Timestamps: `created_at`, `updated_at`.
 | `created_at` | `timestamptz` |  | `DEFAULT now()` |  |
 
 Sin `updated_at`.
+
+> **Implementación 06.05:** esta tabla no se creó en la entrega. RF-010 (historial en ficha) se resuelve leyendo la bitácora existente, que ya es inmutable, tiene índice `(entidad, entidad_id)` y conserva las transiciones previas reales. No se inventan estados históricos ni se duplican escrituras. La tabla queda como referencia para una evolución futura si se necesita un historial desacoplado de auditoría.
+
+> **Estados 06.05:** no se agregaron columnas ni `CHECK` nuevos. Los `CHECK` de `inscripcion_sala` y `paquete_sesiones` ya admitían `en_pausa`; ahora el submódulo la escribe. El estado efectivo se calcula en `EstadoEfectivoInscripcionRule` con precedencia `Retirada > EnPausa > Renovada > Vencida > Activa`. Los cambios de estado se registran en `bitacora` (`PAUSAR`, `REACTIVAR`, `RETIRAR`, `CAMBIAR_ESTADO`), y la cascada de retiro de paciente usa `paciente.retirar`. No hay tablas nuevas de motivos: los motivos son Enums cerrados en esta entrega.
 
 ---
 
@@ -1611,7 +1642,7 @@ Sin `updated_at`.
 | `fecha` | `date` |  |  |  |
 | `hora_inicio` | `time` |  |  |  |
 | `hora_fin` | `time` |  | `CHECK > hora_inicio` |  |
-| `duracion_minutos` | `int` |  | `DEFAULT 50` |  |
+| `duracion_minutos` | `int` |  | `DEFAULT 50`, `CHECK > 0` |  |
 | `estado` | `varchar(20)` |  | `DEFAULT 'programado'`, `CHECK IN ('programado','asistio','falto','cancelado','reprogramado')` |  |
 | `motivo_cancelacion` | `text` | sí |  |  |
 | `turno_origen_id` | `bigint` | sí | `FK → turno` |  |

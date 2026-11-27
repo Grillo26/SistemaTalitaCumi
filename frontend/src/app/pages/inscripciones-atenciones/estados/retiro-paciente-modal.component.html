@@ -1,0 +1,118 @@
+<app-modal
+  [open]="true"
+  [title]="texts.patientRetireTitle"
+  [subtitle]="preview.paciente.nombre_completo"
+  size="lg"
+  (closed)="closed.emit()"
+>
+  <form class="space-y-4" [formGroup]="form" (ngSubmit)="submit()">
+    @if (error; as message) {
+      <app-alert variant="error" title="No se pudo retirar al paciente" [message]="message" />
+    }
+
+    <div class="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm dark:border-gray-800 dark:bg-white/[0.02]">
+      <p class="font-medium text-gray-800 dark:text-white/90">
+        {{ preview.paciente.nombre_completo }}
+      </p>
+      <p class="mt-1 text-xs text-gray-500">{{ texts.patientRetireHint }}</p>
+    </div>
+
+    @if (precheck; as data) {
+      @if (!data.turnos.disponible) {
+        <app-alert variant="info" title="Verificación de turnos" [message]="texts.noTurns" />
+      } @else if (turnosCount > 0) {
+        <app-alert
+          variant="warning"
+          title="Turnos futuros"
+          [message]="'Hay ' + turnosCount + ' turno(s) futuro(s). Sugerimos cancelarlos antes.'"
+        />
+      }
+
+      @if (!data.pago.disponible) {
+        <app-alert variant="info" title="Estado de pago" [message]="texts.noPayment" />
+      } @else if (saldoPendiente) {
+        <app-alert
+          variant="warning"
+          title="Saldo pendiente"
+          message="Hay saldo pendiente. El retiro no se bloquea."
+        />
+      }
+    }
+
+    <div>
+      <p class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+        {{ texts.preview }} ({{ preview.conteos.total }})
+      </p>
+      @if (preview.inscripciones.length === 0) {
+        <p class="text-sm text-gray-500">{{ texts.noInscriptionsToDrag }}</p>
+      } @else {
+        <div class="divide-y divide-gray-100 rounded-xl border border-gray-200 dark:divide-gray-800 dark:border-gray-800">
+          @for (item of preview.inscripciones; track item.tipo_entidad + '-' + item.id) {
+            <div class="flex flex-wrap items-center justify-between gap-2 p-3">
+              <div>
+                <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+                  {{ item.tipo_entidad_label }} · {{ item.servicio.nombre }}
+                </p>
+                <p class="text-xs text-gray-500">
+                  {{ item.sucursal.nombre }} · {{ formatDate(item.fecha_inicio) }} —
+                  {{ formatDate(item.fecha_fin) }}
+                </p>
+              </div>
+              <span class="text-xs font-medium text-gray-600 dark:text-gray-300">
+                {{ item.estado_efectivo_label }}
+              </span>
+            </div>
+          }
+        </div>
+      }
+    </div>
+
+    <div>
+      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+        {{ texts.motive }} *
+      </label>
+      <app-select-field
+        [options]="motiveOptions"
+        [value]="form.controls.motivo.value"
+        [placeholder]="texts.motive"
+        ariaLabel="Motivo de retiro"
+        (valueChange)="form.controls.motivo.setValue($event)"
+      />
+    </div>
+
+    @if (otherSelected) {
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          {{ texts.motiveDetail }} *
+        </label>
+        <textarea
+          app-textarea
+          rows="3"
+          maxlength="500"
+          formControlName="motivo_detalle"
+          [placeholder]="texts.motiveDetail"
+        ></textarea>
+      </div>
+    }
+
+    <div>
+      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+        {{ texts.date }} *
+      </label>
+      <app-inscripcion-date-input
+        formControlName="fecha_baja"
+        [maxDate]="maxDate"
+        ariaLabel="Fecha de retiro del paciente"
+      />
+    </div>
+
+    <div class="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+      <button app-button variant="outline" type="button" [disabled]="saving" (click)="closed.emit()">
+        {{ texts.cancel }}
+      </button>
+      <button app-button variant="destructive" type="submit" [disabled]="saving">
+        {{ saving ? texts.saving : texts.patientRetireConfirm }}
+      </button>
+    </div>
+  </form>
+</app-modal>

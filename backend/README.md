@@ -77,6 +77,8 @@ app/Modules/Organizacion/
 └── routes-configuracion.php      Configuración (03)
 ```
 
+Módulos actuales: `Organizacion`, `Seguridad`, `Profesionales`, `Pacientes`, `CatalogoServicios` e `InscripcionesAtenciones`.
+
 Reglas de dependencia:
 
 - Controller → Action o Query. Nunca usa Models directamente.
@@ -1510,7 +1512,7 @@ No se tocaron esos módulos.
 | Contrato | Implementación | Mensaje |
 |---|---|---|
 | `DiagnosticTypeDirectoryContract` | `StubDiagnosticTypeDirectoryContract` | `Módulo 05 — Catálogo de tipos de diagnóstico no implementado todavía.` |
-| `PatientEnrollmentDirectoryContract` | `StubPatientEnrollmentDirectoryContract` | `Módulo 06 — Inscripciones no implementado todavía.` |
+| `PatientEnrollmentDirectoryContract` | `StubPatientEnrollmentDirectoryContract` | `Contrato de resumen de inscripciones del paciente aún no implementado por 06.` |
 | `PacienteExporterContract` | `UnavailablePacienteExporter` | `Exportación PDF/Excel pendiente de infraestructura.` |
 
 - `TutorDirectoryContract` tiene implementación real (`EloquentTutorDirectory`): `existe`, `estaActivo`, `resumen`, `tutoresDePaciente`, `tieneTutorPrincipal`, `tutorPrincipal` y `asegurarTutorPrincipal`. `tieneTutorPrincipal` y `tutorPrincipal` exigen que el principal esté **activo** (04.02/RN-007); `tutorPrincipal` devuelve `null` si el principal está inactivo. `TutorResumen` incluye el parentesco de la relación.
@@ -2489,6 +2491,697 @@ Seeders: `CatalogoDiagnosticosPermissionSeeder` y `CatalogoDiagnosticosAccionAud
 | RN-D11 | `version` y snapshots; requisitos editables sin tocar diagnósticos previos | Catálogo versionado; snapshot en 06/11 |
 
 **TODOs:** implementar `TipoDiagnosticoUsageContract` con 06/11; exportación PDF/Excel; filtrado de tipos inactivos y snapshot de requisitos en inscripciones/diagnósticos (06/07/11); integrar la FK diferida de `paciente` cuando 04 lo habilite.
+
+
+---
+
+## Módulo 06 — Inscripciones y atenciones
+
+Submódulos implementados: **inscripción a salas grupales**, **paquetes de sesiones individuales**, **entrevistas y diagnósticos como atenciones** y **vigencia, vencimiento y renovación**. Crean la base del módulo padre `App\Modules\InscripcionesAtenciones` para que los próximos submódulos (estados/pausa) reutilicen el prefijo, el provider y el catálogo de auditoría.
+
+### Estructura
+
+```text
+app/Modules/InscripcionesAtenciones/
+├── Actions/          Salas: CreateInscripcionSalaGrupal, UpdateInscripcion,
+│                     RenovarInscripcion, BajaInscripcion
+│                     Paquetes: CreatePaqueteSesionesAction, UpdatePaqueteAction,
+│                     RenovarPaqueteAction, BajaPaqueteAction,
+│                     RejectPaqueteDeletionAction
+│                     Vigencias: RenovarDesdePanelAction, RenovarMultipleAction,
+│                     UpdateVentanaAlertaAction
+│                     Estados: CambiarEstadoPacienteAction,
+│                     RetirarPacienteConCascadaAction, PausarInscripcionAction,
+│                     ReactivarInscripcionAction, RetirarInscripcionAction
+├── Contracts/        PagoInscripcion, AsistenciaInscripcion,
+│                     TurnosFuturosInscripcion, ComprobantePdfExporter,
+│                     InscripcionExporter + stubs/unavailable
+│                     Paquetes: ConsumoPaquete, PagoPaquete, TurnosFuturosPaquete,
+│                     ComprobantePaquetePdfExporter + stubs/unavailable
+│                     Estados: PacienteEstadoContract, EstadoExporterContract
+├── Enums/            EstadoInscripcionSala, MotivoBaja,
+│                     EstadoPaqueteSesiones, MotivoBajaPaquete, DiaSemana,
+│                     EstadoInscripcion, AccionEstado, MotivoPausa, MotivoPaciente
+├── Events/           InscripcionCreated/Updated/Renewed/Retirada/Pausada/Reactivada,
+│                     PaqueteCreated/Updated/Renewed/Retirado, PacienteRetirado
+├── Exceptions/       Dominio con render HTTP
+├── Http/             Controllers, Requests y Resources de los submódulos
+├── Listeners/        RecordInscripcionAudit, RecordPaqueteAudit,
+│                     RecordInscripcionEstadoAudit
+├── Models/           InscripcionSala, PaqueteSesiones, BitacoraEntry
+├── Providers/        InscripcionesAtencionesServiceProvider
+├── Queries/          Salas y paquetes: listado, ficha, preview de monto,
+│                     renovación, comprobante, pago y turnos futuros
+│                     Estados: listados, historial, reporte y prechequeos
+├── Rules/            Reglas puras de período, solapamiento, estado,
+│                     motivo, tarifa, monto, observaciones, días/hora,
+│                     cantidad, duración, saldo, estimación y estados efectivos
+├── Support/          Constantes, permisos, abilities, snapshots, joins,
+│                     guards, catálogo de motivos y cálculos de período
+├── routes.php
+├── routes-salas-grupales.php
+├── routes-paquetes-sesiones.php
+├── routes-entrevista-diagnostico.php
+├── routes-vigencias.php
+└── routes-estados.php
+```
+
+Constantes:
+
+```php
+InscripcionesAtencionesModule::MODULE_URL = '/inscripciones-atenciones';
+InscripcionesAtencionesModule::MODULE_URL_SALAS_GRUPALES = '/inscripciones-atenciones/salas-grupales';
+InscripcionesAtencionesModule::MODULE_URL_PAQUETES = '/inscripciones-atenciones/paquetes-sesiones';
+InscripcionesAtencionesModule::MODULE_URL_ENTREVISTA_DIAGNOSTICO = '/inscripciones-atenciones/entrevista-diagnostico';
+InscripcionesAtencionesModule::MODULE_URL_VIGENCIAS = '/inscripciones-atenciones/vigencias';
+InscripcionesAtencionesModule::MODULE_URL_ESTADOS = '/inscripciones-atenciones/estados';
+InscripcionesAtencionesModule::AUDIT_MODULE = 'inscripciones';
+InscripcionesAtencionesModule::ENTITY_INSCRIPCION_SALA = 'inscripcion_sala';
+InscripcionesAtencionesModule::ENTITY_PAQUETE_SESIONES = 'paquete_sesiones';
+InscripcionesAtencionesModule::ENTITY_ATENCION_ENTREVISTA = 'atencion_entrevista';
+InscripcionesAtencionesModule::ENTITY_ATENCION_DIAGNOSTICO = 'atencion_diagnostico';
+InscripcionesAtencionesModule::ENTITY_RENOVACION_MULTIPLE = 'renovacion_multiple';
+```
+
+El provider se registra en `bootstrap/providers.php` después de `CatalogoServiciosServiceProvider`. Los futuros providers de Pagos/Agenda deben registrarse después para reemplazar los stubs de sus contratos.
+
+### Migración
+
+`2026_11_25_000800_create_inscripcion_sala_table.php`:
+
+- Tabla real **`inscripcion_sala`** (no existe una tabla genérica `inscripciones`).
+- FKs a paciente, tutor, sala, sucursal, servicio, tarifa, categoría y self-FK `inscripcion_origen_id`.
+- `monto_esperado numeric(12,2)` con checks de no negativo y fechas coherentes.
+- `estado varchar(20)` con `CHECK IN ('activa','en_pausa','vencida','renovada','retirada')`.
+- PostgreSQL: `btree_gist` + constraint `EXCLUDE` `(paciente_id, sala_id, daterange(fecha_inicio, fecha_fin, '[]'))` para estados `activa` y `en_pausa`.
+- Índices por sucursal/período, sala/período, paciente/estado y origen.
+- **No** se crea `estado_inscripcion_historial`; queda para el submódulo de estados/pausa. La baja se audita en `bitacora`.
+- **No** se crean `pago` ni `turno`.
+
+### Permisos
+
+Seeder `InscripcionesAtencionesPermissionSeeder`, marcador `inscripciones.salas_grupales`:
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `inscripcion.ver` | sí | sí | sí |
+| `inscripcion.crear` | sí | sí | sí |
+| `inscripcion.editar` | sí | sí | no |
+| `inscripcion.renovar` | sí | sí | sí |
+| `inscripcion.retirar` | sí | sí | no |
+| `inscripcion.exportar` (reservado) | sí | sí | no |
+
+El código decide por permiso. No hay comparaciones por nombre de rol. Recepción crea/consulta/renueva; Administración además edita y da de baja.
+
+### Endpoints
+
+Prefijo real: **`/api/inscripciones-atenciones/salas-grupales`**.
+
+| Método | Ruta | Acción/Query | Permiso |
+|---|---|---|---|
+| GET | `/` | `ListInscripcionesQuery` | `inscripcion.ver` |
+| GET | `/monto-esperado` | `PreviewMontoEsperadoQuery` | `inscripcion.ver` |
+| GET | `/{id}` | `GetInscripcionQuery` | `inscripcion.ver` |
+| GET | `/{id}/renovacion` | `GetRenovacionPreviewQuery` | `inscripcion.renovar` |
+| GET | `/{id}/pago` | `GetPagoInscripcionQuery` | `inscripcion.ver` |
+| POST | `/{id}/pago` | `IniciarPagoInscripcionQuery` | `inscripcion.ver` (TODO: `pago.crear` cuando exista 08) |
+| GET | `/{id}/asistencia` | `GetAsistenciaInscripcionQuery` | `inscripcion.ver` |
+| GET | `/{id}/turnos-futuros` | `GetTurnosFuturosQuery` | `inscripcion.retirar` |
+| GET | `/{id}/comprobante` | `GetComprobanteDataQuery` | `inscripcion.ver` |
+| GET | `/{id}/comprobante/pdf` | `GenerateComprobantePdfQuery` | `inscripcion.ver` |
+| GET | `/exportar` | `ExportInscripcionesQuery` | `inscripcion.exportar` |
+| POST | `/` | `CreateInscripcionSalaGrupalAction` | `inscripcion.crear` |
+| PATCH | `/{id}` | `UpdateInscripcionAction` | `inscripcion.editar` |
+| POST | `/{id}/renovar` | `RenovarInscripcionAction` | `inscripcion.renovar` |
+| POST | `/{id}/retirar` | `BajaInscripcionAction` | `inscripcion.retirar` |
+| DELETE | `/{id}` | siempre `409 INSCRIPCION_DELETE_NOT_ALLOWED` | `inscripcion.retirar` |
+
+Filtros del listado: `search`, `sucursal_id`, `sala_id`, `paciente_id`, `periodo_mes`, `periodo_anio`, `estado` (`activa`, `vencida`, `retirada`, `en_pausa`, `renovada`), `page`, `per_page` (máx. 50), `sort`, `direction`. La respuesta incluye `data`, `links`, `meta` y `can`.
+
+### Alcance, estado y snapshot
+
+- **Alcance por sucursal:** filtro explícito `whereIn('sucursal_id', UserBranchAccessContract::accesibles())` en las Queries; `puedeAcceder()` en las Actions. Sin `GlobalScope`. Ficha/acción fuera de alcance → `403 BRANCH_ACCESS_DENIED`. Listado con filtro de sucursal fuera de alcance → `403`.
+- **Sucursal inmutable:** `sucursal_id` y `sala_id` no se modifican por PATCH. Para cambiar de sucursal o sala se da de baja y se crea otra inscripción (RN-007).
+- **Estados:** este submódulo solo escribe `activa` y `retirada`. `vencida` se deriva de `fecha_fin`; `en_pausa` y `renovada` quedan reservados para el submódulo de estados/pausa. Sin soft-delete y sin `DELETE`.
+- **Dinero:** `monto_esperado` se guarda como `decimal:2`/string. El cliente nunca envía el monto; la Action lo resuelve. `MontoEsperadoRule` usa bcmath y regex de dos decimales.
+- **Snapshot de tarifa:** `tarifa_id` + `categoria_tarifa_id` + `monto_esperado`. Cambios posteriores del catálogo no alteran inscripciones existentes. En RF-009, si la tarifa resuelta cambia, se exige `confirmar_tarifa_cambio=true` y se re-snapshotea con bitácora antes/después.
+- **Renovación:** nueva inscripción con `inscripcion_origen_id`; por defecto inicio = día siguiente al fin anterior y fin = inicio + 1 mes - 1 día. La anterior no se marca `renovada`; se muestra vencida por fecha.
+- **Concurrencia:** `InscripcionOverlapRule` en la Action + `EXCLUDE` PostgreSQL para doble envío.
+- **Pagos/Agenda:** la ficha principal no los llama. `GET/POST /{id}/pago` y `GET /{id}/asistencia` son endpoints separados; con stubs responden `503 MODULO_NO_DISPONIBLE`. `BajaInscripcionAction` no llama Agenda: el pre-chequeo de turnos es un endpoint separado y la baja funciona sin él.
+
+### Eventos y bitácora
+
+Listener `RecordInscripcionAudit`, síncrono y fail-closed (`503 AUDIT_UNAVAILABLE`). Entidad `inscripcion_sala`, módulo `inscripciones`.
+
+| Evento | Acción | Payload mínimo |
+|---|---|---|
+| `InscripcionCreated` | `CREAR` | `inscripcion_id`, paciente, tutor, sucursal, sala, servicio, tarifa, categoría, período, `monto_esperado`, origen, actor, IP, snapshot |
+| `InscripcionUpdated` | `ACTUALIZAR` | id, snapshot antes/después, campos cambiados, actor, IP |
+| `InscripcionRenewed` | `RENOVAR` | nueva inscripción, origen, paciente, tutor, sucursal, sala, servicio, tarifa, categoría, período, monto, antes/después |
+| `InscripcionRetirada` | `RETIRAR` | id, sucursal, paciente, sala, motivo, detalle, `fecha_baja`, antes/después, actor, IP |
+
+`InscripcionCreated`/`InscripcionRenewed` dejan la expectativa de pago para Pagos y Caja. `InscripcionRetirada` deja el bloqueo de nuevas asistencias para Agenda. **No se llaman esos módulos desde las Actions.** La alerta de RN-005 (período iniciado sin pago) pertenece a Reportes/Alertas.
+
+Seeder `InscripcionesAtencionesAccionAuditadaSeeder`: `CREAR`, `ACTUALIZAR`, `RENOVAR` no críticos; `RETIRAR` crítico.
+
+### Contratos
+
+Reales, sin modificar otros módulos:
+
+- `PatientDirectoryContract` (paciente activo y resumen).
+- `TutorDirectoryContract` (tutores del paciente, resumen y estado).
+- `SalaDirectoryContract` (sala activa en sucursal).
+- `BranchDirectoryContract` y `UserBranchAccessContract`.
+- `TarifaAplicableResolverContract`.
+- `ParameterReaderContract` para los datos del centro y la leyenda.
+
+Stubs propios (503 con `MODULE_NO_DISPONIBLE`):
+
+- `PagoInscripcionContract` / `StubPagoInscripcionContract`.
+- `AsistenciaInscripcionContract` / `StubAsistenciaInscripcionContract`.
+- `TurnosFuturosInscripcionContract` / `StubTurnosFuturosInscripcionContract`.
+- `ComprobantePdfExporterContract` / `UnavailableComprobantePdfExporter`.
+- `InscripcionExporterContract` / `UnavailableInscripcionExporter`.
+
+`SalaGrupalServicioGuard` hace una lectura puntual de `servicio`+`tipo_servicio` porque el contrato de Catálogo no expone `codigo`; no modifica el módulo 05. Los joins de presentación (`InscripcionQueryJoins`) son de solo lectura para evitar N+1 y no cambian Pacientes/Organización/Catálogo.
+
+### Comprobante
+
+`GET /{id}/comprobante` devuelve datos reales: centro desde `configuracion`, logo público, paciente, tutor, sala/tipo/turno, sucursal, servicio, categoría, período, monto y leyenda `comprobante.leyenda_no_factura`. El frontend imprime con `window.print()`. El PDF real y la exportación PDF/Excel quedan pendientes de infraestructura (`dompdf`/`snappy`/`maatwebsite/excel` no están instalados).
+
+### Tests
+
+- Unit: período, solapamiento con casos de borde, transición de estados, motivo, tarifa vigente, monto/observaciones.
+- Feature: alta, paciente inactivo, duplicado, misma paciente en otra sala, sala inactiva, sala de otra sucursal, scoping, permisos, preview, modificación con bitácora, snapshot inmutable, cambio de tarifa con confirmación, renovación vinculada, baja con motivo, DELETE 409, stubs 503 y comprobante.
+- PostgreSQL: tests de la constraint `EXCLUDE` con `phpunit.pgsql.xml`.
+
+### Checklist del submódulo
+
+| RF | Evidencia | Estado |
+|---|---|---|
+| RF-001 | `CreateInscripcionSalaGrupalAction` + form | Completo |
+| RF-002 | `PatientDirectoryContract::asegurarPermiteInscripcion` | Completo |
+| RF-003 | `InscripcionOverlapRule` + `EXCLUDE` | Completo |
+| RF-004 | Autocompletado sobre API Pacientes | Completo |
+| RF-005 | `PreviewMontoEsperadoQuery` + resolver | Completo |
+| RF-006 | `InscripcionObservacionesRule` + max 500 | Completo |
+| RF-007 | `ListInscripcionesQuery` | Completo |
+| RF-008 | `GetInscripcionQuery` + ficha; pago/asistencia separados | Parcial por 08/07 |
+| RF-009 | `UpdateInscripcionAction` + bitácora | Completo; pagos pendientes |
+| RF-010 | `RenovarInscripcionAction` + `inscripcion_origen_id` | Completo |
+| RF-011 | `BajaInscripcionAction` + bitácora | Completo; bloqueo Agenda en 07 |
+| RF-012 | Datos + comprobante imprimible; PDF pendiente | Parcial por infraestructura |
+| RF-013 | Contrato/stub + endpoints separados | Pendiente 08 |
+| RF-014 | Contrato/stub + endpoint separado | Pendiente 07 |
+| RF-015 | Contrato/stub + endpoint 503; sin botón | Pendiente infraestructura |
+| RF-016 | Queries + Actions + middleware | Completo |
+
+| RN | Evidencia |
+|---|---|
+| RN-001 | `InscripcionPeriodoRule` |
+| RN-002 | `SalaDirectoryContract::asegurarActivaEnSucursal` |
+| RN-003 | `InscripcionOverlapRule` + `EXCLUDE` |
+| RN-004 | Categoría seleccionada manualmente, sin inferencia |
+| RN-005 | Evento con monto/período; alerta en Reportes (pendiente) |
+| RN-006 | Sin control de cupo |
+| RN-007 | Sucursal/sala inmutables; baja + alta |
+| RN-008 | FormRequest + `InscripcionDatosObligatoriosRule` |
+| RN-009 | Estado `retirada`; DELETE 409 |
+| RN-010 | Leyenda desde configuración |
+| RN-011 | Resolver + `TarifaVigenteRule` + confirmación |
+
+| CA | Evidencia |
+|---|---|
+| CA-001 | Feature de alta |
+| CA-002 | Feature de paciente inactivo |
+| CA-003 | Feature de duplicidad |
+| CA-004 | Feature de preview |
+| CA-005 | Feature de modificación + bitácora |
+| CA-006 | Feature de renovación vinculada |
+| CA-007 | Feature de baja; asistencias en 07 |
+| CA-008 | Feature de scoping |
+| CA-009 | Comprobante imprimible; PDF pendiente |
+| CA-010 | Pendiente 08; UI “No disponible” |
+
+**TODOs:**
+
+- Implementar `PagoInscripcionContract` en 08 y `AsistenciaInscripcionContract`/`TurnosFuturosInscripcionContract` en 07.
+- Definir el comportamiento de RF-009 cuando existan pagos: `tienePagos` en el contrato y bloqueo/ajuste de tarifa/categoría/monto.
+- Implementar PDF y exportación PDF/Excel cuando se instale la infraestructura.
+- Implementar `ServicioUsageContract::hasInscripciones` y separar `TarifaUsageContract` en la conexión real con Catálogo (propuesta pendiente de confirmación).
+- La alerta RN-005 corresponde a Reportes/Alertas.
+
+### Submódulo 02 — Paquetes de sesiones individuales
+
+Implementación de `docs/06_INSCRIPCIONES_ATENCIONES/02_paquetes_sesiones_individuales.md` (RF-001 a RF-017, RN-001 a RN-011, CA-001 a CA-010). No modifica Salas Grupales, Catálogo, Pacientes, Profesionales ni Organización; solo consume sus contratos y lecturas puntuales.
+
+Decisiones de modelado:
+
+- Tabla propia **`paquete_sesiones`**; no se usa una tabla genérica `inscripciones`.
+- La tarifa es **por sesión**; `monto_esperado` total = tarifa × `cantidad_sesiones`, calculado siempre por el backend con bcmath y guardado como `numeric(12,2)`.
+- `faltadas` consume saldo igual que `realizadas`; `canceladas` no descuenta. `saldo = max(0, pactadas − realizadas − faltadas)`.
+- `vencido` es un estado **derivado** de `fecha_fin`, sin job ni contador persistido. Solo se escriben `activo` y `retirado`; `en_pausa`/`renovado` quedan reservados.
+- Renovación: inicio = día siguiente al fin anterior; fin = misma duración inclusiva del período anterior. El paquete anterior no cambia de estado.
+- `dias_semana` se guarda como CSV numérico `1..6` (lunes a sábado) y se expone como arreglo + labels.
+- Profesional opcional, validado activo y con relación activa a la sucursal. No se valida especialidad porque Catálogo no tiene relación servicio → especialidad.
+- Configuración: se reutiliza `duracion_sesion_minutos` (50) y se agrega `paquete.cantidad_sesiones_default` (10) con seeder.
+
+#### Migración y seeders
+
+`2026_11_26_000000_create_paquete_sesiones_table.php`:
+
+- FKs a paciente, tutor, sucursal, servicio, profesional (nullable), tarifa, categoría y self-FK `paquete_origen_id`.
+- Checks de estado, fechas coherentes, monto no negativo, cantidad > 0, duración > 0 y regex de días `^[1-6](,[1-6])*$`.
+- PostgreSQL: `btree_gist` + `EXCLUDE` sobre `(paciente_id, servicio_id, daterange(fecha_inicio, fecha_fin, '[]'))` para estados `activo` y `en_pausa`.
+- Índices por estado, fechas, sucursal/período, paciente/estado, servicio/fecha, profesional/fecha y origen.
+
+Seeders agregados a `DatabaseSeeder`:
+
+| Seeder | Contenido |
+|---|---|
+| `PaquetesSesionesPermissionSeeder` | permisos `paquete.*` y asignación por matriz inicial |
+| `PaquetesSesionesAccionAuditadaSeeder` | `CREAR`, `ACTUALIZAR`, `RENOVAR` no críticos; `RETIRAR` crítico |
+| `PaquetesSesionesConfiguracionSeeder` | `paquete.cantidad_sesiones_default = 10`; no pisa valores existentes |
+
+Para desarrollo: `php artisan migrate` y luego `php artisan db:seed` (o los tres seeders de paquetes por separado). Los usuarios demo se crean aparte con `php artisan db:seed --class=SeguridadDemoUsersSeeder`.
+
+#### Permisos
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `paquete.ver` | sí | sí | sí |
+| `paquete.crear` | sí | sí | sí |
+| `paquete.editar` | sí | sí | no |
+| `paquete.renovar` | sí | sí | sí |
+| `paquete.retirar` | sí | sí | no |
+| `paquete.exportar` (reservado) | sí | sí | no |
+
+El backend decide siempre por permiso; no hay comparaciones por nombre de rol. Recepción crea/consulta/renueva; Administración además edita y da de baja.
+
+#### Endpoints
+
+Prefijo real: **`/api/inscripciones-atenciones/paquetes-sesiones`**.
+
+| Método | Ruta | Acción/Query | Permiso |
+|---|---|---|---|
+| GET | `/` | `ListPaquetesQuery` | `paquete.ver` |
+| GET | `/opciones` | `GetPaqueteOpcionesQuery` | `paquete.ver` |
+| GET | `/monto-esperado` | `PreviewMontoPaqueteQuery` | `paquete.ver` |
+| GET | `/exportar` | `ExportPaquetesQuery` | `paquete.exportar` |
+| POST | `/` | `CreatePaqueteSesionesAction` | `paquete.crear` |
+| GET | `/{id}` | `GetPaqueteQuery` + `PaqueteResource` | `paquete.ver` |
+| GET | `/{id}/renovacion` | `GetPaqueteRenovacionPreviewQuery` | `paquete.renovar` |
+| GET | `/{id}/consumo` | `GetConsumoPaqueteQuery` | `paquete.ver` |
+| GET | `/{id}/turnos-futuros` | `GetTurnosFuturosPaqueteQuery` | `paquete.ver` |
+| GET | `/{id}/pago` | `GetPagoPaqueteQuery` | `paquete.ver` |
+| POST | `/{id}/pago` | `IniciarPagoPaqueteQuery` | `paquete.ver` (TODO: permiso de 08) |
+| GET | `/{id}/comprobante` | `GetPaqueteComprobanteDataQuery` | `paquete.ver` |
+| GET | `/{id}/comprobante/pdf` | `GeneratePaqueteComprobantePdfQuery` | `paquete.ver` |
+| PATCH | `/{id}` | `UpdatePaqueteAction` | `paquete.editar` |
+| POST | `/{id}/renovar` | `RenovarPaqueteAction` | `paquete.renovar` |
+| POST | `/{id}/retirar` | `BajaPaqueteAction` | `paquete.retirar` |
+| DELETE | `/{id}` | siempre `409 PAQUETE_DELETE_NOT_ALLOWED` | `paquete.retirar` |
+
+Filtros del listado: `search` (nombre/apellido/código/CI del paciente), `sucursal_id`, `paciente_id`, `servicio_id`, `profesional_id`, `periodo_desde`, `periodo_hasta`, `estado` (`activo`, `vencido`, `retirado`, `en_pausa`, `renovado`), `page`, `per_page` (máx. 50), `sort`, `direction`. La respuesta incluye `data`, `links`, `meta` y `can`.
+
+#### Reglas y alcance
+
+| Regla | Evidencia |
+|---|---|
+| RN-001 cantidad | `CantidadSesionesRule` + default configurable |
+| RN-002 días/hora | `DiasHoraRule` + `DiasSemanaCast` + check SQL |
+| RN-003 duración | `DuracionSesionRule` + default `duracion_sesion_minutos` |
+| RN-004 falta descuenta | `SaldoSesionesRule` |
+| RN-005 vencimiento | `EstadoPaqueteSesiones::mostrado()`; no traslada saldo |
+| RN-006 profesional opcional | `profesional_id` nullable + `ProfesionalPaqueteGuard` solo si viene |
+| RN-007 múltiples paquetes | `PaqueteOverlapRule` + `EXCLUDE` por paciente+servicio |
+| RN-008 datos obligatorios | `PaqueteDatosObligatoriosRule` + FormRequests |
+| RN-009 pago adelantado | evento/contrato; alerta pertenece a Pagos/Reportes |
+| RN-010 no se borra | `BajaPaqueteAction` + `409` en DELETE |
+| RN-011 saldo en tiempo real | `GetConsumoPaqueteQuery` + `SaldoSesionesRule`; sin contador persistido |
+
+- **Alcance por sucursal:** filtro explícito `whereIn` en el listado y `puedeAcceder()` en Actions/Queries. Sin `GlobalScope`. Ficha/acción fuera de alcance → `403 BRANCH_ACCESS_DENIED`.
+- **Snapshot:** `tarifa_id`, `categoria_tarifa_id` y `monto_esperado` quedan fijos; cambios de catálogo no alteran paquetes existentes. Para una nueva tarifa se exige confirmación (`409 TARIFA_CAMBIO`) y se re-calcula.
+- **Modificación (RF-012):** solo profesional, días, hora y observaciones; fechas, cantidad, servicio, categoría, duración y tarifa no se modifican por PATCH. Para cambiar el período se renueva.
+- **Concurrencia:** la Action bloquea períodos del paciente/servicio con `lockForUpdate` y revalida solapamiento; el `EXCLUDE` cubre doble envío.
+- **Renovación:** crea un paquete nuevo con `paquete_origen_id`; no emite `PaqueteCreated`, emite `PaqueteRenewed`. No modifica el estado del origen.
+- **Baja:** cambia a `retirado` y registra motivo/detalle/fecha en bitácora. No consulta Agenda ni cancela turnos: el pre-chequeo es un endpoint separado.
+
+#### Eventos, contratos y bitácora
+
+Listener `RecordPaqueteAudit`, síncrono y fail-closed (`503 AUDIT_UNAVAILABLE`). Entidad `paquete_sesiones`, módulo `inscripciones`.
+
+| Evento | Acción | Payload mínimo |
+|---|---|---|
+| `PaqueteCreated` | `CREAR` | paquete, paciente, tutor, sucursal, servicio, profesional, tarifa, categoría, cantidad, días, hora, duración, fechas, monto, actor, IP, snapshot |
+| `PaqueteUpdated` | `ACTUALIZAR` | id, snapshot antes/después, campos cambiados, actor, IP |
+| `PaqueteRenewed` | `RENOVAR` | paquete nuevo, origen, configuración copiada, monto, antes/después |
+| `PaqueteRetirado` | `RETIRAR` | id, sucursal, paciente, servicio, motivo, detalle, fecha de baja, antes/después |
+
+Contratos nuevos, sin tocar los de Salas:
+
+- `ConsumoPaqueteContract` / `StubConsumoPaqueteContract` (503: Agenda y turnos).
+- `PagoPaqueteContract` / `StubPagoPaqueteContract` (503: Pagos y caja).
+- `TurnosFuturosPaqueteContract` / `StubTurnosFuturosPaqueteContract` (503: Agenda y turnos).
+- `ComprobantePaquetePdfExporterContract` / `UnavailableComprobantePaquetePdfExporter` (503: PDF).
+- `ExportPaquetesQuery` reutiliza `InscripcionExporterContract`; sin infraestructura responde 503.
+
+`TerapiaIndividualServicioGuard` lee `servicio` + `tipo_servicio` para exigir `terapia_individual`; `ProfesionalPaqueteGuard` valida activo y `profesional_sucursal` activa. Son lecturas de solo lectura, sin modificar esos módulos.
+
+#### Tests
+
+- Unit: cantidad, días/hora, duración, vigencia, solapamiento, estados, motivo, monto, saldo, datos obligatorios, observaciones, estimación y período de renovación.
+- Feature: alta con/sin profesional, monto calculado, duplicidad, paciente inactivo, servicio no individual, profesional de otra sucursal, alcance por sucursal, tarifa cambiada, preview, actualización con bitácora e inmutables, renovación vinculada, baja con motivo, DELETE 409, listado/filtros/estado derivado, permisos, stubs 503, consumo fake y comprobante.
+- PostgreSQL (`phpunit.pgsql.xml`): `PaqueteConstraintTest` valida el `EXCLUDE` de solapamiento y que otro servicio sí permite el mismo período.
+
+#### Checklist RF / RN / CA / RNF
+
+| RF | Evidencia | Estado |
+|---|---|---|
+| RF-001 | `CreatePaqueteSesionesAction` + formulario Angular | Completo |
+| RF-002 | `cantidad_sesiones` + `paquete.cantidad_sesiones_default` | Completo |
+| RF-003 | `duracion_minutos` + `duracion_sesion_minutos` | Completo |
+| RF-004 | `DiasHoraRule` + selector de días/hora | Completo |
+| RF-005 | `profesional_id` nullable + "Sin asignar" | Completo |
+| RF-006 | `PatientDirectoryContract::asegurarPermiteInscripcion` | Completo |
+| RF-007 | `TarifaAplicableResolverContract` + categoría | Completo |
+| RF-008 | `PreviewMontoPaqueteQuery` + `MontoPaqueteRule` | Completo |
+| RF-009 | `GetConsumoPaqueteQuery` + pestaña Consumo | Completo con contrato stub |
+| RF-010 | `ConsumoPaqueteContract` preparado para Agenda | Pendiente módulo 07 |
+| RF-011 | `ListPaquetesQuery` + filtros frontend | Completo |
+| RF-012 | `UpdatePaqueteAction` + bitácora antes/después | Completo |
+| RF-013 | `RenovarPaqueteAction` + `paquete_origen_id` | Completo |
+| RF-014 | `BajaPaqueteAction` + motivo/fecha | Completo |
+| RF-015 | Comprobante HTML imprimible; PDF pendiente | Parcial por infraestructura |
+| RF-016 | Endpoints separados + contrato de pago | Pendiente módulo 08 |
+| RF-017 | Scoping por sucursal en Queries/Actions | Completo |
+
+| RNF | Evidencia | Estado |
+|---|---|---|
+| RNF-001 | Índices y paginación; sin benchmark formal | Parcial |
+| RNF-002 | Saldo calculado en una consulta + regla pura | Completo |
+| RNF-003 | Sanctum + hash de Laravel | Completo (infraestructura) |
+| RNF-004 | HTTPS y contacto de tutor enmascarado sin permiso | Completo (infraestructura + resource) |
+| RNF-005 | Ficha sin datos clínicos | Completo |
+| RNF-006/007 | Dependen de infraestructura y respaldos | Fuera del código |
+| RNF-008 | Formulario único en español | Completo |
+| RNF-009 | Catálogos y sucursales sin hardcodeo | Completo |
+| RNF-010 | Impresión disponible; PDF/Excel y `wa.me` del tutor | Parcial (PDF/Excel pendientes) |
+| RNF-011 | Catálogos, migración versionada y documentación | Completo |
+| RNF-012 | Bitácora obligatoria y DELETE prohibido | Completo |
+
+| CA | Evidencia |
+|---|---|
+| CA-001 | `PaqueteCreateTest` + `PaqueteCreateSmokeTest` |
+| CA-002 | Alta sin profesional |
+| CA-003 | Duplicidad mismo servicio/período |
+| CA-004 | Contrato de consumo + fake en test (Agenda pendiente) |
+| CA-005 | `SaldoSesionesRule` (falla descuenta) |
+| CA-006 | Estado vencido derivado sin traslado |
+| CA-007 | Renovación vinculada y preview |
+| CA-008 | Baja con motivo + bitácora crítica |
+| CA-009 | Listado con scoping por sucursal |
+| CA-010 | Comprobante HTML con leyenda "No es factura" |
+
+**Pendientes:** implementar Agenda (07) para turnos y consumo real, Pagos (08) para estado/registro de pago, infraestructura PDF/Excel y benchmark de RNF-001. **Fuera de alcance:** creación/cancelación de turnos, asistencias, pagos, pausas/renovaciones automáticas de estado y datos clínicos.
+
+---
+
+### Submódulo 03 — Entrevistas y diagnósticos como atenciones
+
+Implementación de `docs/06_INSCRIPCIONES_ATENCIONES/03_entrevista_diagnostico_atenciones.md` (RF-001 a RF-015, RN-001 a RN-011, CA-001 a CA-010). Reutiliza el módulo padre, la bitácora, los contratos de Pacientes/Tutores/Organización/Catálogo y el patrón de Salas y Paquetes.
+
+#### Migraciones y schema
+
+- `2026_11_26_000100_create_atencion_entrevista_table.php`: tabla `atencion_entrevista`.
+- `2026_11_26_000200_create_atencion_diagnostico_table.php`: tabla `atencion_diagnostico`, con `motivo_omision_entrevista` y checks de estado, fechas, monto y coherencia de omisión/entrevista vinculada.
+- `2026_11_26_000300_create_atencion_diagnostico_profesional_table.php`: pivote de profesionales.
+- `2026_11_26_000400_create_atencion_diagnostico_requisito_table.php`: snapshot de especialidades y cantidades requeridas (RN-D11).
+
+Se actualizaron `database/database.md` y `database/talitacumi_schema.sql`. `estado_general` queda reservado para la etapa 2 y no se expone en este submódulo. La baja se guarda en `bitacora` (motivo y fecha), sin columnas adicionales, igual que en Salas y Paquetes.
+
+#### Permisos
+
+Seeder `EntrevistaDiagnosticoPermissionSeeder`, marcador `inscripciones.entrevista_diagnostico`:
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `atencion.ver` | sí | sí | sí |
+| `atencion.crear` | sí | sí | sí |
+| `atencion.editar` | sí | sí | no |
+| `atencion.retirar` | sí | sí | no |
+| `atencion.exportar` (reservado) | sí | sí | no |
+
+#### Endpoints
+
+Prefijo real: **`/api/inscripciones-atenciones/entrevista-diagnostico`**.
+
+| Método | Ruta | Acción/Query | Permiso |
+|---|---|---|---|
+| GET | `/entrevistas` | `ListAtencionesQuery` (entrevistas) | `atencion.ver` |
+| GET | `/entrevistas/monto-esperado` | `PreviewMontoEntrevistaQuery` | `atencion.ver` |
+| GET | `/entrevistas/exportar` | Exportación PDF/Excel (stub 503) | `atencion.exportar` |
+| POST | `/entrevistas` | `CreateEntrevistaAction` | `atencion.crear` |
+| GET | `/entrevistas/{id}` | `GetAtencionQuery` | `atencion.ver` |
+| PATCH | `/entrevistas/{id}` | `UpdateEntrevistaAction` | `atencion.editar` |
+| POST | `/entrevistas/{id}/retirar` | `BajaAtencionAction` | `atencion.retirar` |
+| DELETE | `/entrevistas/{id}` | siempre `409` | `atencion.retirar` |
+| GET/POST | `/entrevistas/{id}/pago` | `PagoAtencionContract` (stub 503) | `atencion.ver` |
+| GET | `/entrevistas/{id}/comprobante` | `GetAtencionComprobanteDataQuery` | `atencion.ver` |
+| GET | `/entrevistas/{id}/comprobante/pdf` | PDF (stub 503) | `atencion.ver` |
+| GET | `/diagnosticos` | `ListAtencionesQuery` (diagnósticos) | `atencion.ver` |
+| GET | `/diagnosticos/monto-esperado` | `PreviewMontoDiagnosticoQuery` | `atencion.ver` |
+| GET | `/diagnosticos/requisitos` | `GetRequisitosDiagnosticoQuery` | `atencion.ver` |
+| GET | `/diagnosticos/exportar` | Exportación PDF/Excel (stub 503) | `atencion.exportar` |
+| GET | `/entrevistas-previas` | `BuscarEntrevistaPreviaQuery` | `atencion.ver` |
+| POST | `/diagnosticos` | `CreateDiagnosticoAction` | `atencion.crear` |
+| GET | `/diagnosticos/{id}` | `GetAtencionQuery` | `atencion.ver` |
+| PATCH | `/diagnosticos/{id}` | `UpdateDiagnosticoAction` | `atencion.editar` |
+| POST | `/diagnosticos/{id}/retirar` | `BajaAtencionAction` | `atencion.retirar` |
+| POST | `/diagnosticos/{id}/vincular-entrevista` | `VincularEntrevistaADiagnosticoAction` | `atencion.editar` |
+| DELETE | `/diagnosticos/{id}` | siempre `409` | `atencion.retirar` |
+| GET/POST | `/diagnosticos/{id}/pago` | `PagoAtencionContract` (stub 503) | `atencion.ver` |
+| GET | `/diagnosticos/{id}/comprobante` | `GetAtencionComprobanteDataQuery` | `atencion.ver` |
+| GET | `/diagnosticos/{id}/comprobante/pdf` | PDF (stub 503) | `atencion.ver` |
+
+Filtros comunes: `search`, `sucursal_id`, `paciente_id`, `periodo_desde`, `periodo_hasta`, `estado`, `page`, `per_page` (máx. 50), `sort`, `direction`. Diagnósticos agregan `tipo_diagnostico_id` y `profesional_id`.
+
+#### Reglas y decisiones
+
+- 0 profesionales = “Sin asignar” permitido; 1 o más sin cubrir las cantidades del snapshot = `422 PROFESIONALES_INSUFICIENTES` con mensaje “Faltan profesionales requeridos por el tipo”.
+- El tipo de diagnóstico fija el `servicio_id`; el cliente no lo envía.
+- La tarifa se resuelve por servicio + sucursal + categoría + fecha de inicio. El cliente nunca envía monto; si la tarifa cambió entre preview y guardado se exige confirmación (`409 TARIFA_CAMBIO`).
+- Snapshot de tarifa: `tarifa_id`, `categoria_tarifa_id`, `monto_esperado`.
+- Snapshot de requisitos: `atencion_diagnostico_requisito`; editar profesionales se valida contra ese snapshot.
+- Entrevista: una fecha. Diagnóstico: rango con `fecha_fin >= fecha_inicio`; un solo día permitido; sin máximo. Fechas pasadas permitidas.
+- Si el diagnóstico no vincula entrevista, debe marcarse `omitio_entrevista=true`; el motivo es opcional (máx. 500). `BuscarEntrevistaPrevia` solo informa; no bloquea.
+- Edición: entrevista solo fecha/notas; diagnóstico solo fechas/profesionales/notas. La atención retirada no se edita. El monto no se recalcula en edición.
+- Baja: `activa -> retirada`, motivo cerrado (`retiro_paciente`, `error_registro`, `otro`), detalle obligatorio para “otro”, fecha no futura. Sin borrado físico.
+- Scope explícito por `UserBranchAccessContract` en Queries/Actions; sin GlobalScope.
+
+#### Eventos y bitácora
+
+Listener `RecordAtencionAudit`, fail-closed. Entidades `atencion_entrevista` y `atencion_diagnostico`; acciones `CREAR`, `ACTUALIZAR`, `RETIRAR` (crítica) y `VINCULAR`. Se agregaron las etiquetas al `AuditModuleResolver` y el seeder `EntrevistaDiagnosticoAccionAuditadaSeeder`.
+
+Eventos: `EntrevistaCreated`, `DiagnosticoCreated`, `AtencionUpdated`, `AtencionRetirada`, `EntrevistaVinculada`. Los eventos de alta llevan `monto_esperado` y datos suficientes para que Pagos cree la expectativa.
+
+#### Contratos
+
+- `PagoAtencionContract` / `StubPagoAtencionContract` (503).
+- `ComprobanteAtencionPdfExporterContract` / `UnavailableComprobanteAtencionPdfExporter` (503).
+- `AtencionExporterContract` / `UnavailableAtencionExporter` (503).
+- Se reutilizan `EstadoPagoInscripcion` y `RegistroPagoInscripcion`.
+
+#### Tests
+
+- `EntrevistaDiagnosticoTest`: alta de entrevista, alta de diagnóstico con profesionales y snapshot, bloqueo por profesionales insuficientes, diagnóstico sin asignar/omitido, obligación de omitir o vincular, baja y bloqueo posterior, permisos, DELETE 409, pago/exportación stub 503, listado/filtros, rango multidía, vinculación, comprobante, actualizaciones y profesional de otra sucursal.
+- `AtencionRulesTest`: fechas, cobertura de profesionales, omisión de entrevista, notas y motivo de baja.
+- `InscripcionesAtenciones` completo: 269 passed, 3 skipped PostgreSQL-only, 1042 assertions.
+
+**Pendientes:** Pagos/Agenda/Reportes reales, PDF/Excel, implementación real de `EntrevistaDirectoryContract` de Pacientes y de los stubs de uso del Catálogo (`hasInscripciones`, `hasDiagnosticosRegistrados`, `hasInscripcionesOrPagos`).
+
+---
+
+### Submódulo 04 — Vigencia, vencimiento y renovación
+
+Implementación de `docs/06_INSCRIPCIONES_ATENCIONES/04_vigencia_vencimiento_renovacion.md` (RF-001 a RF-017). Es transversal sobre Salas Grupales y Paquetes: **no crea una entidad nueva** y **delega la renovación** en `RenovarInscripcionAction` y `RenovarPaqueteAction`.
+
+#### Decisión de modelado
+
+- El estado de vigencia es **derivado**, no almacenado:
+  `Retirado > Renovado > Vencido > Por vencer > Vigente`.
+- `Renovado` se deriva de la existencia de una entidad sucesora no retirada.
+- No se modifica el Enum de estado de los submódulos de origen.
+- No hay job, columna `estado_vigencia` ni evento por cambio natural de vigencia.
+- La ventana de alerta se lee de `configuracion` (`vigencia.ventana_alerta_dias`) y no se hardcodea.
+- El panel/reporte une `inscripcion_sala` y `paquete_sesiones` con `UNION ALL` paginable; no se crea vista.
+- “Por vencer” es inclusivo: `0 <= fecha_fin - hoy <= ventana`.
+- Zona horaria: `America/La_Paz`.
+
+#### Configuración y migraciones
+
+- `VigenciasConfiguracionSeeder`: crea `vigencia.ventana_alerta_dias = 7` (rango 1–365, global) sin pisar valores existentes.
+- `2026_11_26_000500_add_vigencia_indexes.php`: índices de panel para `(sucursal_id, fecha_fin)` y `(paciente_id, fecha_fin)` en ambas tablas.
+- `ParameterAdminContract` (Organización): lectura/edición encapsulada del parámetro, reutilizando `UpdateParameterAction` para conservar versión, validación, caché y bitácora.
+- No se agregan tablas ni columnas de negocio.
+
+#### Permisos
+
+Seeder `VigenciasPermissionSeeder`, marcador `inscripciones.vigencias`:
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `vigencia.ver` | sí | sí | sí |
+| `vigencia.reportes` | sí | sí | no |
+| `vigencia.exportar` | sí | sí | no |
+| `vigencia.configurar` | sí | sí | no |
+
+No existe `vigencia.renovar`: la renovación exige `inscripcion.renovar` o `paquete.renovar`. Los tipos visibles se filtran además por `inscripcion.ver` y `paquete.ver`.
+
+#### Endpoints
+
+Prefijo real: **`/api/inscripciones-atenciones/vigencias`**.
+
+| Método | Ruta | Acción/Query | Permiso |
+|---|---|---|---|
+| GET | `/panel` | `GetPanelVigenciasQuery` | `vigencia.ver` |
+| GET | `/reportes` | `ListVencimientosReporteQuery` | `vigencia.reportes` |
+| GET | `/reportes/exportar?formato=pdf\|excel` | `ExportVigenciasQuery`; stub 503 | `vigencia.exportar` |
+| GET | `/pacientes/{pacienteId}/resumen` | `GetResumenVigenciaPacienteQuery` | `vigencia.ver` |
+| GET | `/entidades/{tipo}/{id}/renovacion` | `PreviewRenovacionQuery` | permiso de renovación del tipo |
+| POST | `/entidades/{tipo}/{id}/renovar` | `RenovarDesdePanelAction` | permiso de renovación del tipo |
+| POST | `/renovaciones` | `RenovarMultipleAction` | permiso de renovación del tipo |
+| GET | `/configuracion/ventana` | `GetVentanaAlertaQuery` | `vigencia.configurar` |
+| PATCH | `/configuracion/ventana` | `UpdateVentanaAlertaAction` | `vigencia.configurar` |
+
+Filtros de panel/reportes: `search`, `sucursal_id`, `paciente_id`, `servicio_id`, `tipo_entidad`, `estado`, `periodo_desde`, `periodo_hasta`, `page`, `per_page` (máx. 50), `sort`, `direction`. El panel usa por defecto “por vencer + vencidos”. Los reportes aceptan los cinco estados.
+
+#### Renovación y tarifa
+
+- `PreviewRenovacionQuery` devuelve tarifa anterior, tarifa vigente, `monto_anterior`, `monto_vigente` y `cambio_tarifa`.
+- `RenovarDesdePanelAction`:
+  - valida permiso subyacente y sucursal;
+  - resuelve tarifa actual;
+  - exige `monto_visto` y confirmación cuando cambió;
+  - delega en la Action de origen con `tarifa_id_esperada` vigente;
+  - después de crear, verifica el monto final y revierte si cambió durante la operación.
+- `RenovarMultipleAction` es atómica y exige mismo paciente; registra el lote en bitácora con `renovacion_multiple` y mantiene las auditorías individuales.
+- No se trasladan sesiones: se crea un paquete nuevo con la cantidad completa.
+
+#### Agenda y pacientes
+
+- `VigenciaEntidadContract` / `EloquentVigenciaEntidad`: `puedeRegistrarAsistencia(tipo, id, fechaTurno)`.
+- Usa la fecha del turno, no “hoy”; permite cargar asistencias históricas dentro del período y bloquea fuera del período o si la entidad está retirada.
+- El mensaje “Debe renovar...” y el bloqueo de Agenda se implementan en el módulo 07.
+- RF-015 expone `GET /pacientes/{id}/resumen` y el componente reutilizable `VigenciaAlertaComponent`; la integración visual en la ficha de Pacientes queda pendiente de autorización de ese módulo.
+
+#### Exportación
+
+`VigenciaExporterContract` es stub (`503`) hasta instalar infraestructura PDF/Excel. Los filtros se envían al contrato para que el archivo real los incluya. No se genera un archivo vacío ni simulado.
+
+#### Tests
+
+- Unit: clasificación con bordes, ventana, elegibilidad, comparación de tarifa.
+- Feature: panel, scoping, tipos visibles, reportes, preview, renovación individual, cambio de tarifa entre preview y ejecución, no traslado, múltiple atómica, contrato de Agenda, resumen del paciente, exportación 503 y configuración.
+- Índices: migración aplicada en PostgreSQL local.
+- Suite completa: **1013 passed, 6 skipped (PostgreSQL-only), 5060 assertions** con `make test`.
+
+**Pendientes:** Agenda (07) para consumo/asistencias reales, Pagos (08), exportación PDF/Excel, integración en la ficha de Pacientes y widget del panel en el inicio (CA-003).
+
+---
+
+### Submódulo 05 — Estados del paciente y de la inscripción
+
+Implementación de `docs/06_INSCRIPCIONES_ATENCIONES/05_estados_paciente_inscripcion.md` (RF-001 a RF-016, RN-001 a RN-012, CA-001 a CA-012). Es transversal sobre Salas, Paquetes y Pacientes.
+
+#### Modelo de estados
+
+- **Persistidos:** paciente (`activo`, `en_pausa`, `retirado`) e inscripción (`activa/activo`, `en_pausa`, `retirada/retirado`).
+- **Derivados:** `vencida` y `renovada`; no se escriben ni tienen endpoint manual.
+- **Precedencia efectiva:** `Retirada > EnPausa > Renovada > Vencida > Activa`.
+- **Pausa:** opción A. Se usa el `estado` existente; `inscripcion_sala.estado` y `paquete_sesiones.estado` ya admitían `en_pausa` en el `CHECK`. No cambia `fecha_inicio`, `fecha_fin` ni el saldo.
+- **Paciente:** la máquina base sigue en Pacientes (`EstadoPaciente::allowedTransitions` + `ChangePacienteStatusAction`). 06.05 la consume por `PacienteEstadoContract`; no la duplica.
+- **Regla nueva de inscripción:** `EstadoInscripcionTransitionRule`; la regla de retiro existente de Salas/Paquetes se amplió para aceptar `en_pausa`.
+- **Vencida/Renovada:** el estado efectivo se calcula con `EstadoEfectivoInscripcionRule`, que reutiliza `VigenciaClassifierRule` con ventana 0 y recibe `hoy` inyectado.
+- **Bitácora como historial:** RF-010 se resuelve leyendo la bitácora con permisos de estados; no se creó `estado_inscripcion_historial`. Las bajas y renovaciones previas ya están en bitácora y se muestran como legado real, sin inventar datos.
+- **Pacientes:** se separaron permisos: `paciente.cambiar_estado` (pausa/reactivación, Administración) y `paciente.retirar` (solo Administración/Superadmin). Recepción solo consulta estados de paciente. El endpoint histórico de Pacientes exige el permiso específico según el destino.
+- **Motivos:** catálogo cerrado en Enums (`MotivoPausa`, `MotivoPaciente`, más los Enums existentes de Salas/Paquetes). Una tabla administrable queda como evolución posterior para no cambiar el schema en esta entrega.
+- **Fecha:** pausa/reactivación usan el timestamp de auditoría; el retiro de inscripción admite hasta 30 días hacia atrás; el retiro de paciente usa hoy.
+
+#### Endpoints
+
+Prefijo real: **`/api/inscripciones-atenciones/estados`**.
+
+| Método | Ruta | Permiso |
+|---|---|---|
+| GET | `/opciones` | `estado.ver` |
+| GET | `/pacientes` | `estado.ver` + `paciente.ver` |
+| GET | `/pacientes/{id}/historial` | `estado.ver` + `paciente.ver` |
+| POST | `/pacientes/{id}/pausar` | `paciente.cambiar_estado` |
+| POST | `/pacientes/{id}/reactivar` | `paciente.cambiar_estado` |
+| POST | `/pacientes/{id}/retirar` | `paciente.retirar` |
+| GET | `/pacientes/{id}/retiro/preview` | `paciente.retirar` + `paciente.ver` |
+| GET | `/pacientes/{id}/retiro/prechequeo` | `paciente.retirar` + `paciente.ver` |
+| GET | `/inscripciones` | `estado.ver`; tipos filtrados por `inscripcion.ver`/`paquete.ver` |
+| GET | `/inscripciones/{tipo}/{id}/historial` | `estado.ver` + permiso de vista del tipo |
+| POST | `/inscripciones/{tipo}/{id}/pausar` | `inscripcion.pausar` + vista del tipo |
+| POST | `/inscripciones/{tipo}/{id}/reactivar` | `inscripcion.reactivar` + vista del tipo |
+| POST | `/inscripciones/{tipo}/{id}/retirar` | `inscripcion.retirar` o `paquete.retirar` |
+| GET | `/inscripciones/{tipo}/{id}/prechequeo-pausa` | `inscripcion.pausar` |
+| GET | `/inscripciones/{tipo}/{id}/prechequeo-retiro` | permiso de retiro del tipo |
+| GET | `/inscripciones/{tipo}/{id}/prechequeo-reactivacion` | `inscripcion.reactivar` |
+| GET | `/reportes` | `estado.reportes` |
+| GET | `/reportes/exportar` | `estado.exportar`; stub `503` |
+
+#### Matriz de transiciones de inscripción
+
+| Desde | Hacia | Tipo |
+|---|---|---|
+| Activa | En pausa | Manual |
+| Activa | Vencida | Sistema/derivada |
+| Activa | Renovada | Sistema/derivada |
+| Activa | Retirada | Manual |
+| En pausa | Activa | Manual |
+| En pausa | Retirada | Manual |
+| Vencida | Renovada | Sistema/derivada |
+
+El paciente mantiene la matriz de Pacientes: `activo ↔ en_pausa`, `activo → retirado`, `en_pausa → retirado`, `retirado → activo`.
+
+#### Permisos
+
+Seeder `EstadosPermissionSeeder`:
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `estado.ver` | sí | sí | sí |
+| `estado.reportes` | sí | sí | no |
+| `estado.exportar` | sí | sí | no |
+| `inscripcion.pausar` | sí | sí | sí |
+| `inscripcion.reactivar` | sí | sí | sí |
+
+El retiro de inscripción reutiliza `inscripcion.retirar`/`paquete.retirar`. El estado del paciente usa `paciente.cambiar_estado` y `paciente.retirar`; Recepción no los tiene.
+
+#### Eventos y auditoría
+
+- `InscripcionPausada` y `InscripcionReactivada` → `RecordInscripcionEstadoAudit` (`PAUSAR`/`REACTIVAR`).
+- `InscripcionRetirada` y `PaqueteRetirado` se reutilizan; no se duplican.
+- `PacienteStatusChanged` se reutiliza para pausa/reactivación/retiro.
+- `PacienteRetirado` agrega el detalle de la cascada (inscripciones y sucursales) para futuros consumidores.
+- El retiro en cascada es una sola transacción: paciente + inscripciones activas/en pausa, mismo motivo y fecha. Si una baja falla, se revierte todo.
+
+#### Agenda, Pagos y exportación
+
+- `VigenciaEntidadContract` ahora usa el estado efectivo: solo `Activa` admite asistencia; el mensaje “La inscripción no está activa” lo muestra Agenda.
+- Los prechequeos de turnos y pagos son endpoints separados y no bloquean. Con los stubs responden `disponible=false` y la UI muestra “verificación no disponible”/“estado de pago no disponible”, nunca “sin turnos”/“sin saldo”.
+- `EstadoExporterContract` / `UnavailableEstadoExporter` responden `503`; falta infraestructura PDF/Excel.
+
+#### Tests
+
+- Unit: matriz completa de paciente e inscripción, precedencia y bordes de fecha, motivos, asistencia y cascada.
+- Feature: pausa/reactivación, bloqueo de inscripción a paciente en pausa/retirado en Salas/Paquetes/Atenciones, retiro individual y en cascada, rollback, permisos, prechequeos tolerantes a stubs, historial, filtros, 409 y exclusión de Vigencia.
+- Integración: `EstadosVigenciaTest` y `EstadosAsistenciaTest`.
+
+**Pendientes:** motivos administrables en tabla, integración visual de los componentes en las fichas de Pacientes/Salas/Paquetes, Agenda (07), Pagos (08), PDF/Excel, alertas de próximo pago y benchmark RNF-001.
 
 ---
 

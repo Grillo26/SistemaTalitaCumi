@@ -1,0 +1,767 @@
+<div class="space-y-5 sm:space-y-6">
+  <app-page-breadcrumb [pageTitle]="texts.title" />
+
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+      <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">{{ texts.title }}</h1>
+      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ texts.subtitle }}</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <button
+        app-button
+        type="button"
+        [variant]="activeTab() === 'panel' ? 'default' : 'outline'"
+        (click)="setTab('panel')"
+      >
+        {{ texts.panel }}
+      </button>
+      @if (abilities().reports) {
+        <button
+          app-button
+          type="button"
+          [variant]="activeTab() === 'reportes' ? 'default' : 'outline'"
+          (click)="setTab('reportes')"
+        >
+          {{ texts.reports }}
+        </button>
+      }
+      @if (abilities().config) {
+        <button
+          app-button
+          type="button"
+          [variant]="activeTab() === 'configuracion' ? 'default' : 'outline'"
+          (click)="setTab('configuracion')"
+        >
+          {{ texts.configuration }}
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (activeTab() === 'panel') {
+    @if (panelError(); as message) {
+      <app-alert variant="error" title="No se pudo cargar el panel" [message]="message" />
+    }
+
+    @if (branches().length > 1) {
+      <div class="flex flex-wrap gap-2" role="tablist" aria-label="Sucursales">
+        @for (branch of branchTabs(); track branch.id) {
+          <button
+            app-button
+            type="button"
+            size="sm"
+            [variant]="panelForm.controls.sucursal_id.value === branch.id ? 'default' : 'outline'"
+            (click)="selectBranch(branch.id)"
+          >
+            {{ branch.nombre }}
+          </button>
+        }
+      </div>
+    }
+
+    <app-component-card [title]="texts.panelTitle">
+      <form
+        class="grid gap-4 lg:grid-cols-4"
+        [formGroup]="panelForm"
+        (ngSubmit)="applyPanelFilters()"
+      >
+        <div class="relative lg:col-span-2">
+          <span
+            class="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3 text-gray-400"
+            aria-hidden="true"
+          >
+            <svg class="size-5" viewBox="0 0 20 20" fill="none">
+              <path
+                d="M14.382 14.383l3.325 3.326m-1.249-8.334a7.082 7.082 0 01-7.083 7.081 7.082 7.082 0 110-14.163 7.082 7.082 0 017.083 7.082z"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </span>
+          <input
+            app-input
+            type="text"
+            formControlName="search"
+            class="ps-10"
+            [placeholder]="texts.search"
+            aria-label="Buscar paciente"
+          />
+        </div>
+        <app-select-field
+          [options]="tipoFilterOptions()"
+          [value]="panelForm.controls.tipo_entidad.value"
+          [placeholder]="texts.allTypes"
+          ariaLabel="Filtrar por tipo de entidad"
+          (valueChange)="panelForm.controls.tipo_entidad.setValue($event)"
+        />
+        <app-select-field
+          [options]="estadoOptions"
+          [value]="panelForm.controls.estado.value"
+          [placeholder]="texts.allStates"
+          ariaLabel="Filtrar por estado de vigencia"
+          (valueChange)="panelForm.controls.estado.setValue($event)"
+        />
+        <div class="flex items-end gap-2 lg:col-span-4">
+          <button app-button type="submit" [disabled]="panelLoading()">{{ texts.filter }}</button>
+          <button app-button variant="outline" type="button" (click)="clearPanelFilters()">
+            {{ texts.clear }}
+          </button>
+        </div>
+      </form>
+    </app-component-card>
+
+    @if (selectedRows().length > 0) {
+      <div
+        class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-100 bg-brand-50 px-4 py-3 dark:border-brand-500/20 dark:bg-brand-500/10"
+      >
+        <p class="text-sm font-medium text-brand-700 dark:text-brand-300">
+          {{ selectedRows().length }} entidad(es) seleccionada(s) para renovar.
+        </p>
+        <div class="flex gap-2">
+          <button app-button variant="outline" type="button" (click)="selectedRows.set([])">
+            Limpiar selección
+          </button>
+          <button
+            app-button
+            type="button"
+            [disabled]="!canRenovarSeleccionadas()"
+            (click)="openRenovarSeleccionadas()"
+          >
+            {{ texts.renewSelected }}
+          </button>
+        </div>
+      </div>
+    }
+
+    @if (lastRenewal().length > 0) {
+      <div
+        class="rounded-xl border border-success-200 bg-success-50 p-4 dark:border-success-500/30 dark:bg-success-500/10"
+      >
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p class="text-sm font-semibold text-success-700 dark:text-success-400">
+              {{ lastRenewal().length > 1 ? texts.successMultiple : texts.successRenew }}
+            </p>
+            <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">
+              La nueva entidad quedó vinculada al origen. Podés imprimir el comprobante o continuar
+              con el pago.
+            </p>
+          </div>
+          <button app-button variant="ghost" size="sm" type="button" (click)="lastRenewal.set([])">
+            Cerrar
+          </button>
+        </div>
+        <div class="mt-3 flex flex-wrap gap-2">
+          @for (result of lastRenewal(); track result.tipo_entidad + '-' + result.entidad_id) {
+            <div
+              class="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs dark:border-gray-800 dark:bg-gray-900"
+            >
+              <span class="font-medium text-gray-700 dark:text-gray-200">
+                {{ result.tipo_entidad_label }} #{{ result.entidad_id }}
+              </span>
+              <button
+                app-button
+                variant="link"
+                size="sm"
+                type="button"
+                (click)="verComprobante(result)"
+              >
+                {{ texts.receipt }}
+              </button>
+              <button
+                app-button
+                variant="link"
+                size="sm"
+                type="button"
+                (click)="registrarPago(result)"
+              >
+                {{ texts.registerPayment }}
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    <app-component-card>
+      <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+        <table app-table class="min-w-full">
+          <thead
+            app-table-header
+            class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900"
+          >
+            <tr app-table-row>
+              <th
+                app-table-cell
+                class="w-12 px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400"
+              >
+                <span class="sr-only">Seleccionar</span>
+              </th>
+              <th
+                app-table-cell
+                class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400"
+              >
+                Paciente
+              </th>
+              <th
+                app-table-cell
+                class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400"
+              >
+                Tutor
+              </th>
+              <th
+                app-table-cell
+                class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400"
+              >
+                Servicio
+              </th>
+              <th
+                app-table-cell
+                class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400"
+              >
+                Período
+              </th>
+              <th
+                app-table-cell
+                class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400"
+              >
+                Vence
+              </th>
+              <th
+                app-table-cell
+                class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400"
+              >
+                Estado
+              </th>
+              <th
+                app-table-cell
+                class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400"
+              >
+                Saldo
+              </th>
+              <th
+                app-table-cell
+                class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400"
+              >
+                Acciones
+              </th>
+            </tr>
+          </thead>
+          <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+            @if (panelLoading()) {
+              <tr app-table-row>
+                <td app-table-cell colspan="9" class="px-4 py-12 text-center text-sm text-gray-500">
+                  {{ texts.searching }}
+                </td>
+              </tr>
+            } @else {
+              @for (row of panelRows(); track row.tipo_entidad + '-' + row.id) {
+                <tr
+                  app-table-row
+                  class="transition-colors hover:bg-gray-50/70 dark:hover:bg-white/[0.02]"
+                >
+                  <td app-table-cell class="px-4 py-4">
+                    <input
+                      type="checkbox"
+                      class="size-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                      [checked]="isSelected(row)"
+                      [disabled]="selectionDisabled(row)"
+                      [attr.aria-label]="
+                        'Seleccionar ' +
+                        row.tipo_entidad_label +
+                        ' de ' +
+                        row.paciente.nombre_completo
+                      "
+                      (change)="toggleSelection(row)"
+                    />
+                  </td>
+                  <td app-table-cell class="px-4 py-4">
+                    <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+                      {{ row.paciente.nombre_completo }}
+                    </p>
+                    <p class="text-xs text-gray-500">{{ row.paciente.codigo || 'Sin código' }}</p>
+                    <app-badge color="gray" variant="light" size="sm" class="mt-1">{{
+                      row.tipo_entidad_label
+                    }}</app-badge>
+                  </td>
+                  <td app-table-cell class="px-4 py-4">
+                    <p class="text-sm text-gray-600 dark:text-gray-300">
+                      {{ row.tutor.nombre_completo }}
+                    </p>
+                    @if (row.can.whatsapp && whatsappUrl(row.tutor.telefono); as url) {
+                      <a
+                        class="mt-1 inline-flex text-xs font-medium text-success-600 hover:text-success-700 dark:text-success-400"
+                        [href]="url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {{ texts.whatsapp }}
+                      </a>
+                    }
+                  </td>
+                  <td app-table-cell class="px-4 py-4">
+                    <p class="text-sm text-gray-700 dark:text-gray-300">
+                      {{ row.servicio.nombre }}
+                    </p>
+                    @if (row.sala) {
+                      <p class="text-xs text-gray-500">{{ row.sala.nombre }}</p>
+                    }
+                    @if (row.profesional) {
+                      <p class="text-xs text-gray-500">{{ row.profesional.nombre_completo }}</p>
+                    }
+                    @if (row.cantidad_sesiones) {
+                      <p class="text-xs text-gray-500">{{ row.cantidad_sesiones }} sesiones</p>
+                    }
+                  </td>
+                  <td
+                    app-table-cell
+                    class="whitespace-nowrap px-4 py-4 text-sm text-gray-600 dark:text-gray-300"
+                  >
+                    {{ formatDate(row.fecha_inicio) }} — {{ formatDate(row.fecha_fin) }}
+                  </td>
+                  <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                    <p class="text-sm text-gray-600 dark:text-gray-300">
+                      {{ formatDate(row.fecha_fin) }}
+                    </p>
+                    <p class="text-xs text-gray-500">{{ diasLabel(row) }}</p>
+                  </td>
+                  <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                    <app-badge
+                      [color]="estadoVigenciaColor(row.estado_vigencia)"
+                      variant="light"
+                      size="sm"
+                    >
+                      {{ row.estado_vigencia_label }}
+                    </app-badge>
+                  </td>
+                  <td
+                    app-table-cell
+                    class="whitespace-nowrap px-4 py-4 text-sm text-gray-600 dark:text-gray-300"
+                  >
+                    {{ saldoLabel(row) }}
+                  </td>
+                  <td app-table-cell class="whitespace-nowrap px-4 py-4 text-end">
+                    @if (row.can.renew) {
+                      <button app-button size="sm" type="button" (click)="openRenovar(row)">
+                        {{ texts.renew }}
+                      </button>
+                    } @else if (row.motivo_no_renovable_label) {
+                      <span class="block max-w-44 text-end text-xs text-gray-500">{{
+                        row.motivo_no_renovable_label
+                      }}</span>
+                    }
+                  </td>
+                </tr>
+              } @empty {
+                <tr app-table-row>
+                  <td
+                    app-table-cell
+                    colspan="9"
+                    class="px-4 py-12 text-center text-sm text-gray-500"
+                  >
+                    {{ texts.noRows }}
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+
+      @if (panelMeta().total > 0) {
+        <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p class="text-sm text-gray-500 dark:text-gray-400">
+            Mostrando {{ panelMeta().from ?? 0 }}–{{ panelMeta().to ?? 0 }} de
+            {{ panelMeta().total }}
+          </p>
+          <app-pagination
+            [currentPage]="panelMeta().current_page"
+            [totalPages]="panelMeta().last_page"
+            variant="text-icon"
+            (pageChange)="goToPanelPage($event)"
+          />
+        </div>
+      }
+    </app-component-card>
+  }
+
+  @if (activeTab() === 'reportes' && abilities().reports) {
+    @if (reportError(); as message) {
+      <app-alert variant="error" title="No se pudo cargar el reporte" [message]="message" />
+    }
+
+    <app-component-card [title]="texts.reportsTitle">
+      <form
+        class="grid gap-4 lg:grid-cols-6"
+        [formGroup]="reportForm"
+        (ngSubmit)="applyReportFilters()"
+      >
+        <app-select-field
+          [options]="branchOptions()"
+          [value]="reportForm.controls.sucursal_id.value"
+          [placeholder]="texts.allBranches"
+          ariaLabel="Filtrar por sucursal"
+          (valueChange)="reportForm.controls.sucursal_id.setValue($event)"
+        />
+        <app-select-field
+          [options]="tipoFilterOptions()"
+          [value]="reportForm.controls.tipo_entidad.value"
+          [placeholder]="texts.allTypes"
+          ariaLabel="Filtrar por tipo de entidad"
+          (valueChange)="reportForm.controls.tipo_entidad.setValue($event)"
+        />
+        <app-select-field
+          [options]="estadoOptions"
+          [value]="reportForm.controls.estado.value"
+          [placeholder]="texts.allStates"
+          ariaLabel="Filtrar por estado"
+          (valueChange)="reportForm.controls.estado.setValue($event)"
+        />
+        <app-select-field
+          [options]="serviceOptions()"
+          [value]="reportForm.controls.servicio_id.value"
+          [placeholder]="texts.allServices"
+          ariaLabel="Filtrar por servicio"
+          (valueChange)="reportForm.controls.servicio_id.setValue($event)"
+        />
+        <app-inscripcion-date-input
+          formControlName="periodo_desde"
+          [ariaLabel]="texts.periodFrom"
+        />
+        <app-inscripcion-date-input formControlName="periodo_hasta" [ariaLabel]="texts.periodTo" />
+        <div class="flex flex-wrap items-end gap-2 lg:col-span-6">
+          <button app-button type="submit" [disabled]="reportLoading()">{{ texts.filter }}</button>
+          <button app-button variant="outline" type="button" (click)="clearReportFilters()">
+            {{ texts.clear }}
+          </button>
+          <span class="flex-1"></span>
+          @if (abilities().export) {
+            <button
+              app-button
+              variant="outline"
+              type="button"
+              [disabled]="exporting() !== null"
+              (click)="exportar('pdf')"
+            >
+              {{ exporting() === 'pdf' ? texts.saving : texts.exportPdf }}
+            </button>
+            <button
+              app-button
+              variant="outline"
+              type="button"
+              [disabled]="exporting() !== null"
+              (click)="exportar('excel')"
+            >
+              {{ exporting() === 'excel' ? texts.saving : texts.exportExcel }}
+            </button>
+          }
+        </div>
+      </form>
+    </app-component-card>
+
+    <app-component-card>
+      <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+        <table app-table class="min-w-full">
+          <thead
+            app-table-header
+            class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900"
+          >
+            <tr app-table-row>
+              <th
+                app-table-cell
+                class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400"
+              >
+                Paciente
+              </th>
+              <th
+                app-table-cell
+                class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400"
+              >
+                Tipo
+              </th>
+              <th
+                app-table-cell
+                class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400"
+              >
+                Servicio
+              </th>
+              <th
+                app-table-cell
+                class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400"
+              >
+                Período
+              </th>
+              <th
+                app-table-cell
+                class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400"
+              >
+                Vence
+              </th>
+              <th
+                app-table-cell
+                class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400"
+              >
+                Estado
+              </th>
+              <th
+                app-table-cell
+                class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400"
+              >
+                Saldo
+              </th>
+            </tr>
+          </thead>
+          <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+            @if (reportLoading()) {
+              <tr app-table-row>
+                <td app-table-cell colspan="7" class="px-4 py-12 text-center text-sm text-gray-500">
+                  Cargando reporte...
+                </td>
+              </tr>
+            } @else {
+              @for (row of reportRows(); track row.tipo_entidad + '-' + row.id) {
+                <tr
+                  app-table-row
+                  class="transition-colors hover:bg-gray-50/70 dark:hover:bg-white/[0.02]"
+                >
+                  <td app-table-cell class="px-4 py-4">
+                    <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+                      {{ row.paciente.nombre_completo }}
+                    </p>
+                    <p class="text-xs text-gray-500">
+                      {{ row.paciente.codigo || 'Sin código' }} · {{ row.sucursal.nombre }}
+                    </p>
+                    <p class="text-xs text-gray-500">Tutor: {{ row.tutor.nombre_completo }}</p>
+                  </td>
+                  <td app-table-cell class="px-4 py-4 text-sm text-gray-600 dark:text-gray-300">
+                    {{ row.tipo_entidad_label }}
+                  </td>
+                  <td app-table-cell class="px-4 py-4 text-sm text-gray-600 dark:text-gray-300">
+                    {{ row.servicio.nombre }}
+                  </td>
+                  <td
+                    app-table-cell
+                    class="whitespace-nowrap px-4 py-4 text-sm text-gray-600 dark:text-gray-300"
+                  >
+                    {{ formatDate(row.fecha_inicio) }} — {{ formatDate(row.fecha_fin) }}
+                  </td>
+                  <td
+                    app-table-cell
+                    class="whitespace-nowrap px-4 py-4 text-sm text-gray-600 dark:text-gray-300"
+                  >
+                    {{ formatDate(row.fecha_fin) }}
+                  </td>
+                  <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                    <app-badge
+                      [color]="estadoVigenciaColor(row.estado_vigencia)"
+                      variant="light"
+                      size="sm"
+                      >{{ row.estado_vigencia_label }}</app-badge
+                    >
+                  </td>
+                  <td
+                    app-table-cell
+                    class="whitespace-nowrap px-4 py-4 text-sm text-gray-600 dark:text-gray-300"
+                  >
+                    {{ saldoLabel(row) }}
+                  </td>
+                </tr>
+              } @empty {
+                <tr app-table-row>
+                  <td
+                    app-table-cell
+                    colspan="7"
+                    class="px-4 py-12 text-center text-sm text-gray-500"
+                  >
+                    {{ texts.noResults }}
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+
+      @if (reportMeta().total > 0) {
+        <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p class="text-sm text-gray-500 dark:text-gray-400">
+            Mostrando {{ reportMeta().from ?? 0 }}–{{ reportMeta().to ?? 0 }} de
+            {{ reportMeta().total }}
+          </p>
+          <app-pagination
+            [currentPage]="reportMeta().current_page"
+            [totalPages]="reportMeta().last_page"
+            variant="text-icon"
+            (pageChange)="goToReportPage($event)"
+          />
+        </div>
+      }
+    </app-component-card>
+  }
+
+  @if (activeTab() === 'configuracion' && abilities().config) {
+    @if (configError(); as message) {
+      <app-alert variant="error" title="No se pudo cargar la configuración" [message]="message" />
+    }
+
+    <app-component-card [title]="texts.configurationTitle">
+      @if (configLoading()) {
+        <p class="text-sm text-gray-500">Cargando configuración...</p>
+      } @else if (ventana(); as config) {
+        <form class="max-w-xl space-y-4" [formGroup]="configForm" (ngSubmit)="saveConfig()">
+          <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.configHelp }}</p>
+          <div>
+            <label
+              class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              for="ventana-alerta"
+              >{{ texts.newWindow }}</label
+            >
+            <input
+              id="ventana-alerta"
+              app-input
+              type="number"
+              formControlName="valor"
+              min="1"
+              max="365"
+              class="max-w-xs"
+            />
+            <p class="mt-1 text-xs text-gray-500">
+              Rango permitido: {{ config.minimo }}–{{ config.maximo }} días. Versión
+              {{ config.version }}.
+            </p>
+          </div>
+          <button app-button type="submit" [disabled]="configSaving()">
+            {{ configSaving() ? texts.saving : texts.save }}
+          </button>
+        </form>
+      }
+    </app-component-card>
+  }
+</div>
+
+@if (renovacionOpen()) {
+  <app-modal
+    [open]="true"
+    [title]="texts.renewTitle"
+    [subtitle]="
+      renovacionMultiple() ? texts.renewSubtitle : 'Revisá las fechas y la tarifa propuestas.'
+    "
+    size="xl"
+    (closed)="closeRenovacion()"
+  >
+    @if (renovacionLoading()) {
+      <p class="text-sm text-gray-500">Preparando la renovación...</p>
+    } @else {
+      @if (renovacionError(); as message) {
+        <app-alert variant="error" title="No se pudo renovar" [message]="message" />
+      }
+
+      <div class="space-y-4">
+        @for (item of renovacionItems(); track item.fila.tipo_entidad + '-' + item.fila.id) {
+          <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p class="text-sm font-semibold text-gray-800 dark:text-white/90">
+                  {{ item.fila.paciente.nombre_completo }}
+                </p>
+                <p class="text-xs text-gray-500">
+                  {{ item.fila.tipo_entidad_label }} · {{ item.fila.servicio.nombre }} ·
+                  {{ item.fila.sucursal.nombre }}
+                </p>
+              </div>
+              <app-badge color="gray" variant="light" size="sm">#{{ item.fila.id }}</app-badge>
+            </div>
+            <div class="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+              <p>
+                <span class="text-gray-500">Fechas propuestas:</span>
+                {{ formatDate(item.preview.fecha_inicio) }} —
+                {{ formatDate(item.preview.fecha_fin) }}
+              </p>
+              <p>
+                <span class="text-gray-500">Configuración:</span>
+                {{ item.preview.sala?.nombre || item.preview.cantidad_sesiones + ' sesiones' }}
+              </p>
+              <p>
+                <span class="text-gray-500">{{ texts.oldTariff }}:</span>
+                {{ formatBs(item.preview.monto_anterior) }}
+              </p>
+              <p>
+                <span class="text-gray-500">{{ texts.currentTariff }}:</span>
+                {{ formatBs(item.preview.monto_vigente) }}
+              </p>
+            </div>
+
+            @if (item.preview.cambio_tarifa) {
+              <div class="mt-3">
+                <app-alert
+                  variant="warning"
+                  [title]="texts.tariffChanged"
+                  [message]="
+                    'Antes ' +
+                    formatBs(item.preview.monto_anterior) +
+                    ' · Ahora ' +
+                    formatBs(item.preview.monto_vigente)
+                  "
+                />
+                <label
+                  class="mt-2 inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"
+                >
+                  <input
+                    type="checkbox"
+                    [checked]="item.confirmarTarifa"
+                    (change)="toggleConfirmarTarifa($index)"
+                  />
+                  {{ texts.tariffConfirm }}
+                </label>
+              </div>
+            }
+          </div>
+        }
+      </div>
+
+      @if (renovacionMultiple()) {
+        <p class="mt-4 text-xs text-gray-500">
+          La operación es atómica: si una entidad falla, no se renueva ninguna.
+        </p>
+      }
+
+      <div class="mt-5 flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+        <button
+          app-button
+          variant="outline"
+          type="button"
+          [disabled]="renovacionSaving()"
+          (click)="closeRenovacion()"
+        >
+          {{ texts.cancel }}
+        </button>
+        <button
+          app-button
+          type="button"
+          [disabled]="renovacionSaving()"
+          (click)="confirmarRenovacion()"
+        >
+          {{ renovacionSaving() ? texts.renewing : texts.confirmRenew }}
+        </button>
+      </div>
+    }
+  </app-modal>
+}
+
+@if (comprobanteOpen()) {
+  <app-modal
+    [open]="true"
+    title="Comprobante"
+    [ariaLabel]="'Comprobante de atención'"
+    size="xl"
+    (closed)="closeComprobante()"
+  >
+    @if (comprobanteTipo() === 'inscripcion_sala' && inscripcionComprobante(); as data) {
+      <app-inscripcion-comprobante [data]="data" (close)="closeComprobante()" />
+    } @else if (paqueteComprobante(); as data) {
+      <app-paquete-comprobante [data]="data" (close)="closeComprobante()" />
+    }
+  </app-modal>
+}

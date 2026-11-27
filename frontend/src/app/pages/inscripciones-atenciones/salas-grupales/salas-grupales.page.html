@@ -1,0 +1,1156 @@
+<div class="space-y-6">
+  <app-page-breadcrumb [pageTitle]="texts.title" />
+
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+      <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">{{ texts.title }}</h1>
+      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ texts.subtitle }}</p>
+    </div>
+    @if (abilities().create) {
+      <button app-button type="button" (click)="openCreate()">
+        {{ texts.newInscription }}
+      </button>
+    }
+  </div>
+
+  @if (listError(); as message) {
+    <app-alert variant="error" title="No se pudo cargar el listado" [message]="message" />
+  }
+
+  <app-component-card [title]="texts.filters">
+    <div class="grid gap-4 lg:grid-cols-3 xl:grid-cols-6">
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+          >Sucursal</label
+        >
+        <app-select-field
+          [options]="branchOptions()"
+          [value]="filters.controls.sucursal_id.value"
+          [placeholder]="texts.allBranches"
+          ariaLabel="Filtrar por sucursal"
+          (valueChange)="onFilterBranchChange($event)"
+        />
+      </div>
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+          >Sala</label
+        >
+        <app-select-field
+          [options]="filterSalaOptions()"
+          [value]="filters.controls.sala_id.value"
+          [placeholder]="texts.allRooms"
+          ariaLabel="Filtrar por sala"
+          (valueChange)="filters.controls.sala_id.setValue($event)"
+        />
+      </div>
+      <div class="lg:col-span-2">
+        <app-inscripcion-paciente-search
+          [selected]="filterPaciente()"
+          (selectedChange)="onFilterPaciente($event)"
+        />
+      </div>
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Mes</label>
+        <app-select-field
+          [options]="monthOptions"
+          [value]="filters.controls.periodo_mes.value"
+          ariaLabel="Filtrar por mes"
+          (valueChange)="filters.controls.periodo_mes.setValue($event)"
+        />
+      </div>
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Año</label>
+        <app-select-field
+          [options]="yearOptions()"
+          [value]="filters.controls.periodo_anio.value"
+          ariaLabel="Filtrar por año"
+          (valueChange)="filters.controls.periodo_anio.setValue($event)"
+        />
+      </div>
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+          >Estado</label
+        >
+        <app-select-field
+          [options]="estadoOptions"
+          [value]="filters.controls.estado.value"
+          ariaLabel="Filtrar por estado"
+          (valueChange)="filters.controls.estado.setValue($event)"
+        />
+      </div>
+      <div class="flex items-end gap-2">
+        <button app-button type="button" (click)="applyFilters()">Filtrar</button>
+        <button app-button variant="outline" type="button" (click)="clearFilters()">
+          {{ texts.clearFilters }}
+        </button>
+      </div>
+    </div>
+  </app-component-card>
+
+  <app-component-card [title]="texts.listTitle">
+    <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+      <table app-table class="min-w-full">
+        <thead
+          app-table-header
+          class="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900"
+        >
+          <tr app-table-row>
+            <th
+              app-table-cell
+              class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400"
+            >
+              {{ texts.patient }}
+            </th>
+            <th
+              app-table-cell
+              class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400"
+            >
+              {{ texts.room }}
+            </th>
+            <th
+              app-table-cell
+              class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400"
+            >
+              Sucursal
+            </th>
+            <th
+              app-table-cell
+              class="px-4 py-3 text-start"
+              [attr.aria-sort]="
+                sort() === 'fecha_inicio'
+                  ? direction() === 'asc'
+                    ? 'ascending'
+                    : 'descending'
+                  : 'none'
+              "
+            >
+              <button
+                type="button"
+                class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300"
+                (click)="setSort('fecha_inicio')"
+              >
+                {{ texts.period }}
+                @if (sort() === 'fecha_inicio') {
+                  {{ direction() === 'asc' ? '↑' : '↓' }}
+                }
+              </button>
+            </th>
+            <th
+              app-table-cell
+              class="px-4 py-3 text-start"
+              [attr.aria-sort]="
+                sort() === 'monto_esperado'
+                  ? direction() === 'asc'
+                    ? 'ascending'
+                    : 'descending'
+                  : 'none'
+              "
+            >
+              <button
+                type="button"
+                class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300"
+                (click)="setSort('monto_esperado')"
+              >
+                {{ texts.amount }}
+                @if (sort() === 'monto_esperado') {
+                  {{ direction() === 'asc' ? '↑' : '↓' }}
+                }
+              </button>
+            </th>
+            <th
+              app-table-cell
+              class="px-4 py-3 text-start"
+              [attr.aria-sort]="
+                sort() === 'estado'
+                  ? direction() === 'asc'
+                    ? 'ascending'
+                    : 'descending'
+                  : 'none'
+              "
+            >
+              <button
+                type="button"
+                class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 transition-colors hover:text-brand-600 dark:text-gray-400 dark:hover:text-brand-300"
+                (click)="setSort('estado')"
+              >
+                Estado
+                @if (sort() === 'estado') {
+                  {{ direction() === 'asc' ? '↑' : '↓' }}
+                }
+              </button>
+            </th>
+            <th
+              app-table-cell
+              class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400"
+            >
+              Pago
+            </th>
+            <th
+              app-table-cell
+              class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400"
+            >
+              {{ texts.actions }}
+            </th>
+          </tr>
+        </thead>
+        <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+          @if (loading()) {
+            <tr app-table-row>
+              <td
+                app-table-cell
+                colspan="8"
+                class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400"
+              >
+                {{ texts.loading }}
+              </td>
+            </tr>
+          } @else if (rows().length === 0) {
+            <tr app-table-row>
+              <td
+                app-table-cell
+                colspan="8"
+                class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400"
+              >
+                {{ texts.empty }}
+              </td>
+            </tr>
+          } @else {
+            @for (row of rows(); track row.id) {
+              <tr
+                app-table-row
+                class="transition-colors hover:bg-gray-50/70 dark:hover:bg-white/[0.02]"
+              >
+                <td app-table-cell class="px-4 py-4">
+                  <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+                    {{ row.paciente.nombre_completo }}
+                  </p>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">
+                    {{ row.paciente.codigo || 'Sin código' }}
+                  </p>
+                </td>
+                <td app-table-cell class="px-4 py-4">
+                  <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+                    {{ row.sala.nombre }}
+                  </p>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">
+                    {{ row.sala.tipo_sala || 'Sala grupal' }}
+                    @if (row.sala.turno) {
+                      · {{ row.sala.turno }}
+                    }
+                  </p>
+                </td>
+                <td app-table-cell class="px-4 py-4 text-sm text-gray-600 dark:text-gray-300">
+                  {{ row.sucursal.nombre }}
+                </td>
+                <td
+                  app-table-cell
+                  class="whitespace-nowrap px-4 py-4 text-sm text-gray-600 dark:text-gray-300"
+                >
+                  {{ formatDate(row.fecha_inicio) }} — {{ formatDate(row.fecha_fin) }}
+                </td>
+                <td
+                  app-table-cell
+                  class="whitespace-nowrap px-4 py-4 text-sm font-medium text-gray-800 dark:text-white/90"
+                >
+                  {{ formatBs(row.monto_esperado) }}
+                </td>
+                <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                  <app-badge [color]="estadoColor(row.estado_mostrado)" variant="light" size="sm">
+                    {{ row.estado_label }}
+                  </app-badge>
+                </td>
+                <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                  @if (abilities().pago_disponible) {
+                    <span class="text-sm text-gray-400">—</span>
+                  } @else {
+                    <app-badge color="gray" variant="light" size="sm">No disponible</app-badge>
+                  }
+                </td>
+                <td app-table-cell class="whitespace-nowrap px-4 py-4 text-end">
+                  <div class="flex flex-wrap items-center justify-end gap-1">
+                    <button
+                      app-button
+                      variant="ghost"
+                      size="sm"
+                      type="button"
+                      (click)="openFicha(row.id)"
+                    >
+                      {{ texts.view }}
+                    </button>
+                    @if (row.can.update) {
+                      <button
+                        app-button
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        (click)="openEditById(row.id)"
+                      >
+                        {{ texts.edit }}
+                      </button>
+                    }
+                    @if (row.can.renew) {
+                      <button
+                        app-button
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        (click)="openRenovacionById(row.id)"
+                      >
+                        {{ texts.renew }}
+                      </button>
+                    }
+                    @if (row.can.withdraw) {
+                      <button
+                        app-button
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        (click)="openBajaById(row.id)"
+                      >
+                        {{ texts.withdraw }}
+                      </button>
+                    }
+                  </div>
+                </td>
+              </tr>
+            }
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <p class="text-sm text-gray-500 dark:text-gray-400">
+        Mostrando {{ from() ?? 0 }}–{{ to() ?? 0 }} de {{ total() }}
+      </p>
+      <app-pagination
+        [currentPage]="page()"
+        [totalPages]="lastPage()"
+        variant="text-icon"
+        (pageChange)="goToPage($event)"
+      />
+    </div>
+  </app-component-card>
+</div>
+
+@if (formOpen()) {
+  <app-modal
+    [open]="true"
+    [title]="formMode() === 'create' ? texts.newInscription : 'Editar inscripción'"
+    subtitle="Los campos marcados con * son obligatorios."
+    size="xl"
+    (closed)="closeForm()"
+  >
+    <form class="space-y-5" [formGroup]="form" (ngSubmit)="saveForm()">
+      @if (formError(); as message) {
+        <app-alert variant="error" title="No se pudo guardar" [message]="message" />
+      }
+
+      <div class="grid gap-4 md:grid-cols-2">
+        <div class="md:col-span-2">
+          @if (formMode() === 'create') {
+            <app-inscripcion-paciente-search
+              [selected]="formPaciente()"
+              (selectedChange)="onFormPaciente($event)"
+              [required]="true"
+            />
+          } @else if (editingPatient(); as paciente) {
+            <p class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Paciente
+            </p>
+            <div class="rounded-xl border border-gray-200 p-3 dark:border-gray-800">
+              <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+                {{ paciente.nombre_completo }}
+              </p>
+              <p class="text-xs text-gray-500">{{ paciente.estado_label }}</p>
+            </div>
+          }
+        </div>
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Tutor responsable *
+          </label>
+          @if (formMode() === 'create') {
+            <app-select-field
+              [options]="tutorOptions()"
+              [value]="form.controls.tutor_responsable_id.value"
+              placeholder="Seleccioná un tutor"
+              ariaLabel="Tutor responsable"
+              [disabled]="formTutoresLoading() || formTutores().length === 0"
+              (valueChange)="form.controls.tutor_responsable_id.setValue($event)"
+            />
+            @if (formTutoresLoading()) {
+              <p class="mt-1 text-xs text-gray-500">Cargando tutores...</p>
+            }
+            @if (formTutoresError(); as message) {
+              <p class="mt-1 text-xs text-error-600">{{ message }}</p>
+            }
+            @if (fieldError(formFieldErrors(), 'tutor_responsable_id'); as message) {
+              <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+            }
+          } @else {
+            <div class="rounded-xl border border-gray-200 p-3 dark:border-gray-800">
+              <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+                {{ formTutores()[0]?.nombre_completo || 'Tutor actual' }}
+              </p>
+              <p class="text-xs text-gray-500">El tutor no se modifica desde esta pantalla.</p>
+            </div>
+          }
+        </div>
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >Sucursal *</label
+          >
+          <app-select-field
+            [options]="branchOptions()"
+            [value]="form.controls.sucursal_id.value"
+            placeholder="Seleccioná una sucursal"
+            ariaLabel="Sucursal"
+            [disabled]="formMode() === 'edit'"
+            (valueChange)="onFormBranchChange($event)"
+          />
+          @if (fieldError(formFieldErrors(), 'sucursal_id'); as message) {
+            <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+          }
+        </div>
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >Sala *</label
+          >
+          <app-select-field
+            [options]="formSalaOptions()"
+            [value]="form.controls.sala_id.value"
+            placeholder="Seleccioná una sala"
+            ariaLabel="Sala"
+            [disabled]="formMode() === 'edit' || form.controls.sucursal_id.value === ''"
+            (valueChange)="form.controls.sala_id.setValue($event)"
+          />
+          @if (fieldError(formFieldErrors(), 'sala_id'); as message) {
+            <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+          }
+        </div>
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >Servicio *</label
+          >
+          <app-select-field
+            [options]="serviceOptions()"
+            [value]="form.controls.servicio_id.value"
+            placeholder="Servicio de sala grupal"
+            ariaLabel="Servicio"
+            (valueChange)="onFormServiceChange($event)"
+          />
+          @if (fieldError(formFieldErrors(), 'servicio_id'); as message) {
+            <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+          }
+        </div>
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >Categoría *</label
+          >
+          <app-select-field
+            [options]="categoriaOptions()"
+            [value]="form.controls.categoria_tarifa_id.value"
+            placeholder="Seleccioná una categoría"
+            ariaLabel="Categoría de tarifa"
+            (valueChange)="onFormCategoryChange($event)"
+          />
+          @if (fieldError(formFieldErrors(), 'categoria_tarifa_id'); as message) {
+            <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+          }
+        </div>
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >Fecha de inicio *</label
+          >
+          <app-inscripcion-date-input formControlName="fecha_inicio" ariaLabel="Fecha de inicio" />
+          @if (fieldError(formFieldErrors(), 'fecha_inicio'); as message) {
+            <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+          }
+        </div>
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >Fecha de fin *</label
+          >
+          <app-inscripcion-date-input
+            formControlName="fecha_fin"
+            [minDate]="form.controls.fecha_inicio.value || undefined"
+            ariaLabel="Fecha de fin"
+          />
+          @if (fieldError(formFieldErrors(), 'fecha_fin'); as message) {
+            <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+          }
+        </div>
+      </div>
+
+      <div>
+        <label
+          class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+          for="inscripcion-observaciones"
+        >
+          Observaciones
+        </label>
+        <textarea
+          id="inscripcion-observaciones"
+          app-textarea
+          rows="3"
+          formControlName="observaciones"
+          maxlength="500"
+          [placeholder]="texts.observationsHint"
+        ></textarea>
+        <p class="mt-1 text-xs text-gray-400">{{ form.controls.observaciones.value.length }}/500</p>
+        @if (fieldError(formFieldErrors(), 'observaciones'); as message) {
+          <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+        }
+      </div>
+
+      <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+        <p class="text-sm font-semibold text-gray-800 dark:text-white/90">
+          {{ texts.expectedAmount }}
+        </p>
+        @if (formTariffLoading()) {
+          <p class="mt-2 text-sm text-gray-500">{{ texts.calculating }}</p>
+        } @else if (formTariffError(); as message) {
+          <p class="mt-2 text-sm text-warning-600">{{ message }}</p>
+        } @else if (formTariff(); as tarifa) {
+          @if (formMode() === 'edit' && editingAmount(); as currentAmount) {
+            <p class="mt-2 text-xs text-gray-500">
+              Monto actual de la inscripción:
+              <span class="font-semibold">{{ formatBs(currentAmount) }}</span>
+            </p>
+            @if (formTariffChanged() === null) {
+              <p class="mt-1 text-xs text-gray-400">
+                La tarifa vigente es {{ formatBs(tarifa.monto) }}. El monto de una inscripción
+                existente no cambia automáticamente por cambios del catálogo.
+              </p>
+            }
+          } @else {
+            <p class="mt-2 text-2xl font-semibold text-brand-600 dark:text-brand-400">
+              {{ formatBs(tarifa.monto) }}
+            </p>
+          }
+          <p class="mt-1 text-xs text-gray-500">
+            {{ tarifa.servicio_nombre }} · {{ tarifa.categoria_nombre }} · Vigencia
+            {{ formatDate(tarifa.vigente_desde) }} —
+            {{ tarifa.vigente_hasta ? formatDate(tarifa.vigente_hasta) : 'abierta' }}
+          </p>
+          <p class="mt-1 text-xs text-gray-400">
+            Origen: {{ tarifa.origen === 'sucursal' ? 'Sucursal' : 'Global' }}
+          </p>
+        } @else {
+          <p class="mt-2 text-sm text-gray-500">
+            Seleccioná servicio, sucursal, categoría y fecha para calcularlo.
+          </p>
+        }
+
+        @if (formTariffChanged(); as tarifa) {
+          <div class="mt-3">
+            <app-alert
+              variant="warning"
+              [title]="texts.tariffChanged"
+              [message]="texts.tariffChangedDetail + ' Nuevo monto: ' + formatBs(tarifa.monto)"
+            />
+            <label
+              class="mt-2 inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"
+            >
+              <input
+                type="checkbox"
+                [checked]="formConfirmTariff()"
+                (change)="formConfirmTariff.set($any($event.target).checked)"
+              />
+              {{ texts.confirmTariff }}
+            </label>
+          </div>
+        }
+      </div>
+
+      <div
+        class="flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800"
+      >
+        <button
+          app-button
+          variant="outline"
+          type="button"
+          [disabled]="formSaving()"
+          (click)="closeForm()"
+        >
+          {{ texts.cancel }}
+        </button>
+        <button app-button type="submit" [disabled]="formSaving()">
+          {{ formSaving() ? texts.saving : texts.save }}
+        </button>
+      </div>
+    </form>
+  </app-modal>
+}
+
+@if (fichaOpen()) {
+  <app-modal
+    [open]="true"
+    [customHeader]="true"
+    [showClose]="false"
+    size="xl"
+    (closed)="closeFicha()"
+  >
+    <div
+      modal-header
+      class="flex items-start justify-between gap-4 border-b border-gray-100 p-6 pb-4 dark:border-gray-800"
+    >
+      <div>
+        <p class="text-xs font-medium uppercase tracking-wide text-gray-400">Inscripción</p>
+        @if (ficha(); as detalle) {
+          <h3 class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">
+            {{ detalle.paciente.nombre_completo }}
+          </h3>
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <app-badge [color]="estadoColor(detalle.estado_mostrado)" variant="light" size="sm">
+              {{ detalle.estado_label }}
+            </app-badge>
+            <span class="text-sm text-gray-500">{{ detalle.sala.nombre }}</span>
+            <span class="text-sm text-gray-500"
+              >{{ formatDate(detalle.fecha_inicio) }} — {{ formatDate(detalle.fecha_fin) }}</span
+            >
+          </div>
+        } @else {
+          <h3 class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">
+            Ficha de inscripción
+          </h3>
+        }
+      </div>
+      <button
+        app-button
+        variant="ghost"
+        size="icon-sm"
+        type="button"
+        ariaLabel="Cerrar ficha"
+        (click)="closeFicha()"
+      >
+        ✕
+      </button>
+    </div>
+
+    @if (fichaLoading()) {
+      <p class="py-10 text-center text-sm text-gray-500">Cargando ficha...</p>
+    } @else if (fichaError(); as message) {
+      <app-alert variant="error" title="No se pudo abrir la ficha" [message]="message" />
+    } @else if (ficha(); as detalle) {
+      <div class="space-y-5">
+        <div class="flex flex-wrap gap-2 border-b border-gray-100 pb-3 dark:border-gray-800">
+          @for (
+            tab of [
+              { id: 'resumen', label: 'Resumen' },
+              { id: 'pago', label: texts.payment },
+              { id: 'asistencia', label: texts.attendance },
+              { id: 'comprobante', label: texts.receipt },
+            ];
+            track tab.id
+          ) {
+            <button
+              type="button"
+              class="rounded-lg px-3 py-1.5 text-sm font-medium"
+              [class.bg-brand-50]="fichaTab() === tab.id"
+              [class.text-brand-600]="fichaTab() === tab.id"
+              [class.text-gray-500]="fichaTab() !== tab.id"
+              (click)="setFichaTab($any(tab.id))"
+            >
+              {{ tab.label }}
+            </button>
+          }
+        </div>
+
+        @switch (fichaTab()) {
+          @case ('resumen') {
+            <div class="grid gap-4 md:grid-cols-2">
+              <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                <p class="text-xs uppercase tracking-wide text-gray-400">Paciente</p>
+                <p class="mt-1 font-medium text-gray-800 dark:text-white/90">
+                  {{ detalle.paciente.nombre_completo }}
+                </p>
+                <p class="text-sm text-gray-500">
+                  {{ detalle.paciente.codigo || 'Sin código' }} ·
+                  {{ detalle.paciente.edad_anios }} años
+                </p>
+                <p class="text-sm text-gray-500">{{ detalle.paciente.estado_label }}</p>
+              </div>
+              <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                <p class="text-xs uppercase tracking-wide text-gray-400">Tutor responsable</p>
+                <p class="mt-1 font-medium text-gray-800 dark:text-white/90">
+                  {{ detalle.tutor.nombre_completo }}
+                </p>
+                @if (detalle.tutor.parentesco) {
+                  <p class="text-sm text-gray-500">{{ detalle.tutor.parentesco }}</p>
+                }
+                @if (detalle.tutor.contacto_protegido) {
+                  <p class="mt-2 text-xs text-gray-400">
+                    Contacto protegido. No tenés permiso para ver el teléfono.
+                  </p>
+                } @else if (detalle.tutor.telefono) {
+                  <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                    {{ detalle.tutor.telefono }}
+                  </p>
+                  @if (whatsappUrl(detalle.tutor.telefono); as url) {
+                    <a
+                      [href]="url"
+                      target="_blank"
+                      rel="noopener"
+                      app-button
+                      variant="outline"
+                      size="sm"
+                      class="mt-2"
+                    >
+                      {{ texts.whatsapp }}
+                    </a>
+                  }
+                }
+              </div>
+              <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                <p class="text-xs uppercase tracking-wide text-gray-400">Sala / sucursal</p>
+                <p class="mt-1 font-medium text-gray-800 dark:text-white/90">
+                  {{ detalle.sala.nombre }}
+                </p>
+                <p class="text-sm text-gray-500">
+                  {{ detalle.sala.tipo_sala || 'Sala grupal' }} ·
+                  {{ detalle.sala.turno || 'Sin turno' }}
+                </p>
+                <p class="text-sm text-gray-500">{{ detalle.sucursal.nombre }}</p>
+              </div>
+              <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                <p class="text-xs uppercase tracking-wide text-gray-400">Servicio / categoría</p>
+                <p class="mt-1 font-medium text-gray-800 dark:text-white/90">
+                  {{ detalle.servicio.nombre }}
+                </p>
+                <p class="text-sm text-gray-500">{{ detalle.categoria.nombre }}</p>
+              </div>
+              <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                <p class="text-xs uppercase tracking-wide text-gray-400">Período</p>
+                <p class="mt-1 font-medium text-gray-800 dark:text-white/90">
+                  {{ formatDate(detalle.fecha_inicio) }} — {{ formatDate(detalle.fecha_fin) }}
+                </p>
+              </div>
+              <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                <p class="text-xs uppercase tracking-wide text-gray-400">
+                  Monto esperado (snapshot)
+                </p>
+                <p class="mt-1 text-2xl font-semibold text-brand-600 dark:text-brand-400">
+                  {{ formatBs(detalle.monto_esperado) }}
+                </p>
+                <p class="text-xs text-gray-400">Tarifa aplicada #{{ detalle.tarifa_id }}</p>
+              </div>
+              @if (detalle.observaciones) {
+                <div
+                  class="rounded-xl border border-gray-200 p-4 md:col-span-2 dark:border-gray-800"
+                >
+                  <p class="text-xs uppercase tracking-wide text-gray-400">Observaciones</p>
+                  <p class="mt-1 whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">
+                    {{ detalle.observaciones }}
+                  </p>
+                </div>
+              }
+              @if (detalle.retiro; as retiro) {
+                <div
+                  class="rounded-xl border border-warning-200 bg-warning-50 p-4 md:col-span-2 dark:border-warning-500/30 dark:bg-warning-500/10"
+                >
+                  <p class="text-sm font-semibold text-warning-700 dark:text-warning-400">
+                    {{ texts.retiro }}
+                  </p>
+                  <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">
+                    {{ retiro.fecha_baja ? formatDate(retiro.fecha_baja) : '—' }} ·
+                    {{ motivoLabel(retiro.motivo_codigo) }}
+                  </p>
+                  @if (retiro.motivo_detalle) {
+                    <p class="mt-1 text-sm text-gray-700 dark:text-gray-300">
+                      {{ retiro.motivo_detalle }}
+                    </p>
+                  }
+                  <p class="mt-1 text-xs text-gray-500">
+                    Registrado por {{ retiro.usuario_nombre || 'usuario del sistema' }}
+                  </p>
+                </div>
+              }
+              <div class="rounded-xl border border-gray-200 p-4 md:col-span-2 dark:border-gray-800">
+                <p class="text-xs uppercase tracking-wide text-gray-400">Renovación</p>
+                <div class="mt-2 grid gap-2 sm:grid-cols-2">
+                  <p class="text-sm text-gray-600 dark:text-gray-300">
+                    Origen:
+                    @if (detalle.origen; as origen) {
+                      #{{ origen.id }} ({{ formatDate(origen.fecha_inicio) }} —
+                      {{ formatDate(origen.fecha_fin) }})
+                    } @else {
+                      —
+                    }
+                  </p>
+                  <p class="text-sm text-gray-600 dark:text-gray-300">
+                    Renovada por:
+                    @if (detalle.renovada_por; as renovada) {
+                      #{{ renovada.id }} ({{ formatDate(renovada.fecha_inicio) }} —
+                      {{ formatDate(renovada.fecha_fin) }})
+                    } @else {
+                      —
+                    }
+                  </p>
+                </div>
+              </div>
+            </div>
+          }
+          @case ('pago') {
+            @if (pagoLoading()) {
+              <p class="text-sm text-gray-500">Consultando Pagos y Caja...</p>
+            } @else if (pagoError(); as message) {
+              <app-alert variant="info" title="Pagos no disponible" [message]="message" />
+            } @else if (pago(); as estado) {
+              <div class="grid gap-4 sm:grid-cols-3">
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <p class="text-xs uppercase tracking-wide text-gray-400">Estado</p>
+                  <p class="mt-1 font-medium">{{ estado.estado }}</p>
+                </div>
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <p class="text-xs uppercase tracking-wide text-gray-400">Pagado</p>
+                  <p class="mt-1 font-medium">{{ formatBs(estado.monto_pagado) }}</p>
+                </div>
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <p class="text-xs uppercase tracking-wide text-gray-400">Saldo</p>
+                  <p class="mt-1 font-medium">{{ formatBs(estado.saldo) }}</p>
+                </div>
+              </div>
+              <button app-button type="button" class="mt-4" (click)="registrarPago()">
+                Registrar pago
+              </button>
+            }
+          }
+          @case ('asistencia') {
+            @if (asistenciaLoading()) {
+              <p class="text-sm text-gray-500">Consultando Agenda y Turnos...</p>
+            } @else if (asistenciaError(); as message) {
+              <app-alert variant="info" title="Asistencia no disponible" [message]="message" />
+            } @else if (asistencia(); as resumen) {
+              <div class="grid gap-4 sm:grid-cols-4">
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <p class="text-xs uppercase tracking-wide text-gray-400">Asistencias</p>
+                  <p class="mt-1 text-xl font-semibold">{{ resumen.asistencias }}</p>
+                </div>
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <p class="text-xs uppercase tracking-wide text-gray-400">Faltas</p>
+                  <p class="mt-1 text-xl font-semibold">{{ resumen.faltas }}</p>
+                </div>
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <p class="text-xs uppercase tracking-wide text-gray-400">Cancelados</p>
+                  <p class="mt-1 text-xl font-semibold">{{ resumen.cancelados }}</p>
+                </div>
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <p class="text-xs uppercase tracking-wide text-gray-400">Total</p>
+                  <p class="mt-1 text-xl font-semibold">{{ resumen.total }}</p>
+                </div>
+              </div>
+            }
+          }
+          @case ('comprobante') {
+            @if (comprobanteLoading()) {
+              <p class="text-sm text-gray-500">Cargando datos del comprobante...</p>
+            } @else if (comprobanteError(); as message) {
+              <app-alert
+                variant="error"
+                title="No se pudo generar el comprobante"
+                [message]="message"
+              />
+            } @else {
+              <p class="text-sm text-gray-600 dark:text-gray-300">
+                El comprobante incluye los datos del paciente, tutor, sala, período, monto y la
+                leyenda de que no es factura.
+              </p>
+              @if (!detalle.can.pdf) {
+                <p class="mt-2 text-xs text-gray-400">{{ texts.noPdf }}</p>
+              }
+              <button app-button type="button" class="mt-4" (click)="openComprobante()">
+                {{ texts.print }}
+              </button>
+            }
+          }
+        }
+
+        <div
+          class="flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800"
+        >
+          <button app-button variant="outline" type="button" (click)="closeFicha()">
+            {{ texts.close }}
+          </button>
+          @if (detalle.can.update) {
+            <button app-button variant="outline" type="button" (click)="openEditFromFicha()">
+              {{ texts.edit }}
+            </button>
+          }
+          @if (detalle.can.renew) {
+            <button app-button variant="outline" type="button" (click)="openRenovacionFromFicha()">
+              {{ texts.renew }}
+            </button>
+          }
+          @if (detalle.can.withdraw) {
+            <button app-button variant="destructive" type="button" (click)="openBajaFromFicha()">
+              {{ texts.withdraw }}
+            </button>
+          }
+        </div>
+      </div>
+    }
+  </app-modal>
+}
+
+@if (bajaOpen()) {
+  <app-modal
+    [open]="true"
+    title="Dar de baja inscripción"
+    [subtitle]="bajaInscripcion()?.paciente?.nombre_completo || ''"
+    size="md"
+    (closed)="closeBaja()"
+  >
+    <form class="space-y-4" [formGroup]="bajaForm" (ngSubmit)="confirmBaja()">
+      @if (bajaError(); as message) {
+        <app-alert variant="error" title="No se pudo dar de baja" [message]="message" />
+      }
+      @if (turnosFuturosError(); as message) {
+        <app-alert variant="info" title="Verificación de turnos" [message]="message" />
+      } @else if (turnosFuturos(); as turnos) {
+        @if (turnos.cantidad > 0) {
+          <app-alert
+            variant="warning"
+            title="Turnos futuros programados"
+            [message]="texts.futureTurnsWarning + ' (' + turnos.cantidad + ')'"
+          />
+        }
+      }
+
+      <div>
+        <label
+          class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+          for="baja-motivo"
+        >
+          Motivo *
+        </label>
+        <app-select-field
+          [options]="motivoOptions"
+          [value]="bajaForm.controls.motivo.value"
+          ariaLabel="Motivo de baja"
+          (valueChange)="bajaForm.controls.motivo.setValue($event)"
+        />
+        @if (fieldError(bajaFieldErrors(), 'motivo'); as message) {
+          <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+        }
+      </div>
+
+      @if (motivoOtro()) {
+        <div>
+          <label
+            class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            for="baja-detalle"
+          >
+            Detalle del motivo *
+          </label>
+          <textarea
+            id="baja-detalle"
+            app-textarea
+            rows="3"
+            formControlName="motivo_detalle"
+            maxlength="500"
+          ></textarea>
+          @if (fieldError(bajaFieldErrors(), 'motivo_detalle'); as message) {
+            <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+          }
+        </div>
+      }
+
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+          >Fecha de baja *</label
+        >
+        <app-inscripcion-date-input
+          formControlName="fecha_baja"
+          [maxDate]="todayDate"
+          ariaLabel="Fecha de baja"
+        />
+        @if (fieldError(bajaFieldErrors(), 'fecha_baja'); as message) {
+          <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+        }
+      </div>
+
+      <p class="text-sm text-gray-600 dark:text-gray-300">
+        La inscripción pasará a estado Retirada. No se elimina y queda en bitácora con usuario,
+        fecha y motivo.
+      </p>
+
+      <div class="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+        <button
+          app-button
+          variant="outline"
+          type="button"
+          [disabled]="bajaSaving()"
+          (click)="closeBaja()"
+        >
+          {{ texts.cancel }}
+        </button>
+        <button app-button variant="destructive" type="submit" [disabled]="bajaSaving()">
+          {{ bajaSaving() ? 'Guardando...' : 'Confirmar baja' }}
+        </button>
+      </div>
+    </form>
+  </app-modal>
+}
+
+@if (renovacionOpen()) {
+  <app-modal
+    [open]="true"
+    title="Renovar inscripción"
+    [subtitle]="renovacionInscripcion()?.paciente?.nombre_completo || ''"
+    size="lg"
+    (closed)="closeRenovacion()"
+  >
+    @if (renovacionLoading()) {
+      <p class="text-sm text-gray-500">Preparando la renovación...</p>
+    } @else {
+      <form class="space-y-4" [formGroup]="renovacionForm" (ngSubmit)="confirmRenovacion()">
+        @if (renovacionError(); as message) {
+          <app-alert variant="error" title="No se pudo renovar" [message]="message" />
+        }
+
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              >Nueva fecha de inicio *</label
+            >
+            <app-inscripcion-date-input
+              formControlName="fecha_inicio"
+              ariaLabel="Nueva fecha de inicio"
+            />
+          </div>
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              >Nueva fecha de fin *</label
+            >
+            <app-inscripcion-date-input
+              formControlName="fecha_fin"
+              [minDate]="renovacionForm.controls.fecha_inicio.value || undefined"
+              ariaLabel="Nueva fecha de fin"
+            />
+          </div>
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              >Servicio</label
+            >
+            <app-select-field
+              [options]="serviceOptions()"
+              [value]="renovacionForm.controls.servicio_id.value"
+              ariaLabel="Servicio de la renovación"
+              (valueChange)="
+                renovacionForm.controls.servicio_id.setValue($event); requestRenovacionPreview()
+              "
+            />
+          </div>
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              >Categoría</label
+            >
+            <app-select-field
+              [options]="categoriaOptions()"
+              [value]="renovacionForm.controls.categoria_tarifa_id.value"
+              ariaLabel="Categoría de la renovación"
+              (valueChange)="
+                renovacionForm.controls.categoria_tarifa_id.setValue($event);
+                requestRenovacionPreview()
+              "
+            />
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+          <p class="text-sm font-semibold text-gray-800 dark:text-white/90">
+            {{ texts.expectedAmount }}
+          </p>
+          @if (renovacionTariffLoading()) {
+            <p class="mt-2 text-sm text-gray-500">{{ texts.calculating }}</p>
+          } @else if (renovacionTariffError(); as message) {
+            <p class="mt-2 text-sm text-warning-600">{{ message }}</p>
+          } @else if (renovacionTariff(); as tarifa) {
+            <p class="mt-2 text-2xl font-semibold text-brand-600 dark:text-brand-400">
+              {{ formatBs(tarifa.monto) }}
+            </p>
+            <p class="mt-1 text-xs text-gray-500">
+              {{ tarifa.categoria_nombre }} · Vigencia {{ formatDate(tarifa.vigente_desde) }} —
+              {{ tarifa.vigente_hasta ? formatDate(tarifa.vigente_hasta) : 'abierta' }}
+            </p>
+          } @else {
+            <p class="mt-2 text-sm text-gray-500">{{ texts.noTariff }}</p>
+          }
+
+          @if (renovacionTariffChanged(); as tarifa) {
+            <div class="mt-3">
+              <app-alert
+                variant="warning"
+                [title]="texts.tariffChanged"
+                [message]="texts.tariffChangedDetail + ' Nuevo monto: ' + formatBs(tarifa.monto)"
+              />
+              <label
+                class="mt-2 inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"
+              >
+                <input
+                  type="checkbox"
+                  [checked]="renovacionConfirmTariff()"
+                  (change)="renovacionConfirmTariff.set($any($event.target).checked)"
+                />
+                {{ texts.confirmTariff }}
+              </label>
+            </div>
+          }
+        </div>
+
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >Observaciones</label
+          >
+          <textarea
+            app-textarea
+            rows="2"
+            formControlName="observaciones"
+            maxlength="500"
+          ></textarea>
+        </div>
+
+        <div class="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+          <button
+            app-button
+            variant="outline"
+            type="button"
+            [disabled]="renovacionSaving()"
+            (click)="closeRenovacion()"
+          >
+            {{ texts.cancel }}
+          </button>
+          <button app-button type="submit" [disabled]="renovacionSaving()">
+            {{ renovacionSaving() ? 'Guardando...' : 'Confirmar renovación' }}
+          </button>
+        </div>
+      </form>
+    }
+  </app-modal>
+}
+
+@if (comprobanteOpen()) {
+  <app-modal
+    [open]="true"
+    title="Comprobante de inscripción"
+    size="xl"
+    (closed)="closeComprobante()"
+  >
+    @if (comprobanteLoading()) {
+      <p class="text-sm text-gray-500">Cargando comprobante...</p>
+    } @else if (comprobanteError(); as message) {
+      <app-alert variant="error" title="No se pudo cargar el comprobante" [message]="message" />
+    } @else if (comprobante(); as data) {
+      <app-inscripcion-comprobante [data]="data" (close)="closeComprobante()" />
+    }
+  </app-modal>
+}

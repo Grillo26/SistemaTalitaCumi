@@ -1783,3 +1783,26 @@ pre code,
   background: #671c61;
   opacity: 1;
 }
+
+/* Comprobante de inscripción: impresión aislada del resto de la aplicación. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  #comprobante-print,
+  #comprobante-print * {
+    visibility: visible;
+  }
+
+  #comprobante-print {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    max-height: none;
+    margin: 0;
+    overflow: visible;
+    border: 0;
+    box-shadow: none;
+  }
+}

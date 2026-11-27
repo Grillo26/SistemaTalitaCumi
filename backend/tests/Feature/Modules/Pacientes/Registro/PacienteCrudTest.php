@@ -120,7 +120,7 @@ final class PacienteCrudTest extends PacientesTestCase
     public function test_delete_is_always_rejected_with_409(): void
     {
         $branch = $this->branch();
-        $user = $this->actingAsRole('recepcion');
+        $user = $this->actingAsRole('administracion');
         $this->withBranch($user, $branch);
 
         $paciente = $this->paciente(['sucursal_registro_id' => $branch->id]);

@@ -39,6 +39,9 @@ final class AuditModuleResolver
         'cuota' => 'pagos',
         'inscripcion_sala' => 'inscripciones',
         'paquete_sesiones' => 'inscripciones',
+        'atencion_entrevista' => 'inscripciones',
+        'atencion_diagnostico' => 'inscripciones',
+        'renovacion_multiple' => 'inscripciones',
         'turno' => 'agenda',
     ];
 
@@ -87,6 +90,9 @@ final class AuditModuleResolver
         'cuota' => 'Cuota',
         'inscripcion_sala' => 'Inscripción a sala',
         'paquete_sesiones' => 'Paquete de sesiones',
+        'atencion_entrevista' => 'Entrevista',
+        'atencion_diagnostico' => 'Diagnóstico',
+        'renovacion_multiple' => 'Renovación múltiple',
         'turno' => 'Turno',
     ];
 
@@ -112,6 +118,11 @@ final class AuditModuleResolver
         'RESTAURAR' => 'Restauración',
         'CAMBIAR_COLOR' => 'Cambio de color',
         'CERRAR_VIGENCIA' => 'Cierre de vigencia',
+        'VINCULAR' => 'Vinculación',
+        'RENOVAR' => 'Renovación',
+        'PAUSAR' => 'Pausa',
+        'REACTIVAR' => 'Reactivación',
+        'RETIRAR_PACIENTE' => 'Retiro del paciente',
     ];
 
     public static function fromEntity(?string $entity): string

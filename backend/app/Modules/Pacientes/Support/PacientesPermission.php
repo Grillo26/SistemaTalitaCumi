@@ -18,6 +18,9 @@ final class PacientesPermission
 
     public const PATIENT_CHANGE_STATUS = 'paciente.cambiar_estado';
 
+    /** Retiro definitivo del paciente (06.05/RN-005). */
+    public const PATIENT_RETIRE = 'paciente.retirar';
+
     /** Alergias, condiciones médicas y edición de esos campos. */
     public const PATIENT_VIEW_SENSITIVE = 'paciente.ver_sensibles';
 
@@ -68,6 +71,7 @@ final class PacientesPermission
             self::PATIENT_CREATE,
             self::PATIENT_EDIT,
             self::PATIENT_CHANGE_STATUS,
+            self::PATIENT_RETIRE,
             self::PATIENT_VIEW_SENSITIVE,
             self::PATIENT_EXPORT,
         ];

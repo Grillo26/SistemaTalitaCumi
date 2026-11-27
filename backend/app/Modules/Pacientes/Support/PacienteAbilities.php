@@ -20,7 +20,8 @@ final class PacienteAbilities
         return [
             'create' => $user->can(PacientesPermission::PATIENT_CREATE),
             'edit' => $user->can(PacientesPermission::PATIENT_EDIT),
-            'change_status' => $user->can(PacientesPermission::PATIENT_CHANGE_STATUS),
+            'change_status' => $user->can(PacientesPermission::PATIENT_CHANGE_STATUS)
+                || $user->can(PacientesPermission::PATIENT_RETIRE),
             'view_sensibles' => $user->can(PacientesPermission::PATIENT_VIEW_SENSITIVE),
             'export' => false,
             'export_listado' => $user->can(PacienteResumenPermission::EXPORT_LISTADO),
@@ -47,7 +48,8 @@ final class PacienteAbilities
     {
         return [
             'edit' => $user->can(PacientesPermission::PATIENT_EDIT),
-            'change_status' => $user->can(PacientesPermission::PATIENT_CHANGE_STATUS),
+            'change_status' => $user->can(PacientesPermission::PATIENT_CHANGE_STATUS)
+                || $user->can(PacientesPermission::PATIENT_RETIRE),
             'view_sensibles' => $user->can(PacientesPermission::PATIENT_VIEW_SENSITIVE),
             'delete' => false,
             'view_resumen' => $user->can(PacientesPermission::PATIENT_VIEW),
