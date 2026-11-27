@@ -9,9 +9,11 @@ use App\Modules\InscripcionesAtenciones\Contracts\ComprobantePaquetePdfExporterC
 use App\Modules\InscripcionesAtenciones\Contracts\ComprobantePdfExporterContract;
 use App\Modules\InscripcionesAtenciones\Contracts\ConsumoPaqueteBatchContract;
 use App\Modules\InscripcionesAtenciones\Contracts\ConsumoPaqueteContract;
+use App\Modules\InscripcionesAtenciones\Contracts\EloquentOrigenTurnos;
 use App\Modules\InscripcionesAtenciones\Contracts\EloquentVigenciaEntidad;
 use App\Modules\InscripcionesAtenciones\Contracts\EstadoExporterContract;
 use App\Modules\InscripcionesAtenciones\Contracts\InscripcionExporterContract;
+use App\Modules\InscripcionesAtenciones\Contracts\OrigenTurnosContract;
 use App\Modules\InscripcionesAtenciones\Contracts\PacienteEstadoContract;
 use App\Modules\InscripcionesAtenciones\Contracts\PagoAtencionContract;
 use App\Modules\InscripcionesAtenciones\Contracts\PagoInscripcionContract;
@@ -97,6 +99,7 @@ final class InscripcionesAtencionesServiceProvider extends ServiceProvider
         $this->app->bind(VigenciaEntidadContract::class, EloquentVigenciaEntidad::class);
         $this->app->bind(EstadoExporterContract::class, UnavailableEstadoExporter::class);
         $this->app->bind(PacienteEstadoContract::class, EloquentPacienteEstado::class);
+        $this->app->bind(OrigenTurnosContract::class, EloquentOrigenTurnos::class);
     }
 
     public function boot(): void

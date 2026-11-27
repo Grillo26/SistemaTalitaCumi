@@ -12,7 +12,15 @@ final class AgendaTurnosModule
 {
     public const MODULE_URL = '/agenda-turnos/agenda-semanal';
 
+    public const MODULE_URL_PROGRAMACION = '/agenda-turnos/programacion-turnos';
+
     public const AUDIT_MODULE = 'agenda';
+
+    public const ENTITY_TURNO = 'turno';
+
+    public const ENTITY_LOTE_GENERACION = 'turno_lote_generacion';
+
+    public const ENTITY_FERIADO = 'feriado';
 
     private function __construct() {}
 }

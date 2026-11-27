@@ -43,6 +43,16 @@ export const routes: Routes = [
         title: 'Agenda semanal | TalitaCumi',
       },
       {
+        path: 'agenda-turnos/programacion-turnos',
+        canActivate: [permissionGuard],
+        data: { permission: 'turno.ver' },
+        loadChildren: () =>
+          import('./pages/agenda-turnos/programacion-turnos/programacion-turnos.routes').then(
+            (m) => m.PROGRAMACION_TURNOS_ROUTES,
+          ),
+        title: 'Programación de turnos | TalitaCumi',
+      },
+      {
         path: 'pacientes',
         canActivate: [permissionGuard],
         data: { permissions: ['paciente.ver', 'tutor.ver', 'ficha_ingreso.ver'] },

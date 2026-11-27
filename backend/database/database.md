@@ -1635,6 +1635,7 @@ Sin `updated_at`.
 | `sucursal_id` | `bigint` |  | `FK → sucursal` |  |
 | `paciente_id` | `bigint` |  | `FK → paciente` |  |
 | `sala_id` | `bigint` | sí | `FK → sala` |  |
+| `inscripcion_sala_id` | `bigint` | sí | `FK → inscripcion_sala` | Origen del turno de sala (07.2) |
 | `paquete_sesiones_id` | `bigint` | sí | `FK → paquete_sesiones` |  |
 | `atencion_diagnostico_id` | `bigint` | sí | `FK → atencion_diagnostico` |  |
 | `servicio_id` | `bigint` |  | `FK → servicio` |  |
@@ -1645,14 +1646,58 @@ Sin `updated_at`.
 | `duracion_minutos` | `int` |  | `DEFAULT 50`, `CHECK > 0` |  |
 | `estado` | `varchar(20)` |  | `DEFAULT 'programado'`, `CHECK IN ('programado','asistio','falto','cancelado','reprogramado')` |  |
 | `motivo_cancelacion` | `text` | sí |  |  |
+| `cancelacion_origen` | `varchar(30)` | sí | `CHECK IN ('regeneracion','manual')` | 07.2 escribe `regeneracion`; `manual` es de 7.3 |
+| `cancelado_en` | `timestamptz` | sí |  |  |
 | `turno_origen_id` | `bigint` | sí | `FK → turno` |  |
+| `lote_generacion_id` | `bigint` | sí | `FK → turno_lote_generacion` | Lote que creó el turno |
+| `cancelado_por_lote_id` | `bigint` | sí | `FK → turno_lote_generacion` | Lote de regeneración que lo canceló |
 | `usuario_registro_id` | `bigint` | sí | `FK → usuario` |  |
 | `usuario_asistencia_id` | `bigint` | sí | `FK → usuario` |  |
 | `asistencia_registrada_en` | `timestamptz` | sí |  |  |
 
-Índices: `(fecha)`, `(sucursal_id, fecha)`, `(paciente_id)`, `(profesional_id)`, `(estado)`, `(sala_id, fecha)`. CHECK: exactamente uno de `sala_id`, `paquete_sesiones_id` o `atencion_diagnostico_id` no nulo. Timestamps: `created_at`, `updated_at`.
+Índices: `(fecha)`, `(sucursal_id, fecha)`, `(paciente_id)`, `(profesional_id)`, `(estado)`, `(sala_id, fecha)`, `(inscripcion_sala_id)`, `(lote_generacion_id)`. CHECK: exactamente uno de `sala_id`, `paquete_sesiones_id` o `atencion_diagnostico_id` no nulo; un turno de sala requiere `sala_id` y no admite paquete/diagnóstico. Timestamps: `created_at`, `updated_at`.
 
 > **Implementación real 07.1:** la tabla `turno` y el pivote `turno_profesional` ya existen como tablas físicas en la migración `2026_11_26_000600_create_turno_table.php`, con los mismos CHECK e índices de este documento. El submódulo 01 (agenda semanal) solo lee; 7.2 a 7.5 escriben. Las FKs de `usuario_registro_id`/`usuario_asistencia_id` apuntan a `users`, la tabla física real de autenticación. `profesional_id` es nullable («sin asignar») y el estado `reprogramado` también se admite y se muestra.
+
+> **Implementación real 07.2:** la migración `2026_11_27_000200_add_programacion_fields_to_turno_table.php` agrega `inscripcion_sala_id`, `lote_generacion_id`, `cancelado_por_lote_id`, `cancelacion_origen` y `cancelado_en`. Refuerzos en PostgreSQL: índice único parcial `(inscripcion_sala_id, fecha, hora_inicio)` y `(paquete_sesiones_id, fecha, hora_inicio)` para turnos no cancelados/reprogramados; `EXCLUDE USING gist` por paciente sobre `tsrange(fecha + hora_inicio, fecha + hora_fin, '[)')` para turnos no cancelados/reprogramados (RF-004). No hay EXCLUDE de profesional ni de sala porque las sesiones grupales comparten legítimamente ambos.
+
+#### `turno_lote_generacion` — Lotes de generación y regeneración
+
+*Documento.* Registro de cada operación de 07.2. La clave de idempotencia es única globalmente (RT-001).
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `tipo_origen` | `varchar(30)` |  | `CHECK IN ('inscripcion_sala','paquete_sesiones')` |  |
+| `origen_id` | `bigint` |  |  | Referencia lógica, sin FK polimórfica |
+| `sucursal_id` | `bigint` |  | `FK → sucursal` |  |
+| `accion` | `varchar(20)` |  | `CHECK IN ('generar','regenerar')` |  |
+| `clave_idempotencia` | `varchar(100)` |  | `UNIQUE` |  |
+| `usuario_id` | `bigint` | sí | `FK → users` |  |
+| `ip` | `varchar(45)` | sí |  |  |
+| `cantidad_creados` | `int` |  | `DEFAULT 0` |  |
+| `cantidad_cancelados` | `int` |  | `DEFAULT 0` |  |
+| `cantidad_preservados` | `int` |  | `DEFAULT 0` |  |
+| `advertencias_confirmadas` | `jsonb` | sí |  |  |
+| `created_at` / `updated_at` | `timestamptz` |  |  |  |
+
+Índice: `(tipo_origen, origen_id, created_at)`.
+
+#### `feriado` — Feriados configurables
+
+*Documento.* Catálogo de 07.2 (RF-016). Sin precarga: la generación funciona con la tabla vacía.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `fecha` | `date` |  |  |  |
+| `descripcion` | `varchar(200)` |  |  |  |
+| `sucursal_id` | `bigint` | sí | `FK → sucursal` | NULL = global |
+| `activo` | `boolean` |  | `DEFAULT true` | Baja lógica |
+| `usuario_id` | `bigint` | sí | `FK → users` |  |
+| `created_at` / `updated_at` | `timestamptz` |  |  |  |
+
+Índices únicos parciales: `(fecha)` donde `sucursal_id IS NULL`; `(fecha, sucursal_id)` donde `sucursal_id IS NOT NULL`.
 
 #### `turno_profesional` — Profesionales por turno
 

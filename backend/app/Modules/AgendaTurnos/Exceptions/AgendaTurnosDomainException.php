@@ -15,11 +15,28 @@ abstract class AgendaTurnosDomainException extends RuntimeException
 
     abstract public function errorCode(): string;
 
+    /**
+     * Datos adicionales para el cliente (por ejemplo, el detalle actualizado
+     * de un conflicto detectado entre la previsualización y la confirmación).
+     *
+     * @return array<string, mixed>
+     */
+    public function context(): array
+    {
+        return [];
+    }
+
     public function render(Request $request): JsonResponse
     {
-        return response()->json([
+        $payload = [
             'message' => $this->getMessage(),
             'code' => $this->errorCode(),
-        ], $this->status());
+        ];
+
+        if ($this->context() !== []) {
+            $payload['context'] = $this->context();
+        }
+
+        return response()->json($payload, $this->status());
     }
 }

@@ -3294,6 +3294,148 @@ La exportación PDF usa `AgendaExporterContract` + `UnavailableAgendaExporter`: 
 
 ---
 
+## Módulo 07 — Agenda y turnos (submódulo 02: programación y patrones de días)
+
+Implementación de `docs/07_AGENDA_TURNOS/02_programacion_turnos_patrones.md` (RF-001 a RF-016, RN-001 a RN-010, CA-001 a CA-010). Reutiliza la tabla `turno`, el modelo, el enum `EstadoTurno`, el prefijo del padre y el registry de 7.1. Escribe turnos **solo** por generación y regeneración manuales; no hay alta individual, reprogramación, cancelación individual ni asistencia (7.3/7.4/7.5 fuera de alcance).
+
+### Estructura
+
+```text
+app/Modules/AgendaTurnos/
+├── Actions/
+│   ├── GenerarTurnosDesdeOrigen.php        (transacción compartida)
+│   ├── GenerarTurnosDesdePaquete.php
+│   ├── GenerarTurnosDesdeInscripcionSala.php
+│   ├── RegenerarTurnos.php
+│   ├── AsignarProfesionalATurnos.php
+│   └── Feriados/ (Create, Update, Deactivate)
+├── Enums/            TipoOrigenTurno, AccionLoteGeneracion, SeveridadHallazgo,
+│                     EstadoOrigenProgramacion
+├── Events/           TurnosGenerados, TurnosRegenerados,
+│                     TurnoCanceladoPorRegeneracion, ProfesionalAsignadoALote,
+│                     FeriadoCreado/Actualizado/Desactivado
+├── Http/
+│   ├── Controllers/  ProgramacionTurnosController, FeriadoController
+│   ├── Requests/     Preview/Generar/Regenerar/Asignar/Feriados
+│   └── Resources/    Origen, previews, lote, turno de origen, feriado
+├── Listeners/        RecordAgendaGeneracionAudit (fail-closed)
+├── Models/           Turno (ahora escribe), TurnoLoteGeneracion, Feriado, BitacoraEntry
+├── Queries/          GetOrigenProgramacion, PreviewGeneracionTurnos,
+│                     PreviewRegeneracion, GetTurnosDeOrigen, ListFeriados
+├── Rules/            GeneradorFechas, PatronDias, DuracionTurno,
+│                     TurnoSolapamiento, OrigenGenerable, Regeneracion,
+│                     CantidadRestante, ResumenGeneracion, SesionGrupal
+├── Support/          GeneradorTurnos, OrigenProgramacionResolver, ProgramacionGuard,
+│                     TurnosExistentesResolver, FeriadosResolver, DirectoriosAgenda,
+│                     TurnoFilasFactory, TurnoBatchWriter, LoteIdempotencia, DTOs
+└── routes-programacion.php
+```
+
+Constantes nuevas:
+
+```php
+AgendaTurnosModule::MODULE_URL_PROGRAMACION = '/agenda-turnos/programacion-turnos';
+AgendaTurnosPermission::GENERAR = 'turno.generar';
+AgendaTurnosPermission::REGENERAR = 'turno.regenerar';
+AgendaTurnosPermission::ASIGNAR_PROFESIONAL = 'turno.asignar_profesional';
+AgendaTurnosPermission::FERIADOS = 'turno.feriados';
+```
+
+### Schema y migraciones
+
+- `2026_11_27_000100_create_turno_lote_generacion_table.php`: lote con `tipo_origen`, `origen_id` lógico, `sucursal_id`, `accion`, `clave_idempotencia` única, actor/IP, cantidades y advertencias confirmadas.
+- `2026_11_27_000200_add_programacion_fields_to_turno_table.php`: `inscripcion_sala_id`, `lote_generacion_id`, `cancelado_por_lote_id`, `cancelacion_origen`, `cancelado_en`; CHECK de origen de sala y de cancelación; índices únicos parciales por origen/fecha/hora y `EXCLUDE USING gist` por paciente sobre `tsrange(fecha + hora_inicio, fecha + hora_fin, '[)')` para turnos no cancelados/reprogramados. No hay EXCLUDE de profesional ni sala: la sesión grupal los comparte legítimamente.
+- `2026_11_27_000300_create_feriado_table.php`: catálogo global o por sucursal, sin precarga, baja lógica y unicidad por fecha/alcance.
+
+### Definiciones clave
+
+- **Sesión grupal:** `sala_id + fecha + hora_inicio + hora_fin + servicio_id`. Hay un turno por inscripción/paciente; los turnos de la misma sesión cuentan como uno solo para profesional y sala.
+- **Solapamiento:** por rango (`inicio_a < fin_b && inicio_b < fin_a`), ignorando cancelados y reprogramados. Paciente bloquea siempre; profesional bloquea contra otra sesión; sala advierte contra otra sesión. Los turnos contiguos no se solapan.
+- **Futuro:** fecha > hoy, o fecha = hoy con hora de inicio > hora actual, calculado en `America/La_Paz`.
+- **Generación:** solo desde una entidad origen en estado efectivo Activa. Las fechas pasadas se omiten; los feriados se excluyen; en paquetes se genera como máximo la cantidad pactada y, si el período tiene menos fechas, se advierte “faltan N sesiones”.
+- **Regeneración:** cancela solo turnos futuros en estado Programado del origen; preserva Asistió, Faltó, Cancelado, Reprogramado y los Programados pasados sin marcar. La cantidad restante de un paquete es `pactadas − Asistió − Faltó` (Cancelado no consume). Con 0 restantes solo se cancela/preserva.
+- **Asignación de profesional:** por lote o subconjunto; solo turnos futuros Programados; todo o nada; valida activo y asignado a la sucursal; no sincroniza `paquete_sesiones.profesional_id`.
+- **Idempotencia:** advisory lock transaccional por `(tipo_origen, origen_id)` en PostgreSQL + `clave_idempotencia` única + bloqueo natural “ya tiene turnos activos” + índices únicos parciales. La previsualización no persiste y la confirmación recalcula todo.
+- **Transaccionalidad:** lote + turnos + bitácora (evento síncrono) dentro de una sola `DB::transaction()`. Si falla cualquier inserción o la bitácora, no queda nada.
+
+### Endpoints
+
+Prefijo real: **`/api/agenda-turnos/programacion-turnos`**.
+
+| Método | Ruta | Action/Query | Permiso |
+|---|---|---|---|
+| GET | `/origenes/{tipo}/{id}` | `GetOrigenProgramacion` | `turno.ver` + ver origen |
+| GET | `/origenes/{tipo}/{id}/turnos` | `GetTurnosDeOrigen` | `turno.ver` + ver origen |
+| GET | `/origenes/{tipo}/{id}/preview-generacion` | `PreviewGeneracionTurnos` | `turno.generar` + ver origen |
+| POST | `/origenes/{tipo}/{id}/generar` | `GenerarTurnosDesdePaquete` / `...InscripcionSala` | `turno.generar` + ver origen |
+| GET | `/origenes/{tipo}/{id}/preview-regeneracion` | `PreviewRegeneracion` | `turno.regenerar` + ver origen |
+| POST | `/origenes/{tipo}/{id}/regenerar` | `RegenerarTurnos` | `turno.regenerar` + ver origen |
+| POST | `/turnos/asignar-profesional` | `AsignarProfesionalATurnos` | `turno.asignar_profesional` |
+| GET | `/feriados` | `ListFeriados` | `turno.feriados` |
+| POST | `/feriados` | `CreateFeriadoAction` | `turno.feriados` |
+| PATCH | `/feriados/{id}` | `UpdateFeriadoAction` | `turno.feriados` |
+| POST | `/feriados/{id}/desactivar` | `DeactivateFeriadoAction` | `turno.feriados` |
+
+`{tipo}` es `inscripcion_sala` o `paquete_sesiones`. **No existe `DELETE` de turnos.** La cancelación por regeneración es interna; la individual pertenece a 7.3.
+
+`generar`/`regenerar` requieren `clave_idempotencia` (UUID) y aceptan `confirmar_advertencias`. La generación acepta `profesional_id` (nullable) y `usar_profesional_origen`.
+
+### Permisos
+
+Seeder `AgendaTurnosProgramacionPermissionSeeder` (marcador `agenda.programacion_turnos`):
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `turno.ver` | sí | sí | sí |
+| `turno.generar` | sí | sí | sí |
+| `turno.asignar_profesional` | sí | sí | sí |
+| `turno.regenerar` | sí | sí | no |
+| `turno.feriados` | sí | sí | no |
+
+Además, cada endpoint de origen exige el permiso de vista del origen (`inscripcion.ver` o `paquete.ver`) y el scope de sucursal se valida en la Query/Action. No se decide por nombre de rol.
+
+### Eventos y bitácora
+
+- `TurnosGenerados(loteId, tipoOrigen, origenId, sucursalId, cantidadCreados, turnoIds, advertencias, actorId, ip)`.
+- `TurnosRegenerados(loteId, tipoOrigen, origenId, sucursalId, cantidadCreados, cantidadCancelados, cantidadPreservados, turnosCreadosIds, turnosCanceladosIds, advertencias, actorId, ip)`.
+- `TurnoCanceladoPorRegeneracion(loteId, tipoOrigen, origenId, sucursalId, turnoIds, actorId, ip)`.
+- `ProfesionalAsignadoALote(loteId, profesionalId, sucursalId, turnoIds, actorId, ip)`.
+- `FeriadoCreado/Actualizado/Desactivado`.
+
+`RecordAgendaGeneracionAudit` escribe en `bitacora` (`modulo=agenda`) con `GENERAR`, `REGENERAR`, `ASIGNAR_PROFESIONAL` y acciones de feriados. Es síncrona y fail-closed: si la bitácora falla, la transacción se revierte.
+
+### Contratos cross-módulo
+
+- **Implementado en Inscripciones:** `OrigenTurnosContract::obtener(tipo, id): ?OrigenTurnosResumen`, con `EloquentOrigenTurnos`. Expone sucursal, paciente, servicio, sala, profesional, período, cantidad, estado efectivo y —solo paquetes— días/hora/duración.
+- **Implementado en Organización:** `SalaPatronContract::patron(salaId): ?SalaPatronResumen`. El binding actual es `StubSalaPatronContract`, que lanza `LogicException`; por eso **RF-001 (generación desde sala) queda pendiente** y responde `422 PATRON_NO_DISPONIBLE` con mensaje claro.
+- **Pacientes/Profesionales/Salas/Catálogo:** se reutilizan los métodos batch de 7.1. Si fallan, los nombres muestran “No disponible” sin romper el cálculo.
+
+### Conexiones pendientes con Inscripciones
+
+- `TurnosFuturosInscripcionContract` y `TurnosFuturosPaqueteContract` todavía apuntan a stubs; pueden implementarse contra `turno` sin depender de 7.4. No se reemplazaron en esta entrega para no alterar el comportamiento de pausa/baja.
+- `ConsumoPaqueteContract`, `ConsumoPaqueteBatchContract` y `AsistenciaInscripcionContract` dependen de Asistió/Faltó (7.4); deben esperar.
+- Los botones “Generar turnos” de las fichas de Salas y Paquetes navegan a `/agenda-turnos/programacion-turnos?tipo=...&id=...&accion=generar`. No se generan turnos automáticamente al crear, renovar o editar.
+- El seeder demo de 7.1 (`AgendaTurnosDemoSeeder`) sigue siendo solo local y no es fuente de turnos de 7.2. Para pruebas manuales conviene generar desde un paquete real.
+
+### Frontend
+
+Ruta `/agenda-turnos/programacion-turnos` con `permissionGuard` `turno.ver` y entrada “Programación” en el sidebar. Incluye:
+
+- Pestaña **Programación**: abre un origen por tipo/ID o por query params desde las fichas, muestra el patrón, los turnos existentes y lanza el wizard.
+- Pestaña **Feriados** (solo `turno.feriados`): filtro por año/sucursal, alta global o por sucursal y baja lógica.
+- `GenerarTurnosWizardComponent` autocontenido, máximo 4 pasos: patrón, previsualización, profesional opcional (“Sin asignar”) y confirmación. Muestra bloqueos/advertencias con texto, exige confirmación explícita, protege el doble clic y usa una clave de idempotencia por intento. Al terminar llama a `AgendaRefreshService.notificarCambio()`.
+- Si Salas no expone el patrón, muestra el mensaje de pendiente; si Pacientes/Profesionales/Salas fallan, muestra “No disponible”.
+
+### Tests
+
+- Unit: `GeneradorFechasRule` (CA-001: 9 fechas; CA-005; domingo; feriados; pasadas; tope), `TurnoSolapamientoRule` (parcial, contiguos, mismo rango, cancelados, misma sesión grupal, bloqueo vs advertencia, fechas distintas), `OrigenGenerableRule`, `RegeneracionRule`, `CantidadRestanteRule`, `ResumenGeneracionRule`, `PatronDiasRule`, `DuracionTurnoRule`, `SesionGrupalRule`.
+- Feature: generación CA-001, preview sin persistir CA-002, solapamiento paciente/profesional CA-003/CA-004, fuera de vigencia CA-005, sin profesional CA-006, regeneración CA-007, transaccionalidad CA-008, sucursal CA-009, bitácora CA-010, idempotencia/doble envío, origen ya generado, feriados, grupo sin falsos bloqueos, asignación todo o nada, 50 turnos sin N+1, sin DELETE, sala sin patrón y contrato de origen.
+- `OrigenTurnosContractTest` y `SalaPatronContractTest` cubren las conexiones cross-módulo.
+
+**Pendientes:** RF-001 real (patrón de sala), RNF-010 PDF (503 + vista imprimible), implementación real de `TurnosFuturos*`, `ConsumoPaquete*` y `AsistenciaInscripcion` (7.4), y sincronización opcional del profesional del paquete (decisión de Inscripciones).
+
+---
+
 ## Notas
 
 - No se agregaron librerías de PDF/Excel. Los únicos cambios en módulos existentes son métodos batch de lectura acordados en `PatientDirectoryContract`, `ProfessionalDirectoryContract`, `SalaDirectoryContract` y `BranchDirectoryContract`, con tests propios; no se alteró su comportamiento previo.

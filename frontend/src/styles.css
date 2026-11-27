@@ -1876,3 +1876,32 @@ pre code,
     break-inside: avoid;
   }
 }
+
+/* Programación de turnos: impresión aislada de la previsualización (RNF-010). */
+@media print {
+  body.programacion-printing * {
+    visibility: hidden;
+  }
+
+  body.programacion-printing #programacion-preview-print,
+  body.programacion-printing #programacion-preview-print * {
+    visibility: visible;
+  }
+
+  body.programacion-printing #programacion-preview-print {
+    display: block;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    max-height: none;
+    margin: 0;
+    overflow: visible;
+    background: #ffffff;
+    color: #101828;
+    padding: 12mm;
+  }
+
+  body.programacion-printing #programacion-preview-print .print\:hidden {
+    display: none !important;
+  }
+}

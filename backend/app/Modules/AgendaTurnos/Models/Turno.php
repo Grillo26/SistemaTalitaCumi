@@ -4,6 +4,7 @@ namespace App\Modules\AgendaTurnos\Models;
 
 use App\Modules\AgendaTurnos\Enums\EstadoTurno;
 use App\Modules\AgendaTurnos\Models\Casts\HoraCast;
+use App\Modules\InscripcionesAtenciones\Models\InscripcionSala;
 use Database\Factories\TurnoFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -14,8 +15,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * Turno de agenda (módulo 07).
  *
- * En este submódulo el modelo es de LECTURA. Las escrituras (programación,
- * reprogramación, cancelación y asistencia) pertenecen a 7.2 a 7.5.
+ * 7.1 lo dejó como modelo de lectura; 7.2 escribe turnos únicamente por
+ * generación y regeneración. La cancelación individual y la asistencia
+ * pertenecen a 7.3 y 7.4.
  */
 class Turno extends Model
 {
@@ -37,6 +39,10 @@ class Turno extends Model
             'hora_fin' => HoraCast::class,
             'duracion_minutos' => 'integer',
             'estado' => EstadoTurno::class,
+            'inscripcion_sala_id' => 'integer',
+            'lote_generacion_id' => 'integer',
+            'cancelado_por_lote_id' => 'integer',
+            'cancelado_en' => 'datetime',
             'asistencia_registrada_en' => 'datetime',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
@@ -56,6 +62,29 @@ class Turno extends Model
     public function reprogramaciones(): HasMany
     {
         return $this->hasMany(self::class, 'turno_origen_id');
+    }
+
+    public function inscripcionSala(): BelongsTo
+    {
+        return $this->belongsTo(InscripcionSala::class, 'inscripcion_sala_id');
+    }
+
+    public function loteGeneracion(): BelongsTo
+    {
+        return $this->belongsTo(TurnoLoteGeneracion::class, 'lote_generacion_id');
+    }
+
+    public function canceladoPorLote(): BelongsTo
+    {
+        return $this->belongsTo(TurnoLoteGeneracion::class, 'cancelado_por_lote_id');
+    }
+
+    public function scopeVigentes(Builder $query): Builder
+    {
+        return $query->whereNotIn('estado', [
+            EstadoTurno::CANCELADO->value,
+            EstadoTurno::REPROGRAMADO->value,
+        ]);
     }
 
     public function scopeDeSucursal(Builder $query, int|array $sucursalIds): Builder

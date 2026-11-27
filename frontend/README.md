@@ -1645,3 +1645,55 @@ Reutiliza `InscripcionPacienteSearchComponent` y `InscripcionDateInputComponent`
 **Permisos:** `turno.ver` para la ruta y las consultas; `turno.exportar` para el botón PDF. El backend revalida siempre.
 
 **Estado:** implementado contra API real. Pendientes: acciones reales de 7.3/7.4, PDF backend y 7.5 multi-profesional.
+
+### 36. Programación de turnos y patrones de días
+
+**Ruta:** `/agenda-turnos/programacion-turnos`.
+**Entrada de sidebar:** `Programación` (visible con `turno.ver`).
+**Guard:** `permissionGuard` con `turno.ver`.
+
+**Archivos:**
+
+- `src/app/pages/agenda-turnos/programacion-turnos/programacion-turnos.page.ts`
+- `src/app/pages/agenda-turnos/programacion-turnos/programacion-turnos.page.html`
+- `src/app/pages/agenda-turnos/programacion-turnos/programacion-turnos.routes.ts`
+- `src/app/pages/agenda-turnos/programacion-turnos/programacion-turnos.service.ts`
+- `src/app/pages/agenda-turnos/programacion-turnos/programacion-turnos.models.ts`
+- `components/generar-turnos-wizard/generar-turnos-wizard.component.ts|html`
+
+**API consumida:**
+
+| Método | Endpoint | Acción |
+|---|---|---|
+| GET | `/api/agenda-turnos/programacion-turnos/origenes/{tipo}/{id}` | Datos del origen y si puede generar/regenerar |
+| GET | `.../origenes/{tipo}/{id}/turnos` | Turnos ya generados |
+| GET | `.../origenes/{tipo}/{id}/preview-generacion` | Previsualización sin persistir |
+| POST | `.../origenes/{tipo}/{id}/generar` | Generación manual con idempotencia |
+| GET | `.../origenes/{tipo}/{id}/preview-regeneracion` | Turnos a cancelar/preservar y nuevos |
+| POST | `.../origenes/{tipo}/{id}/regenerar` | Regeneración transaccional |
+| POST | `.../turnos/asignar-profesional` | Asignación por lote o subconjunto |
+| GET/POST/PATCH | `.../feriados` | Catálogo de feriados |
+
+`{tipo}` es `inscripcion_sala` o `paquete_sesiones`.
+
+**Funcionalidad:**
+
+- Pestaña **Programación**: carga un origen por tipo/ID o por query params (`tipo`, `id`, `accion`) desde las fichas; muestra paciente, servicio, sala, profesional, período, cantidad, estado, patrón y turnos existentes. Si el origen ya tiene turnos, ofrece Regenerar; si no, Generar.
+- `GenerarTurnosWizardComponent` autocontenido y reutilizable, máximo 4 pasos:
+  1. patrón y período del origen (solo lectura);
+  2. previsualización con fecha, día, horas, estado y hallazgos (bloqueo/advertencia/informativo) con texto, no solo color; los bloqueos impiden continuar;
+  3. profesional opcional con “Sin asignar” y “Profesional del origen”; el cambio recalcula la previsualización;
+  4. confirmación con resumen, checkbox obligatorio si hay advertencias o sesiones faltantes, botón deshabilitado durante el guardado y clave de idempotencia por intento.
+- Regeneración: muestra cantidades y listas de turnos a cancelar/preservar, incluidos asistidos, faltados y programados pasados sin marcar.
+- Resultado final con creados, cancelados y preservados; al cerrar se recarga el origen y se llama a `AgendaRefreshService.notificarCambio()` para refrescar la agenda semanal.
+- Pestaña **Feriados** (solo `turno.feriados`): filtro por año/sucursal, alta global o por sucursal y baja lógica. Sin precarga.
+- Mensajes claros para sala sin patrón (“generación pendiente”), origen vencido/pausado/retirado, sucursal no asignada, advertencias no confirmadas y conflictos aparecidos entre preview y confirmación.
+- Si Pacientes/Profesionales/Salas/Catálogo fallan, los nombres muestran “No disponible” sin romper el cálculo.
+
+**Integración en fichas:** las fichas de Salas Grupales y Paquetes muestran “Generar turnos” con `turno.generar` o `turno.regenerar` y navegan con `tipo`, `id` y `accion=generar`. No se generan turnos automáticamente al crear, renovar o editar.
+
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-alert`, `app-select-field`, `input[app-input]`, `app-modal`, `ToastService`, `AgendaRefreshService` y los tokens de color de `styles.css`.
+
+**Permisos:** `turno.ver` para la ruta; `turno.generar`, `turno.regenerar`, `turno.asignar_profesional` y `turno.feriados` para las acciones. El backend revalida permisos, origen y sucursal.
+
+**Estado:** implementado contra API real. Pendiente: generación desde sala cuando Organización exponga el patrón (`SalaPatronContract`), PDF del preview (RNF-010) y la implementación real de los contratos de turnos futuros/consumo de Inscripciones.

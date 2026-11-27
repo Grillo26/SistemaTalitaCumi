@@ -1,0 +1,361 @@
+<div class="space-y-5 sm:space-y-6">
+  <app-page-breadcrumb [pageTitle]="texts.pageTitle" />
+
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">
+        {{ texts.pageTitle }}
+      </h1>
+      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+        Generá y regenerá los turnos desde el patrón de una inscripción o paquete. La generación
+        siempre es manual y queda registrada en bitácora.
+      </p>
+    </div>
+  </div>
+
+  <div class="flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-800">
+    <button
+      type="button"
+      class="border-b-2 px-3 py-2 text-sm font-medium"
+      [class.border-brand-500]="pestana() === 'programacion'"
+      [class.text-brand-600]="pestana() === 'programacion'"
+      [class.border-transparent]="pestana() !== 'programacion'"
+      [class.text-gray-500]="pestana() !== 'programacion'"
+      (click)="cambiarPestana('programacion')"
+    >
+      {{ texts.tabProgramacion }}
+    </button>
+    @if (can().feriados) {
+      <button
+        type="button"
+        class="border-b-2 px-3 py-2 text-sm font-medium"
+        [class.border-brand-500]="pestana() === 'feriados'"
+        [class.text-brand-600]="pestana() === 'feriados'"
+        [class.border-transparent]="pestana() !== 'feriados'"
+        [class.text-gray-500]="pestana() !== 'feriados'"
+        (click)="cambiarPestana('feriados')"
+      >
+        {{ texts.tabFeriados }}
+      </button>
+    }
+  </div>
+
+  @if (pestana() === 'programacion') {
+    <app-component-card [title]="texts.originTitle" [desc]="texts.originHint">
+      <div class="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            {{ texts.typeLabel }}
+          </label>
+          <app-select-field
+            [options]="tipoOpciones"
+            [value]="tipo()"
+            ariaLabel="Tipo de entidad origen"
+            (valueChange)="cambiarTipo($event)"
+          />
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            {{ texts.idLabel }}
+          </label>
+          <input
+            app-input
+            type="number"
+            min="1"
+            [value]="idTexto()"
+            placeholder="Ej. 12"
+            (input)="idTexto.set($any($event.target).value)"
+            (keydown.enter)="cargarOrigen()"
+          />
+        </div>
+        <button app-button type="button" [disabled]="loading()" (click)="cargarOrigen()">
+          {{ loading() ? 'Cargando…' : texts.openWizard }}
+        </button>
+      </div>
+
+      @if (error(); as message) {
+        <div class="mt-4">
+          <app-alert variant="error" title="No se pudo cargar la programación" [message]="message" />
+        </div>
+      }
+    </app-component-card>
+
+    @if (origen(); as origen) {
+      <app-component-card [title]="texts.pattern">
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.patient }}</p>
+            <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+              {{ origen.paciente.nombre }}
+            </p>
+          </div>
+          <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.service }}</p>
+            <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+              {{ origen.servicio.nombre }}
+            </p>
+          </div>
+          <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.room }}</p>
+            <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+              {{ origen.sala?.nombre ?? texts.unassigned }}
+            </p>
+          </div>
+          <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.professional }}</p>
+            <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+              {{ origen.profesional?.nombre ?? texts.unassigned }}
+            </p>
+          </div>
+          <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.period }}</p>
+            <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+              {{ fechaLegible(origen.fecha_inicio) }} – {{ fechaLegible(origen.fecha_fin) }}
+            </p>
+          </div>
+          <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.sessions }}</p>
+            <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+              {{ origen.cantidad_sesiones ?? '—' }}
+            </p>
+          </div>
+          <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.effectiveState }}</p>
+            <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+              {{ origen.estado_efectivo_label }}
+            </p>
+          </div>
+          <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.existingTurns }}</p>
+            <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+              {{ origenData()?.turnos_existentes ?? 0 }}
+            </p>
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-wrap justify-end gap-2">
+          @if (puedeGenerar()) {
+            <button app-button type="button" (click)="abrirWizard('generar')">
+              {{ texts.generateTurns }}
+            </button>
+          }
+          @if (puedeRegenerar()) {
+            <button app-button variant="outline" type="button" (click)="abrirWizard('regenerar')">
+              {{ texts.regenerateTurns }}
+            </button>
+          }
+        </div>
+      </app-component-card>
+
+      <app-component-card [title]="texts.existingTurns">
+        <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+          <table class="min-w-full text-left text-sm">
+            <thead class="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800/60 dark:text-gray-400">
+              <tr>
+                <th class="px-3 py-2">{{ texts.date }}</th>
+                <th class="px-3 py-2">{{ texts.start }}</th>
+                <th class="px-3 py-2">{{ texts.end }}</th>
+                <th class="px-3 py-2">{{ texts.status }}</th>
+                <th class="px-3 py-2">{{ texts.professional }}</th>
+                <th class="px-3 py-2">{{ texts.room }}</th>
+                <th class="px-3 py-2">Lote</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (turno of turnos(); track turno.id) {
+                <tr class="border-t border-gray-100 dark:border-gray-800">
+                  <td class="px-3 py-2 text-gray-800 dark:text-white/90">
+                    {{ fechaLegible(turno.fecha) }}
+                  </td>
+                  <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ turno.hora_inicio }}</td>
+                  <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ turno.hora_fin }}</td>
+                  <td class="px-3 py-2">
+                    <span
+                      [class]="'inline-flex rounded-full px-2 py-0.5 text-xs font-medium ' + estadoTurnoClase(turno.estado)"
+                    >
+                      {{ turno.estado_label }}
+                    </span>
+                  </td>
+                  <td class="px-3 py-2 text-gray-600 dark:text-gray-300">
+                    {{ turno.profesional?.nombre ?? texts.unassigned }}
+                  </td>
+                  <td class="px-3 py-2 text-gray-600 dark:text-gray-300">
+                    {{ turno.sala?.nombre ?? '—' }}
+                  </td>
+                  <td class="px-3 py-2 text-gray-600 dark:text-gray-300">
+                    {{ turno.lote_generacion_id ?? '—' }}
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="7" class="px-3 py-4 text-center text-sm text-gray-500">
+                    {{ texts.noExistingTurns }}
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </app-component-card>
+    } @else if (!loading() && error() === null) {
+      <app-component-card>
+        <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.noOrigin }}</p>
+      </app-component-card>
+    }
+  }
+
+  @if (pestana() === 'feriados' && can().feriados) {
+    <app-component-card [title]="texts.holidayTitle" [desc]="texts.holidayHint">
+      <div class="grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            {{ texts.year }}
+          </label>
+          <input
+            app-input
+            type="number"
+            min="2000"
+            max="2100"
+            placeholder="Todos"
+            [value]="anio() ?? ''"
+            (input)="setAnio($any($event.target).value)"
+          />
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            {{ texts.holidayScope }}
+          </label>
+          <app-select-field
+            [options]="sucursalFiltroOpciones()"
+            [value]="sucursalFiltro()"
+            placeholder="Todas"
+            ariaLabel="Filtrar feriados por sucursal"
+            (valueChange)="sucursalFiltro.set($event)"
+          />
+        </div>
+        <div class="flex items-end">
+          <button app-button variant="outline" type="button" (click)="filtrarFeriados()">
+            {{ texts.filter }}
+          </button>
+        </div>
+      </div>
+
+      <div class="mt-5 grid gap-3 border-t border-gray-100 pt-5 dark:border-gray-800 sm:grid-cols-[1fr_2fr_1fr_auto] sm:items-end">
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            {{ texts.holidayDate }}
+          </label>
+          <input
+            app-input
+            type="date"
+            [value]="feriadoFecha()"
+            (input)="feriadoFecha.set($any($event.target).value)"
+          />
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            {{ texts.holidayDescription }}
+          </label>
+          <input
+            app-input
+            type="text"
+            maxlength="200"
+            [value]="feriadoDescripcion()"
+            placeholder="Ej. Feriado departamental"
+            (input)="feriadoDescripcion.set($any($event.target).value)"
+          />
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            {{ texts.holidayScope }}
+          </label>
+          <app-select-field
+            [options]="sucursalOpciones()"
+            [value]="feriadoSucursal()"
+            ariaLabel="Alcance del feriado"
+            (valueChange)="feriadoSucursal.set($event)"
+          />
+        </div>
+        <button app-button type="button" [disabled]="savingFeriado()" (click)="crearFeriado()">
+          {{ savingFeriado() ? 'Guardando…' : texts.addHoliday }}
+        </button>
+      </div>
+
+      @if (feriadosError(); as message) {
+        <div class="mt-4">
+          <app-alert variant="error" title="No se pudieron cargar los feriados" [message]="message" />
+        </div>
+      }
+
+      <div class="mt-5 overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+        <table class="min-w-full text-left text-sm">
+          <thead class="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800/60 dark:text-gray-400">
+            <tr>
+              <th class="px-3 py-2">{{ texts.holidayDate }}</th>
+              <th class="px-3 py-2">{{ texts.holidayDescription }}</th>
+              <th class="px-3 py-2">{{ texts.holidayScope }}</th>
+              <th class="px-3 py-2">{{ texts.status }}</th>
+              <th class="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (feriado of feriados(); track feriado.id) {
+              <tr class="border-t border-gray-100 dark:border-gray-800">
+                <td class="px-3 py-2 text-gray-800 dark:text-white/90">
+                  {{ fechaLegible(feriado.fecha) }}
+                </td>
+                <td class="px-3 py-2 text-gray-600 dark:text-gray-300">
+                  {{ feriado.descripcion }}
+                </td>
+                <td class="px-3 py-2 text-gray-600 dark:text-gray-300">
+                  {{ feriado.sucursal_id === null ? texts.global : 'Sucursal #' + feriado.sucursal_id }}
+                </td>
+                <td class="px-3 py-2">
+                  <span
+                    [class]="
+                      'inline-flex rounded-full px-2 py-0.5 text-xs font-medium ' +
+                      (feriado.activo
+                        ? 'bg-success-50 text-success-700 dark:bg-success-500/10 dark:text-success-400'
+                        : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300')
+                    "
+                  >
+                    {{ feriado.activo ? texts.active : texts.inactive }}
+                  </span>
+                </td>
+                <td class="px-3 py-2 text-right">
+                  @if (feriado.activo) {
+                    <button
+                      app-button
+                      variant="outline"
+                      size="xs"
+                      type="button"
+                      (click)="desactivarFeriado(feriado)"
+                    >
+                      {{ texts.deactivate }}
+                    </button>
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="5" class="px-3 py-4 text-center text-sm text-gray-500">
+                  {{ feriadosLoading() ? 'Cargando feriados…' : texts.noHolidays }}
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </app-component-card>
+  }
+</div>
+
+<app-generar-turnos-wizard
+  [open]="wizardOpen()"
+  [tipo]="wizardTipo()"
+  [origenId]="wizardId()"
+  [modo]="wizardModo()"
+  [can]="can()"
+  (closed)="cerrarWizard()"
+  (completed)="onWizardCompleted($event)"
+/>

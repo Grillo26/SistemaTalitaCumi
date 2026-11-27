@@ -27,7 +27,7 @@ final class AgendaTurnosPermissionSeeder extends Seeder
 
         $assign = InitialPermissionMatrix::shouldAssign(
             'agenda.agenda_semanal',
-            AgendaTurnosPermission::all(),
+            AgendaTurnosPermission::base(),
         );
 
         if ($assign) {

@@ -1,0 +1,40 @@
+<?php
+
+namespace App\Modules\AgendaTurnos\Http\Requests;
+
+use App\Modules\AgendaTurnos\Enums\TipoOrigenTurno;
+use App\Modules\InscripcionesAtenciones\Support\InscripcionPermission;
+use App\Modules\InscripcionesAtenciones\Support\PaquetePermission;
+use Illuminate\Foundation\Http\FormRequest;
+
+/**
+ * [Programación de Turnos] RF-010 / RF-011 / RF-013 / RT-001.
+ */
+final class RegenerarTurnosRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        $tipo = TipoOrigenTurno::tryFrom((string) $this->route('tipo'));
+
+        if ($tipo === null) {
+            return false;
+        }
+
+        $permiso = $tipo === TipoOrigenTurno::PAQUETE_SESIONES
+            ? PaquetePermission::VIEW
+            : InscripcionPermission::VIEW;
+
+        return (bool) $this->user()?->can($permiso);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function rules(): array
+    {
+        return [
+            'clave_idempotencia' => ['required', 'uuid'],
+            'confirmar_advertencias' => ['sometimes', 'boolean'],
+        ];
+    }
+}

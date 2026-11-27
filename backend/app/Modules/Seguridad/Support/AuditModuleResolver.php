@@ -43,6 +43,8 @@ final class AuditModuleResolver
         'atencion_diagnostico' => 'inscripciones',
         'renovacion_multiple' => 'inscripciones',
         'turno' => 'agenda',
+        'turno_lote_generacion' => 'agenda',
+        'feriado' => 'agenda',
     ];
 
     private const MODULE_LABELS = [
@@ -94,6 +96,8 @@ final class AuditModuleResolver
         'atencion_diagnostico' => 'Diagnóstico',
         'renovacion_multiple' => 'Renovación múltiple',
         'turno' => 'Turno',
+        'turno_lote_generacion' => 'Lote de generación de turnos',
+        'feriado' => 'Feriado',
     ];
 
     private const ACTION_LABELS = [
@@ -123,6 +127,13 @@ final class AuditModuleResolver
         'PAUSAR' => 'Pausa',
         'REACTIVAR' => 'Reactivación',
         'RETIRAR_PACIENTE' => 'Retiro del paciente',
+        'GENERAR' => 'Generación de turnos',
+        'REGENERAR' => 'Regeneración de turnos',
+        'ASIGNAR_PROFESIONAL' => 'Asignación de profesional',
+        'CREAR_FERIADO' => 'Alta de feriado',
+        'ACTUALIZAR_FERIADO' => 'Actualización de feriado',
+        'DESACTIVAR_FERIADO' => 'Desactivación de feriado',
+        'CANCELAR' => 'Cancelación',
     ];
 
     public static function fromEntity(?string $entity): string
