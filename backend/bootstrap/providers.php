@@ -7,6 +7,7 @@ use App\Modules\AgendaTurnos\Providers\DiagnosticosServiceProvider;
 use App\Modules\CatalogoServicios\Providers\CatalogoServiciosServiceProvider;
 use App\Modules\InscripcionesAtenciones\Providers\InscripcionesAtencionesServiceProvider;
 use App\Modules\Organizacion\Providers\OrganizacionServiceProvider;
+use App\Modules\Pagos\Providers\PagosServiceProvider;
 use App\Modules\Pacientes\Providers\PacientesServiceProvider;
 use App\Modules\Profesionales\Providers\ProfesionalesServiceProvider;
 use App\Modules\Seguridad\Providers\SeguridadServiceProvider;
@@ -24,4 +25,5 @@ return [
     CambiosTurnosServiceProvider::class,
     AsistenciaTurnosServiceProvider::class,
     DiagnosticosServiceProvider::class,
+    PagosServiceProvider::class,
 ];

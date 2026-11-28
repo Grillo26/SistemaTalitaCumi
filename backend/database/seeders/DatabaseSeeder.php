@@ -90,5 +90,8 @@ class DatabaseSeeder extends Seeder
         $this->call(AsistenciaTurnosAccionAuditadaSeeder::class);
         $this->call(DiagnosticosPermissionSeeder::class);
         $this->call(DiagnosticosAccionAuditadaSeeder::class);
+        $this->call(MedioPagoSeeder::class);
+        $this->call(PagosPermissionSeeder::class);
+        $this->call(PagosAccionAuditadaSeeder::class);
     }
 }

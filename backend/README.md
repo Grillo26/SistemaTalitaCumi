@@ -3926,3 +3926,200 @@ El backend revalida permiso, sucursal y estado. Un diagnóstico de otra sucursal
 - El login real está implementado en la Fase 1 del módulo 02 y el alcance real por sucursal está activo desde la Fase 2. La UI obtiene token mediante el interceptor y las páginas de 01/02/03 ya respetan las sucursales asignadas.
 - `database/database.md` y `database/talitacumi_schema.sql` se actualizaron con la implementación real: `users` es la tabla física, Spatie administra roles/permisos y Sanctum usa `personal_access_tokens`. Las definiciones `usuario`/`rol`/`permiso`/`sesion` del SQL quedan como referencia aspiracional.
 - Si se reconstruye la imagen con `--no-dev`, volver a ejecutar `composer install` dentro del contenedor para correr tests.
+
+---
+
+## Módulo 08.01 — Registro de pagos y saldos
+
+Implementación de `docs/08_PAGOS_CAJA/01_registro_pagos_saldos.md` (RF-001 a RF-016, RN-001 a RN-011, CU-01 a CU-03, CA-001 a CA-010, RNF-001 a RNF-012). Módulo: `App\Modules\Pagos`. Constante: `PagosModule::MODULE_URL = '/pagos'`.
+
+### Estructura
+
+```text
+app/Modules/Pagos/
+├── Actions/      RegistrarPagoAction, RejectPagoDeletionAction, RegistroPagoResultado
+├── Contracts/    PayableEntityContract (+ Resumen, Stub), ComprobantePagoContract (+ Unavailable),
+│                 PagosDelDiaContract (+ Resumen, EloquentPagosDelDia)
+├── Enums/        TipoEntidadPago, EstadoPago
+├── Events/       PagoRegistrado
+├── Exceptions/   PagosDomainException y excepciones de dominio con código HTTP
+├── Http/         Controllers (Pago, PagoEntidad, PagoOpciones, PagoExport), Requests
+├── Listeners/    RecordPagoAudit (síncrono y fail-closed)
+├── Models/       Pago, PagoIdempotencia, SecuenciaPago, MedioPago, BitacoraEntry
+├── Providers/    PagosServiceProvider
+├── Queries/      ListPagosQuery, GetPagoQuery, GetHistorialEntidadQuery, BuscarEntidadPagableQuery
+├── Rules/        MontoPagoRule, SaldoPagoRule, FechaPagoRule, PagoLineasRule, PagoIdempotenciaRule
+├── Support/      PagosModule, PagoPermission, PagoAbilities, PagoPresenter, PagoSnapshot,
+│                 PagoNumberFormatter, PagoCsvExporter
+└── routes.php
+```
+
+Config: `config/pagos.php` → `export_max_rows` (`PAGOS_EXPORT_MAX_ROWS`, 10000).
+
+### Endpoints
+
+Prefijo `/api/pagos`. Rutas estáticas antes de `{id}`.
+
+| Método | Ruta | Componente | Permiso |
+|---|---|---|---|
+| GET | `/` | `ListPagosQuery` | `pago.ver` |
+| GET | `/opciones` | medios activos y tipos de entidad | `pago.ver` |
+| GET | `/buscar-entidades?q=` | `BuscarEntidadPagableQuery` | `pago.registrar` |
+| GET | `/entidades/{tipo}/{id}/historial` | `GetHistorialEntidadQuery` | `pago.ver` |
+| GET | `/exportar` | CSV (`PagoCsvExporter`) | `pago.exportar` |
+| POST | `/` | `RegistrarPagoAction` (201 nuevo, 200 replay) | `pago.registrar` |
+| GET | `/{id}` | `GetPagoQuery` (incluye líneas del grupo) | `pago.ver` |
+| DELETE | `/{id}` | siempre `409 PAGO_DELETE_NOT_ALLOWED` | `pago.ver` |
+
+Filtros del listado: `sucursal_id`, `periodo_desde`, `periodo_hasta`, `paciente_id`, `numero`, `medio_pago`, `estado`, `page`, `per_page` (máx. 50), `sort` (`fecha_pago|numero_correlativo|monto|created_at`), `direction`. Sucursal fuera de alcance → listado vacío. Detalle fuera de alcance → `404 PAGO_NOT_FOUND`.
+
+Cuerpo de registro:
+
+```json
+{
+  "tipo_entidad": "paquete_sesiones",
+  "entidad_id": 12,
+  "clave_idempotencia": "2f0c1e7a-4c1d-4b8e-9d1a-5b1f0c2a9e11",
+  "fecha_pago": "2026-11-25",
+  "motivo_fecha_futura": null,
+  "lineas": [
+    {"medio_pago": "efectivo", "monto": "150.50"},
+    {"medio_pago": "qr", "monto": "349.50", "referencia": "BANCO-998877"}
+  ]
+}
+```
+
+- Montos como string decimal. Más de dos decimales, cero, negativos o floats → `422 PAGO_MONTO_INVALIDO` (se rechaza, no se redondea).
+- Una o dos líneas, medios distintos y activos en el catálogo → `422 PAGO_LINEAS_INVALIDAS`. QR exige referencia.
+- Total > saldo → `409 PAGO_SALDO_EXCEDIDO` con `saldo_maximo`.
+- Tutor opcional: si viene, debe estar activo y asociado al paciente (`422 PAGO_TUTOR_INVALIDO`); si no, se usa el tutor principal activo.
+
+### Reglas y decisiones
+
+- **Entidad pagable (RN-007):** un pago pertenece a una sola entidad (CHECK de "exactamente una" en BD). La sucursal, el paciente y el monto esperado vienen del `PayableEntityContract`, nunca del cliente. Entidades retiradas o anuladas → `409 ENTIDAD_NO_PAGABLE`.
+- **Venta de materiales (10.3):** `tipo_entidad=venta_material` responde `503 MODULO_NO_DISPONIBLE`; la columna existe pero está bloqueada por CHECK.
+- **Correlativo (RF-002, RN-005, RT-003):** contador `secuencia_pago` por sucursal, `lockForUpdate()` dentro de la misma transacción que inserta. Sin secuencia de PostgreSQL, sin huecos al revertir. Número guardado formateado con `comprobante.prefijo` y `comprobante.formato` (`TC-000001`). La API expone `numero_comprobante = <codigo sucursal>-<numero>` (`CEN-TC-000001`), con lo que el número es único visible entre sucursales sin tocar 01.03. **PROPUESTO - VALIDAR.**
+- **Concurrencia (RF-010):** el bloqueo de la fila contadora serializa los registros de una sucursal; toda entidad pertenece a una sucursal, así que el saldo se evalúa con datos confirmados. La prueba de concurrencia real con dos conexiones **no está implementada** (ver pendientes).
+- **Idempotencia (RT-001):** alcance `(usuario, sucursal, clave)`. Huella SHA-256 canónica de la solicitud. Misma clave y misma huella → pago original sin duplicar (200, `replay=true`). Misma clave con otra huella → `409 PAGO_IDEMPOTENCIA_CONFLICTO`. La clave se genera al abrir el modal y se regenera solo ante ese conflicto.
+- **Inmutabilidad (RN-006, RNF-005):** sin PATCH ni Action de anulación. Modelo `Pago` lanza `LogicException` ante cambios no permitidos (solo `vigente → anulado` con campos de anulación). PostgreSQL: trigger `tg_pago_inmutable`.
+- **Saldo (RF-004, RN-011):** monto esperado − suma de pagos `vigente`. El anulado no suma (RT-002, probado con anulación simulada). Estado derivado en la UI: sin pago, a cuenta, pagado.
+- **Fecha (RF-016, RN-009):** calculada con `zona_horaria`. Fechas pasadas permitidas (el cierre de caja de 8.3 decidirá). Fecha futura exige `pago.autorizar_fecha_futura` y motivo (≤500); el registro se marca `critico` en bitácora. **PROPUESTO - VALIDAR.**
+- **Bitácora (RF-015, CA-010):** `RecordPagoAudit`, una fila por pago: `modulo=pagos`, `entidad=pago`, `accion=CREAR`, `critico` según fecha futura. Síncrona y fail-closed: si falla, la transacción completa se revierte (`503 AUDIT_UNAVAILABLE`).
+- **Snapshots:** nombres de sucursal, paciente y tutor, monto esperado y saldo resultante quedan fijos en cada pago (sin N+1 en listado ni comprobante).
+- **Caja (RF-012):** `PagosDelDiaContract::resumen($sucursalId, $fecha)` devuelve totales por medio, solo vigentes. Consumidor: 8.3.
+- **Exportación (RNF-010):** CSV `;` con BOM, escape de fórmulas, `lazy`, límite configurable (`422 EXPORT_TOO_LARGE`) y `registrarExportacion` antes de transmitir. PDF no existe (sin botón).
+
+### Permisos
+
+Seeder `PagosPermissionSeeder`, marca `pagos.registro`, `InitialPermissionMatrix`:
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `pago.ver` | sí | sí | sí |
+| `pago.registrar` | sí | sí | sí |
+| `pago.autorizar_fecha_futura` | sí | sí | no |
+| `pago.exportar` | sí | sí | no |
+
+`pago.anular` **no se crea**: pertenece a 8.4. El backend decide siempre por permiso, nunca por nombre de rol.
+
+Seeders agregados a `DatabaseSeeder`: `MedioPagoSeeder` (efectivo, QR), `PagosPermissionSeeder`, `PagosAccionAuditadaSeeder` (`pagos/pago/CREAR`).
+
+**Etiquetas de 02 (sin tocar `PermissionCatalog` ni `AuditModuleResolver`):** `pago` ya está mapeado a `pagos` y tiene etiqueta; los permisos `pago.autorizar_fecha_futura` y `pago.exportar` usan el fallback (`ucfirst`) de la grilla hasta que 02 los etiquete.
+
+### Contratos
+
+| Contrato | Implementación | Estado |
+|---|---|---|
+| `PayableEntityContract` | `StubPayableEntityContract` | **Stub**: 503 `MODULO_NO_DISPONIBLE`. Implementación real en 06 (inscripciones, paquetes, entrevistas, diagnósticos) y 10.3 (ventas). |
+| `ComprobantePagoContract` | `UnavailableComprobantePago` | **Stub** hasta 8.2 |
+| `PagosDelDiaContract` | `EloquentPagosDelDia` | Real; consumidor 8.3 pendiente |
+
+Consumidos (reales): `UserBranchAccessContract`, `BranchDirectoryContract::asegurarActiva`, `ParameterReaderContract` (`zona_horaria`, `moneda`, `comprobante.prefijo`, `comprobante.formato`), `TutorDirectoryContract` (`tutoresDePaciente`, `tutorPrincipal`), `AuditRecorderContract::registrarExportacion`.
+
+Sin entidades conectadas, el registro **no crea nada** y responde 503. Las pruebas usan `FakePayableEntityContract` (`tests/Support`), que lee filas reales de `paquete_sesiones`.
+
+### TODOs por módulo consumidor (exactos)
+
+- **06 — Inscripciones y atenciones:** implementar `PayableEntityContract` (resumen por tipo e id, buscar por paciente/CI/número) y bindearlo en `PagosServiceProvider` o en el provider de 06. Luego reemplazar `StubPagoInscripcionContract`, `StubPagoPaqueteContract` y `StubPagoAtencionContract` por adaptadores que deleguen en Pagos (`estadoPago`, `iniciarRegistroPago`). Cambiar `RegistroPagoInscripcion::$pagoId` a nullable. **Requiere confirmación previa.**
+- **04.04 — Pacientes:** implementar `PatientPaymentStatusContract` con un adaptador en Pacientes que delegue en Pagos. **Requiere confirmación previa; no se tocó 03/04.**
+- **8.2 — Comprobante:** implementar `ComprobantePagoContract::disponible()`, la reimpresión y la leyenda `comprobante.leyenda_no_factura` (RN-008).
+- **8.3 — Caja:** consumir `PagosDelDiaContract`; definir si el pago exige caja abierta (hoy no se bloquea).
+- **8.4 — Anulación:** Action que cambie `vigente → anulado` con motivo, usando los campos `anulado_en`, `anulado_por`, `motivo_anulacion`. Debe adquirir el mismo bloqueo `secuencia_pago` de la sucursal. Permiso `pago.anular` lo crea 8.4.
+- **10.3 — Ventas:** habilitar `venta_material`: agregar la FK de `pago.venta_material_id`, quitar el CHECK temporal y `disponibleEnEtapa()`.
+
+### Migraciones
+
+- `2026_12_01_000000_create_medio_pago_table.php`
+- `2026_12_01_000100_create_secuencia_pago_table.php`
+- `2026_12_01_000200_create_pago_table.php` (incluye CHECK y trigger de PostgreSQL)
+- `2026_12_01_000300_create_pago_idempotencia_table.php`
+
+El esquema de referencia (`database/talitacumi_schema.sql`) y `database/database.md` están sincronizados. Las migraciones de 2026_12_01 no modifican tablas existentes.
+
+### Pruebas
+
+- Unit `Tests\Unit\Modules\Pagos\Rules\PagoRulesTest`: montos (incluye floats y 3 decimales), saldo, fecha, líneas, huella de idempotencia y formato del correlativo.
+- Feature `PagoRegistroTest`: CA-001 a CA-004, pago combinado, idempotencia (doble envío y conflicto), reversión sin saltos de correlativo ante fallo de bitácora, fecha futura, tutor, medios, montos, entidad retirada, alcance, sucursal inactiva, stub 503, cancelación de DELETE.
+- Feature `PagoListadoTest`: alcance del listado, whitelist de orden y `per_page`, detalle fuera de alcance, historial con anulados (CA-006, RT-002), pagos del día por medio, CSV con permiso/BOM/límite, catálogo de medios, búsqueda 503 y limitada por alcance.
+- PostgreSQL `PagoConstraintTest`: trigger de inmutabilidad, solo cambios de anulación, FK de medio, CHECK de referencia QR y de entidad única. Se omiten en SQLite.
+
+Ejecución: `php artisan test --filter=Pagos` (SQLite) y `php vendor/bin/phpunit --configuration=phpunit.pgsql.xml --filter=Pagos` (PostgreSQL, 45 pruebas en verde).
+
+### Checklist RF / RN / CA
+
+| RF | Estado | Evidencia / pendiente |
+|---|---|---|
+| RF-001 Registrar pago | Parcial | Registro completo; entidades reales pendientes de 06 (503) |
+| RF-002 Correlativo | Completo | `secuencia_pago` con lock, pruebas de reversión |
+| RF-003 Total o a cuenta | Completo | `PagoRegistroTest` CA-001, CA-002 |
+| RF-004 Saldo | Completo | Solo vigentes; `GetHistorialEntidadQuery` |
+| RF-005 Medios | Completo | Catálogo `medio_pago`, FK y CHECK en BD |
+| RF-006 Búsqueda de entidad | Parcial | Endpoint y contrato listos; implementación de 06 pendiente (503) |
+| RF-007 Historial por entidad | Completo | Endpoint y modal de registro; ficha de 06 pendiente |
+| RF-008 Listado filtrable | Completo | Filtros, whitelist, paginación; búsqueda por CI pendiente de 06 |
+| RF-009 Detalle | Parcial | Detalle y líneas del grupo; reimpresión pendiente de 8.2 |
+| RF-010 Bloqueo por saldo | Completo | Regla pura + lock + tests |
+| RF-011 Comprobante | Stub | `ComprobantePagoContract` (8.2) |
+| RF-012 Vinculación con caja | Parcial | `PagosDelDiaContract` listo; consumidor 8.3 |
+| RF-013 Venta de materiales | Stub | 503; 10.3 pendiente |
+| RF-014 Acceso por sucursal | Completo | Alcance en listado, detalle, historial, búsqueda y registro |
+| RF-015 Bitácora | Completo | `RecordPagoAudit` fail-closed |
+| RF-016 Validación de fecha | Completo | Futura con permiso y motivo, marcada crítica |
+
+| RN | Estado |
+|---|---|
+| RN-001 Pagos adelantados | Completo: no se bloquea por fecha del servicio |
+| RN-002 Medios aceptados | Completo |
+| RN-003 Pago a cuenta | Completo |
+| RN-004 Saldo no negativo | Completo |
+| RN-005 Correlativo por sucursal | Completo |
+| RN-006 No se borra | Completo: DELETE 409, modelo y trigger |
+| RN-007 Un pago, una entidad | Completo: CHECK y Action; venta bloqueada |
+| RN-008 Comprobante no fiscal | Pendiente de 8.2 |
+| RN-009 Fecha no futura | Completo |
+| RN-010 Sucursal del pago | Completo: la sucursal sale de la entidad |
+| RN-011 Un pago anulado no cuenta | Completo para saldo; la anulación es de 8.4 |
+
+| CA | Estado |
+|---|---|
+| CA-001 a CA-007 | Cubiertos por tests |
+| CA-008 Comprobante automático | Parcial: pendiente de 8.2 |
+| CA-009 Control por sucursal | Cubierto (404 y listado vacío) |
+| CA-010 Bitácora | Cubierto |
+
+| RNF | Estado |
+|---|---|
+| RNF-001 / RNF-002 | Índices y paginación; sin benchmark de 10.000 pagos |
+| RNF-005 Inmutabilidad | Completo |
+| RNF-008 Pasos desde la ficha | Pendiente de la integración en 06 |
+| RNF-010 Exportación | CSV completo; PDF no existe |
+| RNF-011 Medios configurables | Catálogo y seeder |
+| RNF-012 Bitácora | Completo |
+
+### Pendientes y riesgos conocidos
+
+1. **Conexión con 06 y 04:** requiere tu confirmación (cambia providers de otros módulos). Hasta entonces el registro responde 503 en la API real.
+2. **Concurrencia en PostgreSQL:** el bloqueo está implementado, pero no hay prueba con dos conexiones simultáneas. Es el punto a cubrir antes de producción.
+3. **Auditoría del detalle (decisión abierta):** `GET /pagos/{id}` no se audita. Si se decide, usar `registrarConsultaSensible` con fail-closed.
+4. **Fichas de 06 y modal reutilizable:** el modal existe en `/pagos`; la integración en las fichas de salas, paquetes y atenciones depende del punto 1.
+5. **Estado de la entidad:** la lista de estados no pagables (`retirada`, `retirado`, `anulada`, `anulado`) es provisional y debe confirmarla 06.

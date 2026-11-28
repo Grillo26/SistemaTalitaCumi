@@ -4,7 +4,6 @@ import { guestGuard } from './core/guards/guest.guard';
 import { permissionGuard } from './core/guards/permission.guard';
 import { AppLayoutComponent } from './layout/shell/app-layout/app-layout.component';
 import { HomeComponent } from './pages/home/home.component';
-import { PagosComponent } from './pages/pagos/pagos.component';
 import { ReportesComponent } from './pages/reportes/reportes.component';
 import { InventarioComponent } from './pages/inventario/inventario.component';
 
@@ -146,8 +145,9 @@ export const routes: Routes = [
       },
       {
         path: 'pagos',
-        component: PagosComponent,
-        title: 'Pagos y caja | TalitaCumi',
+        canActivate: [permissionGuard],
+        data: { permission: 'pago.ver' },
+        loadChildren: () => import('./pages/pagos/pagos.routes').then((m) => m.PAGOS_ROUTES),
       },
       {
         path: 'reportes',

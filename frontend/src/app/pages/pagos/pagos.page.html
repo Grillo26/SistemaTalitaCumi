@@ -1,0 +1,192 @@
+<div class="space-y-6">
+  <app-page-breadcrumb pageTitle="Pagos y caja" />
+
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+      <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">Pagos y saldos</h1>
+      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+        Registro de pagos en efectivo o QR, saldos pendientes e historial por inscripción o paquete.
+      </p>
+    </div>
+    @if (abilities().export) {
+      <button app-button variant="outline" type="button" [disabled]="exporting()" (click)="exportar()">
+        {{ exporting() ? 'Exportando…' : 'Exportar CSV' }}
+      </button>
+    }
+  </div>
+
+  @if (listError(); as message) {
+    <app-alert variant="error" title="No se pudo cargar el listado" [message]="message" />
+  }
+
+  @if (abilities().register) {
+    <app-component-card title="Registrar pago">
+      <div class="space-y-4">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div class="flex-1">
+            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="buscar-entidad">
+              Paciente (nombre)
+            </label>
+            <input app-input id="buscar-entidad" type="text" placeholder="Nombre o apellido" [(ngModel)]="buscarQ" (keyup.enter)="buscar()" />
+          </div>
+          <button app-button type="button" [disabled]="buscando()" (click)="buscar()">
+            {{ buscando() ? 'Buscando…' : 'Buscar' }}
+          </button>
+        </div>
+
+        @if (buscarError(); as message) {
+          <app-alert variant="warning" title="Búsqueda no disponible" [message]="message" />
+        }
+
+        @if (resultadosEntidad().length > 0) {
+          <table app-table class="min-w-full">
+            <thead>
+              <tr>
+                <th app-table-head>Paciente</th>
+                <th app-table-head>Entidad</th>
+                <th app-table-head>Sucursal</th>
+                <th app-table-head>Monto esperado</th>
+                <th app-table-head></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (entidad of resultadosEntidad(); track entidad.tipo + entidad.id) {
+                <tr app-table-row>
+                  <td app-table-cell>{{ entidad.paciente_nombre }}</td>
+                  <td app-table-cell>{{ entidad.referencia }}</td>
+                  <td app-table-cell>{{ entidad.sucursal_nombre }}</td>
+                  <td app-table-cell>{{ formatBs(entidad.monto_esperado) }}</td>
+                  <td app-table-cell>
+                    <button app-button variant="outline" size="sm" type="button" (click)="registrarEn(entidad)">Registrar pago</button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      </div>
+    </app-component-card>
+  }
+
+  <app-component-card title="Filtros">
+    <div class="grid gap-4 lg:grid-cols-3 xl:grid-cols-6">
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Desde</label>
+        <app-inscripcion-date-input ariaLabel="Desde" [(ngModel)]="filters.periodo_desde" />
+      </div>
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Hasta</label>
+        <app-inscripcion-date-input ariaLabel="Hasta" [(ngModel)]="filters.periodo_hasta" />
+      </div>
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="filtro-numero">Número</label>
+        <input app-input id="filtro-numero" type="text" [(ngModel)]="filters.numero" />
+      </div>
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Medio</label>
+        <app-select-field [options]="medios()" [value]="filters.medio_pago" ariaLabel="Filtrar por medio" (valueChange)="filters.medio_pago = $event" />
+      </div>
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Estado</label>
+        <app-select-field [options]="estadoOptions" [value]="filters.estado" ariaLabel="Filtrar por estado" (valueChange)="filters.estado = $event" />
+      </div>
+      <div class="flex items-end gap-2">
+        <button app-button type="button" (click)="applyFilters()">Aplicar</button>
+        <button app-button variant="outline" type="button" (click)="clearFilters()">Limpiar</button>
+      </div>
+    </div>
+  </app-component-card>
+
+  <app-component-card title="Pagos registrados">
+    <div class="mb-3 text-sm text-gray-500 dark:text-gray-400">{{ total() }} pagos</div>
+    <div class="overflow-x-auto">
+      <table app-table class="min-w-full">
+        <thead>
+          <tr>
+            <th app-table-head>Número</th>
+            <th app-table-head>Fecha</th>
+            <th app-table-head>Paciente</th>
+            <th app-table-head>Entidad</th>
+            <th app-table-head>Monto</th>
+            <th app-table-head>Medio</th>
+            <th app-table-head>Saldo tras pago</th>
+            <th app-table-head>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of rows(); track row.id) {
+            <tr app-table-row class="cursor-pointer" (click)="open(row)">
+              <td app-table-cell>{{ row.numero_comprobante }}</td>
+              <td app-table-cell>{{ formatFecha(row.fecha_pago) }}</td>
+              <td app-table-cell>{{ row.paciente_nombre }}</td>
+              <td app-table-cell>{{ row.entidad_referencia }}</td>
+              <td app-table-cell>{{ formatBs(row.monto) }}</td>
+              <td app-table-cell>{{ row.medio_pago }}</td>
+              <td app-table-cell>{{ formatBs(row.saldo_resultante) }}</td>
+              <td app-table-cell>
+                <app-badge [color]="row.estado === 'vigente' ? 'success' : 'gray'" variant="light" size="sm">{{ row.estado_label }}</app-badge>
+              </td>
+            </tr>
+          } @empty {
+            <tr app-table-row>
+              <td app-table-cell colspan="8" class="text-center text-gray-500">
+                {{ loading() ? 'Cargando pagos…' : 'No hay pagos con esos filtros.' }}
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div class="mt-4 flex justify-end">
+      <app-pagination [currentPage]="page()" [totalPages]="lastPage()" variant="text-icon" (pageChange)="goToPage($event)" />
+    </div>
+  </app-component-card>
+</div>
+
+<app-modal [open]="selected() !== null" title="Detalle del pago" size="md" (closed)="closeDetail()">
+  <div modal-body class="space-y-4">
+    @if (selected(); as pago) {
+      <dl class="grid gap-3 text-sm sm:grid-cols-2">
+        <div><dt class="text-gray-500">Número</dt><dd class="font-medium">{{ pago.numero_comprobante }}</dd></div>
+        <div><dt class="text-gray-500">Fecha de pago</dt><dd class="font-medium">{{ formatFecha(pago.fecha_pago) }}</dd></div>
+        <div><dt class="text-gray-500">Paciente</dt><dd class="font-medium">{{ pago.paciente_nombre }}</dd></div>
+        <div><dt class="text-gray-500">Tutor</dt><dd class="font-medium">{{ pago.tutor_nombre }}</dd></div>
+        <div><dt class="text-gray-500">Entidad</dt><dd class="font-medium">{{ pago.entidad_referencia }}</dd></div>
+        <div><dt class="text-gray-500">Sucursal</dt><dd class="font-medium">{{ pago.sucursal_nombre }}</dd></div>
+        <div><dt class="text-gray-500">Monto esperado</dt><dd class="font-medium">{{ formatBs(pago.monto_esperado) }}</dd></div>
+        <div><dt class="text-gray-500">Saldo tras el pago</dt><dd class="font-medium">{{ formatBs(pago.saldo_resultante) }}</dd></div>
+      </dl>
+
+      @if (pago.lineas && pago.lineas.length > 0) {
+        <div>
+          <p class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Líneas del pago</p>
+          <ul class="space-y-2 text-sm">
+            @for (linea of pago.lineas; track linea.id) {
+              <li class="flex justify-between rounded-lg border border-gray-200 p-2 dark:border-gray-800">
+                <span>{{ linea.numero_comprobante }} · {{ linea.medio_pago }}@if (linea.referencia_pago) { · ref. {{ linea.referencia_pago }} }</span>
+                <span class="font-medium">{{ formatBs(linea.monto) }}</span>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+
+      <app-alert variant="info" title="Comprobante" message="La reimpresión del comprobante estará disponible con el módulo 8.2." />
+    }
+  </div>
+  <div modal-footer class="flex justify-end">
+    <button app-button type="button" (click)="closeDetail()">Cerrar</button>
+  </div>
+</app-modal>
+
+@if (registroEntidad(); as entidad) {
+  <app-pago-registro-modal
+    [open]="true"
+    [tipo]="entidad.tipo"
+    [entidadId]="entidad.id"
+    [puedeFutura]="abilities().authorize_future"
+    (closed)="registroEntidad.set(null)"
+    (registered)="onRegistered()"
+  />
+}

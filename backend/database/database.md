@@ -1740,38 +1740,81 @@ Sin `updated_at`.
 
 ### Pagos y caja
 
-#### `pago` — Pagos
+#### `medio_pago` — Catálogo de medios de pago
 
-*Documento.* Cada pago se vincula a exactamente una entidad. Número correlativo por sucursal. No se borra: se anula con motivo.
+*Configuración.* Código estable (`efectivo`, `qr`) referenciado por `pago.medio_pago`. Solo se activa o desactiva; no se borra.
 
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `numero_correlativo` | `varchar(30)` |  | `UNIQUE (sucursal_id, numero_correlativo)` | Autogenerado |
+| `codigo` | `varchar(20)` |  | `UNIQUE` | Estable |
+| `nombre` | `varchar(60)` |  |  |  |
+| `activo` | `boolean` |  | `DEFAULT true` |  |
+| `orden` | `smallint` |  | `DEFAULT 0` |  |
+
+Timestamps: `created_at`, `updated_at`. Seeder `MedioPagoSeeder`.
+
+#### `pago` — Pagos
+
+*Documento.* Una fila por línea de pago. Las líneas de un pago combinado comparten `grupo_pago_id`. Número correlativo por sucursal. **Inmutable**: no se edita ni se borra; solo cambia a `anulado` con sus campos de anulación (8.4). Snapshots de nombres, monto esperado y saldo resultante al momento del registro.
+
+| Columna | Tipo | Null | Restricciones | Nota |
+|---|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |  |
+| `numero_correlativo` | `varchar(30)` |  | `UNIQUE (sucursal_id, numero_correlativo)` | Formato `comprobante.formato` (`TC-000001`) |
 | `sucursal_id` | `bigint` |  | `FK → sucursal` |  |
+| `sucursal_codigo_snapshot` | `varchar(50)` |  |  | Número visible: `codigo-numero` |
+| `sucursal_nombre_snapshot` | `varchar(150)` |  |  |  |
 | `paciente_id` | `bigint` |  | `FK → paciente` |  |
-| `tutor_id` | `bigint` |  | `FK → tutor` |  |
+| `paciente_nombre_snapshot` | `varchar(255)` |  |  |  |
+| `tutor_id` | `bigint` |  | `FK → tutor` | Activo y del paciente |
+| `tutor_nombre_snapshot` | `varchar(255)` |  |  |  |
 | `inscripcion_sala_id` | `bigint` | sí | `FK → inscripcion_sala` |  |
 | `paquete_sesiones_id` | `bigint` | sí | `FK → paquete_sesiones` |  |
 | `atencion_entrevista_id` | `bigint` | sí | `FK → atencion_entrevista` |  |
 | `atencion_diagnostico_id` | `bigint` | sí | `FK → atencion_diagnostico` |  |
-| `venta_material_id` | `bigint` | sí | `FK → venta_material` |  |
+| `venta_material_id` | `bigint` | sí | sin FK | `CHECK IS NULL` hasta 10.3 |
+| `entidad_referencia_snapshot` | `varchar(255)` |  |  |  |
+| `monto_esperado_snapshot` | `numeric(12,2)` |  | `CHECK >= 0` |  |
 | `monto` | `numeric(12,2)` |  | `CHECK > 0` |  |
-| `medio_pago` | `varchar(20)` |  | `CHECK IN ('efectivo','qr')` |  |
-| `fecha_pago` | `date` |  | `DEFAULT CURRENT_DATE` |  |
+| `saldo_resultante` | `numeric(12,2)` |  | `CHECK >= 0` | Igual en todas las líneas del grupo |
+| `medio_pago` | `varchar(20)` |  | `FK → medio_pago.codigo` |  |
+| `referencia_pago` | `varchar(100)` | sí |  | Obligatoria para `qr` (CHECK) |
+| `grupo_pago_id` | `uuid` |  |  | Agrupa líneas de un mismo registro |
+| `fecha_pago` | `date` |  |  | No futura salvo autorización |
+| `fecha_futura_autorizada` | `boolean` |  | `DEFAULT false` | Con motivo obligatorio (CHECK) |
+| `motivo_fecha_futura` | `text` | sí |  |  |
+| `autorizado_por_id` | `bigint` | sí | `FK → users` |  |
 | `estado` | `varchar(20)` |  | `DEFAULT 'vigente'`, `CHECK IN ('vigente','anulado')` |  |
-| `anulado_en` | `timestamptz` | sí |  |  |
-| `anulado_por` | `bigint` | sí | `FK → usuario` |  |
-| `motivo_anulacion` | `text` | sí |  |  |
-| `usuario_registro_id` | `bigint` |  | `FK → usuario` |  |
+| `anulado_en` | `timestamptz` | sí |  | 8.4 |
+| `anulado_por` | `bigint` | sí | `FK → users` | 8.4 |
+| `motivo_anulacion` | `text` | sí |  | 8.4 |
+| `usuario_registro_id` | `bigint` |  | `FK → users` |  |
 
-Índices: `(fecha_pago)`, `(sucursal_id, fecha_pago)`, `(estado)`, `(inscripcion_sala_id)`, `(paquete_sesiones_id)`. CHECK: exactamente uno de las 5 FKs no nulo. Timestamps: `created_at`, `updated_at`.
+Índices: `(sucursal_id, fecha_pago)`, `(sucursal_id, estado, fecha_pago)`, `(paciente_id, fecha_pago)`, `(grupo_pago_id)`, un índice por cada FK de entidad, `(medio_pago)` y `(usuario_registro_id)`.
+CHECK de PostgreSQL: exactamente una entidad vinculada; `venta_material_id IS NULL`; motivo obligatorio con fecha futura; referencia obligatoria con QR.
+Trigger `tg_pago_inmutable` (PostgreSQL): bloquea `DELETE` y cualquier `UPDATE` distinto de `vigente → anulado` sobre las columnas financieras.
+Timestamps: `created_at`, `updated_at`.
 
 #### `secuencia_pago` — Secuencia de pagos por sucursal
 
-*Configuración.* Último número usado por sucursal. Solo la escribe `fn_siguiente_numero_pago`, dentro de la transacción del pago.
+*Configuración.* Último número usado por sucursal. Lo incrementa la Action dentro de la transacción del pago, con `SELECT … FOR UPDATE`. No es una secuencia de PostgreSQL: una secuencia deja huecos al revertir.
 
-`PRIMARY KEY (sucursal_id)`. `ultimo_numero int DEFAULT 0`. Sin timestamps.
+`PRIMARY KEY (sucursal_id)`. `ultimo_numero int DEFAULT 0 CHECK >= 0`. Sin timestamps.
+
+#### `pago_idempotencia` — Claves de registro
+
+*Historial (solo inserción).* Alcance `(usuario_id, sucursal_id, clave)`. Misma clave y mismo `hash_solicitud` devuelven el grupo original; hash distinto responde 409.
+
+| Columna | Tipo | Null | Restricciones |
+|---|---|---|---|
+| `id` | `bigint` |  | `PK identity` |
+| `usuario_id` | `bigint` |  | `FK → users` |
+| `sucursal_id` | `bigint` |  | `FK → sucursal` |
+| `clave` | `varchar(64)` |  | `UNIQUE (usuario_id, sucursal_id, clave)` |
+| `hash_solicitud` | `char(64)` |  |  |
+| `grupo_pago_id` | `uuid` |  | índice |
+| `created_at` | `timestamptz` |  | `DEFAULT now()` |
 
 #### `caja` — Caja diaria
 

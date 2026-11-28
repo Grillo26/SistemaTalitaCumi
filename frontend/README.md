@@ -1830,3 +1830,59 @@ Acciones reutilizadas: `POST /api/agenda-turnos/cambios-turnos/turnos/{id}/repro
 **Permisos:** `asignacion.ver` (listado/coordinación), `asignacion.crear` (programar), `asignacion.exportar` (CSV), `diagnostico_agenda.actualizar_estado` y `diagnostico_agenda.cancelar` (Administración/Superadmin), `tutor.ver_contacto` (WhatsApp). El backend revalida permiso, sucursal y estado.
 
 **Estado:** implementado contra API real. Pendientes: PDF (503), duración distinta por profesional (RF-015 parcial) y cancelación automática al retirar el diagnóstico desde 06.03.
+
+### 40. Registro de pagos y saldos (08.01)
+
+**Rutas:** `/pagos` (listado; `permissionGuard` con `pago.ver`, carga diferida). El placeholder anterior se reemplazó.
+**Entrada de sidebar:** `Pagos y caja` (visible con `pago.ver`).
+
+**Archivos:**
+
+- `src/app/pages/pagos/pagos.routes.ts`
+- `src/app/pages/pagos/pagos.page.ts` / `pagos.page.html` (listado, filtros, detalle, búsqueda, exportación)
+- `src/app/pages/pagos/pago-registro-modal.component.ts` / `.html` (modal reutilizable)
+- `src/app/pages/pagos/pagos.service.ts` y `pagos.models.ts`
+
+**API consumida:**
+
+| Método | Endpoint | Acción |
+|---|---|---|
+| GET | `/api/pagos` | Listado paginado con filtros |
+| GET | `/api/pagos/{id}` | Detalle con líneas del grupo |
+| GET | `/api/pagos/opciones` | Medios activos |
+| GET | `/api/pagos/buscar-entidades?q=` | Búsqueda de entidad (503 hasta conectar 06) |
+| GET | `/api/pagos/entidades/{tipo}/{id}/historial` | Monto esperado, pagado, saldo e historial |
+| POST | `/api/pagos` | Registro (idempotente) |
+| GET | `/api/pagos/exportar` | CSV (solo con `pago.exportar`) |
+
+**Modal `app-pago-registro-modal`** (reutilizable; 06 lo abrirá desde sus fichas):
+
+```html
+<app-pago-registro-modal
+  [open]="open()"
+  [tipo]="'paquete_sesiones'"
+  [entidadId]="paqueteId"
+  [puedeFutura]="abilities().authorize_future"
+  (closed)="cerrar()"
+  (registered)="recargar()"
+/>
+```
+
+- Muestra monto esperado, total pagado y saldo desde el historial de la entidad.
+- Hasta dos líneas (efectivo y QR); el monto se envía como texto decimal, sin aritmética en punto flotante.
+- Fecha con `InscripcionDateInputComponent` (Flatpickr). `maxDate` hoy salvo permiso de fecha futura; si es futura, el motivo es obligatorio.
+- La clave de idempotencia se genera al abrir y se reutiliza en reintentos. Se regenera solo si el backend responde `PAGO_IDEMPOTENCIA_CONFLICTO`.
+- El botón se deshabilita durante el envío. Lo digitado se conserva si falla.
+- Errores: 422 por campo; 409 `PAGO_SALDO_EXCEDIDO` con el saldo máximo; 403 y 503 como alerta.
+
+**Funcionalidad del listado:**
+
+- Filtros por período, número, medio y estado; paginación de 20 filas.
+- Clic en una fila: detalle con las líneas del mismo grupo.
+- Búsqueda de entidad por nombre del paciente. Mientras 06 no esté conectado, muestra “Búsqueda no disponible”.
+- Exportación CSV solo con `can.export`.
+- Sin botón de PDF ni de anulación. La reimpresión del comprobante aparece como aviso hasta 8.2.
+
+**Permisos:** `pago.ver` para el listado y el detalle; `pago.registrar` para el bloque de registro; `pago.autorizar_fecha_futura` para fechas futuras; `pago.exportar` para CSV.
+
+**Estado:** registro, listado, detalle, exportación y modal implementados contra la API real. Pendientes: entidades reales de 06 (búsqueda y registro desde el listado), integración del modal en las fichas de 06, reimpresión de comprobante (8.2) y anulación (8.4).

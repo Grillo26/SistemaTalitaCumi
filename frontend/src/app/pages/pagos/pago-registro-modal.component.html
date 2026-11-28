@@ -1,0 +1,92 @@
+<app-modal [open]="open" title="Registrar pago" size="lg" (closed)="close()">
+  <div modal-body class="space-y-5">
+    @if (historialError(); as message) {
+      <app-alert variant="warning" title="Estado de pago no disponible" [message]="message" />
+    }
+
+    @if (historial(); as h) {
+      <div class="grid gap-3 sm:grid-cols-3">
+        <div class="rounded-xl border border-gray-200 p-3 dark:border-gray-800">
+          <p class="text-xs text-gray-500">Monto esperado</p>
+          <p class="text-sm font-medium">{{ formatBs(h.monto_esperado) }}</p>
+        </div>
+        <div class="rounded-xl border border-gray-200 p-3 dark:border-gray-800">
+          <p class="text-xs text-gray-500">Total pagado</p>
+          <p class="text-sm font-medium">{{ formatBs(h.total_pagado) }}</p>
+        </div>
+        <div class="rounded-xl border border-gray-200 p-3 dark:border-gray-800">
+          <p class="text-xs text-gray-500">Saldo pendiente</p>
+          <p class="text-sm font-medium">{{ formatBs(h.saldo) }}</p>
+        </div>
+      </div>
+    }
+
+    @if (formError(); as message) {
+      <app-alert variant="error" title="No se pudo registrar el pago" [message]="message" />
+    }
+
+    @for (linea of lineas; track $index; let i = $index) {
+      <div class="grid gap-4 rounded-xl border border-gray-200 p-4 sm:grid-cols-3 dark:border-gray-800">
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Medio</label>
+          <app-select-field
+            [options]="mediosOptions()"
+            [value]="linea.medio"
+            placeholder="Seleccioná un medio"
+            [ariaLabel]="'Medio de la línea ' + (i + 1)"
+            (valueChange)="linea.medio = $event"
+          />
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" [attr.for]="'monto-' + i">Monto (Bs.)</label>
+          <input app-input [id]="'monto-' + i" type="text" inputmode="decimal" placeholder="0.00" [(ngModel)]="linea.monto" />
+          @if (fieldErrors()['lineas.' + i + '.monto']; as msg) {
+            <p class="mt-1 text-xs text-error-600">{{ msg }}</p>
+          }
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" [attr.for]="'ref-' + i">Referencia</label>
+          <input app-input [id]="'ref-' + i" type="text" [disabled]="linea.medio !== 'qr'" placeholder="Comprobante bancario" [(ngModel)]="linea.referencia" />
+          @if (fieldErrors()['lineas.' + i + '.referencia']; as msg) {
+            <p class="mt-1 text-xs text-error-600">{{ msg }}</p>
+          }
+        </div>
+        @if (lineas.length > 1) {
+          <div class="sm:col-span-3 flex justify-end">
+            <button app-button variant="ghost" type="button" (click)="quitarLinea(i)">Quitar línea</button>
+          </div>
+        }
+      </div>
+    }
+
+    @if (lineas.length < 2) {
+      <button app-button variant="outline" type="button" (click)="agregarLinea()">Pagar con otro medio</button>
+    }
+
+    <div class="grid gap-4 sm:grid-cols-2">
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Fecha de pago</label>
+        <app-inscripcion-date-input ariaLabel="Fecha de pago" [maxDate]="puedeFutura ? undefined : hoy" [(ngModel)]="fechaPago" />
+        @if (fechaPago && esFutura() && !puedeFutura) {
+          <p class="mt-1 text-xs text-error-600">No tenés autorización para registrar pagos con fecha futura.</p>
+        }
+      </div>
+      @if (esFutura()) {
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300" for="motivo-futuro">Motivo de la fecha futura</label>
+          <textarea app-textarea id="motivo-futuro" rows="2" [(ngModel)]="motivoFuturo"></textarea>
+          @if (fieldErrors()['motivo_fecha_futura']; as msg) {
+            <p class="mt-1 text-xs text-error-600">{{ msg }}</p>
+          }
+        </div>
+      }
+    </div>
+  </div>
+
+  <div modal-footer class="flex justify-end gap-2">
+    <button app-button variant="outline" type="button" [disabled]="submitting()" (click)="close()">Cancelar</button>
+    <button app-button type="button" [disabled]="submitting()" (click)="confirmar()">
+      {{ submitting() ? 'Registrando…' : 'Registrar pago' }}
+    </button>
+  </div>
+</app-modal>

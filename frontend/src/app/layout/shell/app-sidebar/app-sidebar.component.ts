@@ -159,6 +159,7 @@ export class AppSidebarComponent {
     {
       name: 'Pagos y caja',
       path: '/pagos',
+      permission: 'pago.ver',
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.75" y="5.25" width="18.5" height="13.5" rx="2.25"/><path d="M2.75 9.25h18.5M6.5 14.5h4"/></svg>',
     },
     {
