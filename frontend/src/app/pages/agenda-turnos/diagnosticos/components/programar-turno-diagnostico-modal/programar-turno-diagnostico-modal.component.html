@@ -1,0 +1,82 @@
+<app-modal
+  [open]="open()"
+  title="Programar turno del diagnóstico"
+  subtitle="Elegí el profesional y el horario. La duración se toma del servicio si no la indicás."
+  size="md"
+  (closed)="cerrar()"
+>
+  <div modal-body class="space-y-4">
+    @if (error(); as message) {
+      <app-alert variant="error" title="No se pudo programar el turno" [message]="message" />
+    }
+
+    <div>
+      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Profesional *</label>
+      @if (profesionalesDisponibles().length > 0) {
+        <app-select-field
+          [options]="profesionalOpciones()"
+          [value]="profesionalId()"
+          placeholder="Seleccioná un profesional"
+          ariaLabel="Profesional del turno de diagnóstico"
+          (valueChange)="profesionalId.set($event)"
+        />
+      } @else {
+        <app-alert variant="warning" message="No hay profesionales disponibles para este puesto. Asigná el profesional en la ficha del diagnóstico." />
+      }
+      @if (errorDe('profesional_id'); as message) {
+        <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+      }
+    </div>
+
+    <div class="grid gap-3 sm:grid-cols-2">
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Fecha *</label>
+        <app-inscripcion-date-input
+          [ngModel]="fecha()"
+          (ngModelChange)="fecha.set($event)"
+          [ngModelOptions]="{ standalone: true }"
+          [minDate]="minFecha()"
+          [maxDate]="fechaFin()"
+          ariaLabel="Fecha del turno de diagnóstico"
+        />
+        @if (errorDe('fecha'); as message) {
+          <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+        }
+      </div>
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Hora de inicio *</label>
+        <input app-input type="time" [value]="horaInicio()" (input)="horaInicio.set($any($event.target).value)" />
+        @if (errorDe('hora_inicio'); as message) {
+          <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+        }
+      </div>
+    </div>
+
+    <div>
+      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Duración (minutos, opcional)</label>
+      <input
+        app-input
+        type="number"
+        min="1"
+        max="480"
+        placeholder="Se toma del servicio"
+        [value]="duracionMinutos()"
+        (input)="duracionMinutos.set($any($event.target).value)"
+      />
+      @if (errorDe('duracion_minutos'); as message) {
+        <p class="mt-1 text-xs text-error-500">{{ message }}</p>
+      }
+    </div>
+
+    <p class="text-xs text-gray-500 dark:text-gray-400">
+      El turno debe caer dentro del período del diagnóstico y de los días y horarios habilitados de la agenda.
+    </p>
+  </div>
+
+  <div modal-footer class="flex justify-end gap-2">
+    <button app-button variant="outline" type="button" [disabled]="saving()" (click)="cerrar()">Cancelar</button>
+    <button app-button type="button" [disabled]="saving() || profesionalesDisponibles().length === 0" (click)="guardar()">
+      {{ saving() ? 'Programando…' : 'Programar turno' }}
+    </button>
+  </div>
+</app-modal>

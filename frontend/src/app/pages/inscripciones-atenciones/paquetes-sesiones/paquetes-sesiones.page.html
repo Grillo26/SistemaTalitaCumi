@@ -982,6 +982,11 @@
             {{ texts.withdraw }}
           </button>
         }
+        @if (canProgramarTurnos()) {
+          <button app-button variant="outline" type="button" (click)="abrirProgramacionTurnos(paquete.id)">
+            Generar turnos
+          </button>
+        }
         <button app-button type="button" (click)="closeFicha()">{{ texts.close }}</button>
       </div>
     }

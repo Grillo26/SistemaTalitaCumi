@@ -77,7 +77,7 @@ app/Modules/Organizacion/
 └── routes-configuracion.php      Configuración (03)
 ```
 
-Módulos actuales: `Organizacion`, `Seguridad`, `Profesionales`, `Pacientes`, `CatalogoServicios` e `InscripcionesAtenciones`.
+Módulos actuales: `Organizacion`, `Seguridad`, `Profesionales`, `Pacientes`, `CatalogoServicios`, `InscripcionesAtenciones` y `AgendaTurnos`.
 
 Reglas de dependencia:
 
@@ -1181,7 +1181,7 @@ Fase 3 se entrega como contratos + stubs que fallan de forma explícita. No hay 
 
 | Contrato | Métodos | Implementación actual |
 |---|---|---|
-| `ProfessionalScheduleContract` | `haySolapamiento(profesionalId, inicio, fin)`, `tieneAsignacionesFuturas(profesionalId, desde)` | `StubProfessionalScheduleContract` lanza `LogicException('Módulo 07 — Agenda y turnos no implementado todavía.')` |
+| `ProfessionalScheduleContract` | `haySolapamiento(profesionalId, inicio, fin)`, `tieneAsignacionesFuturas(profesionalId, desde)` | Implementación real en 07.05: `App\Modules\AgendaTurnos\Contracts\EloquentProfessionalSchedule`. Consulta turnos vigentes de todas las sucursales y no expone datos de otras sucursales. |
 | `ProfessionalDiagnosticRequirementsContract` | `especialidadesRequeridas(tipoDiagnosticoId)` | `StubProfessionalDiagnosticRequirementsContract` lanza `LogicException('Módulo 05/06 — Diagnósticos no implementado todavía.')` |
 | `ProfessionalExporterContract` | `exportarDirectorio`, `exportarMatriz`, `exportarAsignaciones` | `UnavailableProfessionalExporter` lanza `LogicException('Exportación PDF/Excel pendiente de infraestructura.')` |
 
@@ -1190,7 +1190,7 @@ Los stubs están bindeados en `ProfesionalesServiceProvider`. Las Actions de des
 #### TODOs exactos para módulos consumidores
 
 - **07 — Agenda y turnos** (`docs/07_AGENDA_TURNOS/02_programacion_turnos_patrones.md`, `03_reprogramacion_cancelacion_turnos.md`, `05_diagnostico_varios_profesionales.md`):
-  - implementar `ProfessionalScheduleContract` con turnos reales;
+  - implementar `ProfessionalScheduleContract` con turnos reales (hecho en 07.05: `EloquentProfessionalSchedule`);
   - persistir `turno.profesional_id` nullable («sin asignar»), reasignación con motivo, desasignación, estado `programado` y `turno_profesional`;
   - llamar a `ProfessionalAssignmentValidatorContract::asegurarAsignable()` antes de guardar;
   - validar solapamiento global incluyendo otras sucursales, sin revelar datos de sucursales fuera del alcance en el mensaje;
@@ -2840,9 +2840,9 @@ Listener `RecordPaqueteAudit`, síncrono y fail-closed (`503 AUDIT_UNAVAILABLE`)
 
 Contratos nuevos, sin tocar los de Salas:
 
-- `ConsumoPaqueteContract` / `StubConsumoPaqueteContract` (503: Agenda y turnos).
+- `ConsumoPaqueteContract` / implementación real de Agenda (07.04).
 - `PagoPaqueteContract` / `StubPagoPaqueteContract` (503: Pagos y caja).
-- `TurnosFuturosPaqueteContract` / `StubTurnosFuturosPaqueteContract` (503: Agenda y turnos).
+- `TurnosFuturosPaqueteContract` / implementación real de Agenda (07.03).
 - `ComprobantePaquetePdfExporterContract` / `UnavailableComprobantePaquetePdfExporter` (503: PDF).
 - `ExportPaquetesQuery` reutiliza `InscripcionExporterContract`; sin infraestructura responde 503.
 
@@ -2866,8 +2866,8 @@ Contratos nuevos, sin tocar los de Salas:
 | RF-006 | `PatientDirectoryContract::asegurarPermiteInscripcion` | Completo |
 | RF-007 | `TarifaAplicableResolverContract` + categoría | Completo |
 | RF-008 | `PreviewMontoPaqueteQuery` + `MontoPaqueteRule` | Completo |
-| RF-009 | `GetConsumoPaqueteQuery` + pestaña Consumo | Completo con contrato stub |
-| RF-010 | `ConsumoPaqueteContract` preparado para Agenda | Pendiente módulo 07 |
+| RF-009 | `GetConsumoPaqueteQuery` + pestaña Consumo | Completo con contrato real de Agenda |
+| RF-010 | `ConsumoPaqueteContract` implementado por 07.04 | Completo |
 | RF-011 | `ListPaquetesQuery` + filtros frontend | Completo |
 | RF-012 | `UpdatePaqueteAction` + bitácora antes/después | Completo |
 | RF-013 | `RenovarPaqueteAction` + `paquete_origen_id` | Completo |
@@ -3185,9 +3185,744 @@ El retiro de inscripción reutiliza `inscripcion.retirar`/`paquete.retirar`. El 
 
 ---
 
+## Módulo 07 — Agenda y turnos (submódulo 01: agenda semanal)
+
+Implementación de `docs/07_AGENDA_TURNOS/01_agenda_semanal_sucursal.md` (RF-001 a RF-014, RN-001 a RN-008, CA-001 a CA-008). Este submódulo es de **solo consulta** (RN-007): no crea, programa, reprograma, cancela ni registra asistencia. Deja la base del módulo padre para 7.2 a 7.5.
+
+### Estructura
+
+```text
+app/Modules/AgendaTurnos/
+├── Contracts/        AgendaExporterContract + UnavailableAgendaExporter
+├── Enums/            EstadoTurno (programado, asistio, falto, cancelado, reprogramado)
+├── Exceptions/       Dominio con render HTTP
+├── Http/
+│   ├── Controllers/  AgendaSemanal, TurnoDetalle, AgendaExport
+│   ├── Requests/     Filtros de semana y opciones
+│   └── Resources/    Semana, turno, detalle, opciones y sucursal
+├── Models/           Turno (lectura) + HoraCast
+├── Providers/        AgendaTurnosServiceProvider
+├── Queries/          Semana, detalle, opciones, sucursales y datos de exportación
+├── Rules/            Semana, rango horario, resumen, sin asignar, acciones y contraste
+├── Support/          Scope, resolver batch, DTOs y registry de acciones
+└── routes.php
+```
+
+Constantes:
+
+```php
+AgendaTurnosModule::MODULE_URL = '/agenda-turnos/agenda-semanal';
+AgendaTurnosPermission::VER = 'turno.ver';
+AgendaTurnosPermission::EXPORTAR = 'turno.exportar';
+```
+
+### Schema y migración
+
+`2026_11_26_000600_create_turno_table.php` crea `turno` y `turno_profesional` con el schema de referencia:
+
+- `turno`: sucursal, paciente, sala/paquete/diagnóstico (exactamente uno), servicio, profesional nullable, fecha, horas, duración, estado, motivo de cancelación, origen de reprogramación, usuarios de registro/asistencia y `asistencia_registrada_en`.
+- `turno_profesional`: pivote para diagnósticos con varios profesionales (lo poblará 7.5).
+- CHECK PostgreSQL: estado válido, `hora_fin > hora_inicio`, duración positiva y un solo origen.
+- Índices: `(fecha)`, `(sucursal_id, fecha)`, `(paciente_id)`, `(profesional_id)`, `(estado)`, `(sala_id, fecha)`.
+- FKs de usuario a `users` (tabla física real).
+- `TurnoFactory` solo para tests; `AgendaTurnosDemoSeeder` es local, no está en `DatabaseSeeder`.
+
+El modelo `Turno` es de lectura en esta entrega; incluye casts de fecha/horas/estado, scopes por sucursal, rango, estado, profesional, sala, servicios y orden.
+
+### Endpoints
+
+Prefijo real: **`/api/agenda-turnos/agenda-semanal`**.
+
+| Método | Ruta | Query | Permiso |
+|---|---|---|---|
+| GET | `/` | `GetAgendaSemana` | `turno.ver` |
+| GET | `/opciones` | `GetOpcionesFiltros` | `turno.ver` |
+| GET | `/sucursales` | `GetSucursalesDisponibles` | `turno.ver` |
+| GET | `/turnos/{id}` | `GetTurnoDetalle` | `turno.ver` |
+| GET | `/exportar` | `GetAgendaExportData` + `AgendaExporterContract` | `turno.exportar` |
+
+Parámetros: `sucursal_id`, `semana` (`YYYY-MM-DD`; se normaliza al lunes), `area_id`, `sala_id`, `sala_sin_asignar`, `profesional_id`, `profesional_sin_asignar`, `servicio_id`, `estado`.
+
+La respuesta de semana incluye sucursal, días visibles, rango horario, turnos, resumen por estado, avisos de días ocultos, disponibilidad de datos y zona horaria. El detalle incluye `acciones`, `acciones_disponibles` y `mensaje_acciones`.
+
+### Alcance, semana y colores
+
+- **Scope explícito** en cada Query con `UserBranchAccessContract`; nunca `GlobalScope`. Sin sucursales → `403 SIN_SUCURSALES_ASIGNADAS`; sucursal ajena → `403 BRANCH_ACCESS_DENIED`. La predeterminada es la primera asignada activa ordenada por nombre.
+- **Semana**: lunes a domingo como rango de consulta; los días visibles salen de `agenda.dias_semana_habilitados` (default 1–6). Si hay turnos en días ocultos, se devuelve un aviso con cantidad y fechas.
+- **Rango horario**: `agenda.horario_apertura`/`agenda.horario_cierre` expandido por los turnos visibles y redondeado a 30 minutos.
+- **Colores**: salen del área del servicio en Catálogo; `ContrasteColorRule` calcula el texto. Un color inválido no se aplica.
+- **Resumen**: cuenta sobre turnos filtrados y visibles (`base = turnos_filtrados_visibles`).
+- **Zona horaria**: `config('app.timezone')` / `America/La_Paz`. “Hoy” se inyecta a las reglas.
+
+### Datos de otros módulos
+
+Se agregaron métodos batch aditivos, con tests propios, para evitar N+1:
+
+- `PatientDirectoryContract::nombres(array $ids)`.
+- `ProfessionalDirectoryContract::nombres(array $ids)` y `nombresPorSucursal(int $id, bool $soloActivos = true)`.
+- `SalaDirectoryContract::nombres(array $ids)` y `nombresPorSucursal(int $id, bool $soloActivas = true)`.
+- `BranchDirectoryContract::resumenes(array $ids)` + `BranchResumen`.
+
+`DatosOperativosResolver` resuelve pacientes, profesionales, salas, servicios y áreas una vez por request. Si un contrato falla, el dominio queda `disponible=false`, los campos afectados en `null` y la UI muestra **“No disponible”**. Nunca se inventan datos.
+
+### Permisos y acciones
+
+Seeder `AgendaTurnosPermissionSeeder` (marcador `agenda.agenda_semanal`):
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `turno.ver` | sí | sí | sí |
+| `turno.exportar` | sí | sí | no |
+
+`AccionesTurnoRegistry` es el punto de integración de 7.3/7.4: 7.3 registra reprogramar/cancelar/historial; 07.04 integra la asistencia desde su propio componente en el panel de detalle y desde FullCalendar. `AccionesDisponiblesRule` sigue filtrando por estado, permisos y acciones ya ejecutadas.
+
+### Frontend e integración
+
+La ruta frontend es `/agenda-turnos/agenda-semanal` (con redirect desde `/agenda`) y usa `turno.ver`. La vista semanal usa FullCalendar 7.0.2 con plugins gratuitos (`timegrid`); las vistas por profesional/sala se resuelven con un tablero agrupado, sin `resource-timegrid` premium.
+
+RF-012 queda preparado con `AgendaRefreshService.notificarCambio()` y refresco periódico configurable (`environment.agendaRefreshSeconds`). No hay websockets.
+
+La exportación PDF usa `AgendaExporterContract` + `UnavailableAgendaExporter`: responde `503 EXPORTACION_NO_DISPONIBLE` hasta instalar infraestructura. La alternativa de vista imprimible se implementa en el frontend con `@media print`.
+
+### Tests
+
+- Unit: semana (incluye 23:30/00:30 en La Paz), resumen, sin asignar, acciones, contraste y rango horario.
+- Feature: 500 turnos sin crecimiento de consultas, navegación, colores, sin asignar, filtros, detalle, scope, domingo oculto/configurable, resumen, exportación 503, permisos, contratos caídos y opciones.
+- Batch contracts: Pacientes, Profesionales, Salas y Sucursales.
+
+**Pendientes:** 7.5 multi-profesional, `ProfessionalScheduleContract` y PDF backend. 7.2, 7.3 y 7.4 están implementados.
+
+---
+
+## Módulo 07 — Agenda y turnos (submódulo 02: programación y patrones de días)
+
+Implementación de `docs/07_AGENDA_TURNOS/02_programacion_turnos_patrones.md` (RF-001 a RF-016, RN-001 a RN-010, CA-001 a CA-010). Reutiliza la tabla `turno`, el modelo, el enum `EstadoTurno`, el prefijo del padre y el registry de 7.1. Escribe turnos **solo** por generación y regeneración manuales; no hay alta individual, reprogramación, cancelación individual ni asistencia (7.3/7.4/7.5 fuera de alcance).
+
+### Estructura
+
+```text
+app/Modules/AgendaTurnos/
+├── Actions/
+│   ├── GenerarTurnosDesdeOrigen.php        (transacción compartida)
+│   ├── GenerarTurnosDesdePaquete.php
+│   ├── GenerarTurnosDesdeInscripcionSala.php
+│   ├── RegenerarTurnos.php
+│   ├── AsignarProfesionalATurnos.php
+│   └── Feriados/ (Create, Update, Deactivate)
+├── Enums/            TipoOrigenTurno, AccionLoteGeneracion, SeveridadHallazgo,
+│                     EstadoOrigenProgramacion
+├── Events/           TurnosGenerados, TurnosRegenerados,
+│                     TurnoCanceladoPorRegeneracion, ProfesionalAsignadoALote,
+│                     FeriadoCreado/Actualizado/Desactivado
+├── Http/
+│   ├── Controllers/  ProgramacionTurnosController, FeriadoController
+│   ├── Requests/     Preview/Generar/Regenerar/Asignar/Feriados
+│   └── Resources/    Origen, previews, lote, turno de origen, feriado
+├── Listeners/        RecordAgendaGeneracionAudit (fail-closed)
+├── Models/           Turno (ahora escribe), TurnoLoteGeneracion, Feriado, BitacoraEntry
+├── Queries/          GetOrigenProgramacion, PreviewGeneracionTurnos,
+│                     PreviewRegeneracion, GetTurnosDeOrigen, ListFeriados
+├── Rules/            GeneradorFechas, PatronDias, DuracionTurno,
+│                     TurnoSolapamiento, OrigenGenerable, Regeneracion,
+│                     CantidadRestante, ResumenGeneracion, SesionGrupal
+├── Support/          GeneradorTurnos, OrigenProgramacionResolver, ProgramacionGuard,
+│                     TurnosExistentesResolver, FeriadosResolver, DirectoriosAgenda,
+│                     TurnoFilasFactory, TurnoBatchWriter, LoteIdempotencia, DTOs
+└── routes-programacion.php
+```
+
+Constantes nuevas:
+
+```php
+AgendaTurnosModule::MODULE_URL_PROGRAMACION = '/agenda-turnos/programacion-turnos';
+AgendaTurnosPermission::GENERAR = 'turno.generar';
+AgendaTurnosPermission::REGENERAR = 'turno.regenerar';
+AgendaTurnosPermission::ASIGNAR_PROFESIONAL = 'turno.asignar_profesional';
+AgendaTurnosPermission::FERIADOS = 'turno.feriados';
+```
+
+### Schema y migraciones
+
+- `2026_11_27_000100_create_turno_lote_generacion_table.php`: lote con `tipo_origen`, `origen_id` lógico, `sucursal_id`, `accion`, `clave_idempotencia` única, actor/IP, cantidades y advertencias confirmadas.
+- `2026_11_27_000200_add_programacion_fields_to_turno_table.php`: `inscripcion_sala_id`, `lote_generacion_id`, `cancelado_por_lote_id`, `cancelacion_origen`, `cancelado_en`; CHECK de origen de sala y de cancelación; índices únicos parciales por origen/fecha/hora y `EXCLUDE USING gist` por paciente sobre `tsrange(fecha + hora_inicio, fecha + hora_fin, '[)')` para turnos no cancelados/reprogramados. No hay EXCLUDE de profesional ni sala: la sesión grupal los comparte legítimamente.
+- `2026_11_27_000300_create_feriado_table.php`: catálogo global o por sucursal, sin precarga, baja lógica y unicidad por fecha/alcance.
+
+### Definiciones clave
+
+- **Sesión grupal:** `sala_id + fecha + hora_inicio + hora_fin + servicio_id`. Hay un turno por inscripción/paciente; los turnos de la misma sesión cuentan como uno solo para profesional y sala.
+- **Solapamiento:** por rango (`inicio_a < fin_b && inicio_b < fin_a`), ignorando cancelados y reprogramados. Paciente bloquea siempre; profesional bloquea contra otra sesión; sala advierte contra otra sesión. Los turnos contiguos no se solapan.
+- **Futuro:** fecha > hoy, o fecha = hoy con hora de inicio > hora actual, calculado en `America/La_Paz`.
+- **Generación:** solo desde una entidad origen en estado efectivo Activa. Las fechas pasadas se omiten; los feriados se excluyen; en paquetes se genera como máximo la cantidad pactada y, si el período tiene menos fechas, se advierte “faltan N sesiones”.
+- **Regeneración:** cancela solo turnos futuros en estado Programado del origen; preserva Asistió, Faltó, Cancelado, Reprogramado y los Programados pasados sin marcar. La cantidad restante de un paquete es `pactadas − Asistió − Faltó` (Cancelado no consume). Con 0 restantes solo se cancela/preserva.
+- **Asignación de profesional:** por lote o subconjunto; solo turnos futuros Programados; todo o nada; valida activo y asignado a la sucursal; no sincroniza `paquete_sesiones.profesional_id`.
+- **Idempotencia:** advisory lock transaccional por `(tipo_origen, origen_id)` en PostgreSQL + `clave_idempotencia` única + bloqueo natural “ya tiene turnos activos” + índices únicos parciales. La previsualización no persiste y la confirmación recalcula todo.
+- **Transaccionalidad:** lote + turnos + bitácora (evento síncrono) dentro de una sola `DB::transaction()`. Si falla cualquier inserción o la bitácora, no queda nada.
+
+### Endpoints
+
+Prefijo real: **`/api/agenda-turnos/programacion-turnos`**.
+
+| Método | Ruta | Action/Query | Permiso |
+|---|---|---|---|
+| GET | `/origenes/{tipo}/{id}` | `GetOrigenProgramacion` | `turno.ver` + ver origen |
+| GET | `/origenes/{tipo}/{id}/turnos` | `GetTurnosDeOrigen` | `turno.ver` + ver origen |
+| GET | `/origenes/{tipo}/{id}/preview-generacion` | `PreviewGeneracionTurnos` | `turno.generar` + ver origen |
+| POST | `/origenes/{tipo}/{id}/generar` | `GenerarTurnosDesdePaquete` / `...InscripcionSala` | `turno.generar` + ver origen |
+| GET | `/origenes/{tipo}/{id}/preview-regeneracion` | `PreviewRegeneracion` | `turno.regenerar` + ver origen |
+| POST | `/origenes/{tipo}/{id}/regenerar` | `RegenerarTurnos` | `turno.regenerar` + ver origen |
+| POST | `/turnos/asignar-profesional` | `AsignarProfesionalATurnos` | `turno.asignar_profesional` |
+| GET | `/feriados` | `ListFeriados` | `turno.feriados` |
+| POST | `/feriados` | `CreateFeriadoAction` | `turno.feriados` |
+| PATCH | `/feriados/{id}` | `UpdateFeriadoAction` | `turno.feriados` |
+| POST | `/feriados/{id}/desactivar` | `DeactivateFeriadoAction` | `turno.feriados` |
+
+`{tipo}` es `inscripcion_sala` o `paquete_sesiones`. **No existe `DELETE` de turnos.** La cancelación por regeneración es interna; la individual pertenece a 7.3.
+
+`generar`/`regenerar` requieren `clave_idempotencia` (UUID) y aceptan `confirmar_advertencias`. La generación acepta `profesional_id` (nullable) y `usar_profesional_origen`.
+
+### Permisos
+
+Seeder `AgendaTurnosProgramacionPermissionSeeder` (marcador `agenda.programacion_turnos`):
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `turno.ver` | sí | sí | sí |
+| `turno.generar` | sí | sí | sí |
+| `turno.asignar_profesional` | sí | sí | sí |
+| `turno.regenerar` | sí | sí | no |
+| `turno.feriados` | sí | sí | no |
+
+Además, cada endpoint de origen exige el permiso de vista del origen (`inscripcion.ver` o `paquete.ver`) y el scope de sucursal se valida en la Query/Action. No se decide por nombre de rol.
+
+### Eventos y bitácora
+
+- `TurnosGenerados(loteId, tipoOrigen, origenId, sucursalId, cantidadCreados, turnoIds, advertencias, actorId, ip)`.
+- `TurnosRegenerados(loteId, tipoOrigen, origenId, sucursalId, cantidadCreados, cantidadCancelados, cantidadPreservados, turnosCreadosIds, turnosCanceladosIds, advertencias, actorId, ip)`.
+- `TurnoCanceladoPorRegeneracion(loteId, tipoOrigen, origenId, sucursalId, turnoIds, actorId, ip)`.
+- `ProfesionalAsignadoALote(loteId, profesionalId, sucursalId, turnoIds, actorId, ip)`.
+- `FeriadoCreado/Actualizado/Desactivado`.
+
+`RecordAgendaGeneracionAudit` escribe en `bitacora` (`modulo=agenda`) con `GENERAR`, `REGENERAR`, `ASIGNAR_PROFESIONAL` y acciones de feriados. Es síncrona y fail-closed: si la bitácora falla, la transacción se revierte.
+
+### Contratos cross-módulo
+
+- **Implementado en Inscripciones:** `OrigenTurnosContract::obtener(tipo, id): ?OrigenTurnosResumen`, con `EloquentOrigenTurnos`. Expone sucursal, paciente, servicio, sala, profesional, período, cantidad, estado efectivo y —solo paquetes— días/hora/duración.
+- **Implementado en Organización:** `SalaPatronContract::patron(salaId): ?SalaPatronResumen`. El binding actual es `StubSalaPatronContract`, que lanza `LogicException`; por eso **RF-001 (generación desde sala) queda pendiente** y responde `422 PATRON_NO_DISPONIBLE` con mensaje claro.
+- **Pacientes/Profesionales/Salas/Catálogo:** se reutilizan los métodos batch de 7.1. Si fallan, los nombres muestran “No disponible” sin romper el cálculo.
+
+### Conexiones pendientes con Inscripciones
+
+- `TurnosFuturosInscripcionContract` y `TurnosFuturosPaqueteContract` todavía apuntan a stubs; pueden implementarse contra `turno` sin depender de 7.4. No se reemplazaron en esta entrega para no alterar el comportamiento de pausa/baja.
+- `ConsumoPaqueteContract`, `ConsumoPaqueteBatchContract` y `AsistenciaInscripcionContract` fueron implementados por 07.04 sobre `turno`; no escriben contadores de 06.
+- Los botones “Generar turnos” de las fichas de Salas y Paquetes navegan a `/agenda-turnos/programacion-turnos?tipo=...&id=...&accion=generar`. No se generan turnos automáticamente al crear, renovar o editar.
+- El seeder demo de 7.1 (`AgendaTurnosDemoSeeder`) sigue siendo solo local y no es fuente de turnos de 7.2. Para pruebas manuales conviene generar desde un paquete real.
+
+### Frontend
+
+Ruta `/agenda-turnos/programacion-turnos` con `permissionGuard` `turno.ver` y entrada “Programación” en el sidebar. Incluye:
+
+- Pestaña **Programación**: abre un origen por tipo/ID o por query params desde las fichas, muestra el patrón, los turnos existentes y lanza el wizard.
+- Pestaña **Feriados** (solo `turno.feriados`): filtro por año/sucursal, alta global o por sucursal y baja lógica.
+- `GenerarTurnosWizardComponent` autocontenido, máximo 4 pasos: patrón, previsualización, profesional opcional (“Sin asignar”) y confirmación. Muestra bloqueos/advertencias con texto, exige confirmación explícita, protege el doble clic y usa una clave de idempotencia por intento. Al terminar llama a `AgendaRefreshService.notificarCambio()`.
+- Si Salas no expone el patrón, muestra el mensaje de pendiente; si Pacientes/Profesionales/Salas fallan, muestra “No disponible”.
+
+### Tests
+
+- Unit: `GeneradorFechasRule` (CA-001: 9 fechas; CA-005; domingo; feriados; pasadas; tope), `TurnoSolapamientoRule` (parcial, contiguos, mismo rango, cancelados, misma sesión grupal, bloqueo vs advertencia, fechas distintas), `OrigenGenerableRule`, `RegeneracionRule`, `CantidadRestanteRule`, `ResumenGeneracionRule`, `PatronDiasRule`, `DuracionTurnoRule`, `SesionGrupalRule`.
+- Feature: generación CA-001, preview sin persistir CA-002, solapamiento paciente/profesional CA-003/CA-004, fuera de vigencia CA-005, sin profesional CA-006, regeneración CA-007, transaccionalidad CA-008, sucursal CA-009, bitácora CA-010, idempotencia/doble envío, origen ya generado, feriados, grupo sin falsos bloqueos, asignación todo o nada, 50 turnos sin N+1, sin DELETE, sala sin patrón y contrato de origen.
+- `OrigenTurnosContractTest` y `SalaPatronContractTest` cubren las conexiones cross-módulo.
+
+**Pendientes:** RF-001 real (patrón de sala), RNF-010 PDF (503 + vista imprimible), sincronización opcional del profesional del paquete (decisión de Inscripciones). Los contratos `TurnosFuturos*`, `ConsumoPaquete*` y `AsistenciaInscripcion` quedaron implementados en 7.3/07.04.
+
+---
+
+## Módulo 07 — Agenda y turnos (submódulo 03: reprogramación y cancelación)
+
+Implementación de `docs/07_AGENDA_TURNOS/03_reprogramacion_cancelacion_turnos.md` (RF-001 a RF-015, RN-001 a RN-010, CA-001 a CA-010). Reutiliza `turno`, `EstadoTurno` (que ya incluía `reprogramado`), `turno_origen_id`, `TurnoSolapamientoRule`, `SesionGrupalRule`, `AgendaAccessScope`, `AgendaRefreshService` y la bitácora. No implementa 7.4 (asistencia), 7.5 (multi-profesional) ni generación/regeneración.
+
+### Estructura
+
+```text
+app/Modules/AgendaTurnos/
+├── Actions/Cambios/
+│   ├── ReprogramarTurno.php
+│   ├── CancelarTurno.php
+│   └── CancelarTurnosMasivo.php
+├── Enums/            AccionCambioTurno, OrigenMotivoTurno
+├── Events/           TurnoReprogramado, TurnoCancelado, TurnosCanceladosMasivamente
+├── Exceptions/       TurnoNoModificable, EstadoTurnoDesactualizado, MotivoObligatorio,
+│                     ConflictoDisponibilidad, TurnoFueraDeVigencia, OrigenNoReprogramable,
+│                     CancelacionMasivaFueraDeSucursal, ConjuntoCancelacionCambio, ...
+├── Http/             Controllers/Cambios, Requests/Cambios, Resources/Cambios
+├── Listeners/        RecordCambiosTurnoAudit (bitácora = historial)
+├── Models/           MotivoTurno; Turno ampliado
+├── Providers/        CambiosTurnosServiceProvider
+├── Queries/Cambios/  GetTurnoCambio, PreviewReprogramacion, PreviewCancelacion,
+│                     PreviewCancelacionMasiva, GetOrigenesCancelables, GetHistorialTurno,
+│                     ListMotivosTurno, ReporteCambiosTurnos, ExportCambiosTurnos,
+│                     GetTurnoContactoWhatsApp
+├── Rules/            TurnoModificable, EstadoEsperado, MotivoObligatorio, NuevaFecha,
+│                     DisponibilidadReprogramacion, OrigenReprogramable, EfectoSaldo,
+│                     CancelacionMasiva
+├── Support/          calculadoras compartidas, locks, saldo, motivos, WhatsApp, historial
+├── Contracts/        CambiosTurnosExporter + Unavailable + TurnosFuturos reales
+└── routes-cambios.php
+```
+
+### Schema
+
+- `2026_11_28_000100_create_motivo_turno_table.php`: catálogo configurable; `origen` y `descuenta_saldo` nullable a propósito.
+- `2026_11_28_000200_add_cambios_fields_to_turno_table.php`: `motivo_turno_id`, `motivo_detalle`, `consume_saldo`, `cancelado_por_usuario_id`; índice `(sucursal_id, fecha, estado)`; único parcial `turno_origen_unico` sobre `turno_origen_id`; CHECK `consume_saldo` solo en cancelado.
+- No se cambia el CHECK de estado: `reprogramado` ya existía desde 7.1/7.2.
+- **No se crea tabla de historial**: se reutiliza `bitacora` (`entidad='turno'`, `entidad_id`, `accion`, `datos_anteriores/nuevos`, `usuario_id`), igual que Estados. Es inmutable y 7.4 escribirá `ASISTIO`/`FALTO` en el mismo lugar.
+
+### Máquina de estados y trazabilidad
+
+- `Programado → Reprogramado`: original preservado, nuevo turno Programado con `turno_origen_id`, historial con vínculo bidireccional.
+- `Programado → Cancelado`: `cancelacion_origen='manual'`, motivo, usuario, fecha, snapshot `consume_saldo`; no se borra.
+- `Asistió`/`Faltó`: los escribe 7.4; 7.3 no los modifica.
+- El original reprogramado no se vuelve a reprogramar/cancelar; el turno nuevo Programado sí.
+- Bitácora: `REPROGRAMAR` + `CREAR_POR_REPROGRAMACION`; `CANCELAR`; `CANCELAR_MASIVO` (por turno y por lote `turno_cancelacion_masiva`).
+
+### Saldo
+
+- `consume_saldo` es un snapshot inmutable resuelto al cancelar desde `motivo_turno.descuenta_saldo`; `null/false` = no consume.
+- El preview muestra saldo actual/resultante solo si `ConsumoPaqueteContract` está disponible; con el stub muestra “Efecto en saldo no disponible” y la cancelación funciona igual.
+- `CantidadRestanteRule` de 7.2 ahora resta también `Cancelado` con `consume_saldo=true`; `TurnoExistente` expone `consumeSaldo` y `turnoOrigenId`.
+- `SaldoSesionesRule`/consumo real de Paquetes sigue pendiente de 7.4; no se inventan saldos.
+
+### Motivos
+
+Seeder `MotivosTurnoSeeder`: cinco motivos de la spec (`enfermedad_paciente`, `ausencia_profesional`, `feriado`, `motivo_familiar`, `otro`), idempotente. `origen` y `descuenta_saldo` quedan NULL hasta confirmación funcional. `otro` exige texto. No hay CRUD administrativo de motivos en esta entrega; el catálogo se administra por seeder/DB. 07.05 agrega `cancelacion_diagnostico` con `DiagnosticoMotivoTurnoSeeder` (`aplica_cancelar=true`, `aplica_reprogramar=false`, sin texto obligatorio).
+
+### Endpoints
+
+Prefijo **`/api/agenda-turnos/cambios-turnos`**:
+
+| Método | Ruta | Query/Action | Permiso |
+|---|---|---|---|
+| GET | `/turnos/{id}` | `GetTurnoCambio` | `turno.ver` |
+| GET | `/turnos/{id}/historial` | `GetHistorialTurno` | `turno.historial` |
+| GET | `/turnos/{id}/contacto-whatsapp` | `GetTurnoContactoWhatsApp` | `turno.ver` + `tutor.ver_contacto` |
+| POST | `/turnos/{id}/preview-reprogramacion` | `PreviewReprogramacion` | `turno.reprogramar` |
+| POST | `/turnos/{id}/reprogramar` | `ReprogramarTurno` | `turno.reprogramar` |
+| POST | `/turnos/{id}/preview-cancelacion` | `PreviewCancelacion` | `turno.cancelar` |
+| POST | `/turnos/{id}/cancelar` | `CancelarTurno` | `turno.cancelar` |
+| GET | `/motivos?accion=` | `ListMotivosTurno` | `turno.ver` |
+| GET | `/pacientes/{id}/origenes-cancelables` | `GetOrigenesCancelables` | `turno.cancelar_masivo` |
+| POST | `/cancelacion-masiva/preview` | `PreviewCancelacionMasiva` | `turno.cancelar_masivo` |
+| POST | `/cancelacion-masiva` | `CancelarTurnosMasivo` | `turno.cancelar_masivo` |
+| GET | `/reporte-cambios` | `ReporteCambiosTurnos` | `turno.reporte_cambios` |
+| GET | `/reporte-cambios/exportar` | `ExportCambiosTurnos` | `turno.exportar_cambios` |
+
+No existe `DELETE`. La ejecución exige `estado_esperado` (individual) o el conjunto exacto de ids (masiva); si cambió, 409. La exportación responde 503 con contrato `Unavailable`.
+
+### Permisos
+
+Seeder `CambiosTurnosPermissionSeeder` (marcador `agenda.cambios_turnos`):
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `turno.ver` | sí | sí | sí |
+| `turno.reprogramar` | sí | sí | sí |
+| `turno.cancelar` | sí | sí | sí |
+| `turno.historial` | sí | sí | sí |
+| `turno.cancelar_masivo` | sí | sí | no |
+| `turno.reporte_cambios` | sí | sí | no |
+| `turno.exportar_cambios` | sí | sí | no |
+
+WhatsApp requiere además `tutor.ver_contacto` (Recepción ya lo tiene). El backend revalida permisos y sucursal.
+
+### Eventos y contratos
+
+- `TurnoReprogramado(turnoOriginalId, turnoNuevoId, sucursalId, pacienteId, motivo, original, nuevo, advertencias, actorId, ip)`.
+- `TurnoCancelado(turnoId, sucursalId, pacienteId, fecha, horaInicio, horaFin, motivo, consumeSaldo, advertencias, actorId, ip, masivo, loteId)`.
+- `TurnosCanceladosMasivamente(loteId, pacienteId, entidades, turnoIds, sucursales, motivo, actorId, ip)`.
+- `RecordCambiosTurnoAudit` escribe bitácora/historial fail-closed.
+- `TurnosFuturosInscripcionContract` y `TurnosFuturosPaqueteContract` ahora tienen implementación real en Agenda (`EloquentTurnosFuturos*`) bindeada en Inscripciones; el pre-chequeo de pausa/baja devuelve cantidades reales. `ConsumoPaquete*` y `AsistenciaInscripcionContract` fueron implementados por 07.04.
+- `CambiosTurnosExporterContract` + `Unavailable` para PDF/Excel (503).
+
+### Frontend
+
+- Ruta `/agenda-turnos/cambios-turnos`; entrada “Cambios de turnos” en sidebar con `turno.cancelar_masivo`; tabs “Cancelación masiva” y “Reporte de cambios” según permisos.
+- Componentes reutilizables `reprogramar-turno-modal`, `cancelar-turno-modal`, `historial-turno`; se integran en el panel de detalle de 7.1 (botones Reprogramar/Cancelar/Ver historial).
+- Preview con bloqueos/advertencias, confirmación explícita, saldo o “no disponible”, WhatsApp manual, refresco de `AgendaRefreshService`.
+- Reporte con filtros, paginación y exportación 503 clara.
+
+### Tests
+
+- Unit: `TurnoModificableRule`, `EstadoEsperadoRule`, `MotivoObligatorioRule`, `NuevaFechaRule`, `DisponibilidadReprogramacionRule`, `OrigenReprogramableRule`, `EfectoSaldoRule`, `CancelacionMasivaRule`; `CantidadRestanteRule` con cancelado que consume.
+- Feature: CA-001 a CA-010, transacción con fallo, doble envío, sucursal, WhatsApp, reporte/scoping, export 503, snapshot inmutable, no DELETE.
+- Conexiones: tests de 7.1, 7.2 e Inscripciones/Estados actualizados al comportamiento real de `TurnosFuturos*`.
+
+**Pendientes:** exportación PDF/Excel, autorización expresa de Administración para Faltó (fuera de alcance), reprogramación de una sala completa (limitación documentada) y decisión sobre cancelaciones 07.03 con `consume_saldo` en el saldo de 06.02.
+
+---
+
+## Módulo 07 — Agenda y turnos (submódulo 04: registro de asistencia)
+
+Implementación de `docs/07_AGENDA_TURNOS/04_registro_asistencia_turno.md` (07.04/RF-001 a 07.04/RF-015, 07.04/RN-001 a 07.04/RN-010, 07.04/CU-01 a 07.04/CU-03, 07.04/CA-001 a 07.04/CA-010). Reutiliza `turno`, `EstadoTurno`, `AccionCambioTurno`, `AgendaAccessScope`, `bitacora`, `AgendaRefreshService` y los contratos de lectura de 06.01/06.02 y 04.04. No implementa 07.03 ni 07.05.
+
+### Estructura
+
+```text
+app/Modules/AgendaTurnos/
+├── Actions/Asistencia/          RegistrarAsistencia, CorregirAsistencia
+├── Contracts/                   EloquentAsistenciaInscripcion, EloquentConsumoPaquete,
+│                                EloquentConsumoPaqueteBatch, EloquentPatientAttendanceSummary,
+│                                AsistenciaPdfExporterContract, UnavailableAsistenciaPdfExporter
+├── Enums/                       AsistenciaEvento
+├── Events/                      AsistenciaRegistrada, AsistenciaCorregida
+├── Exceptions/                  TurnoNoAsistible, AsistenciaYaRegistrada,
+│                                AsistenciaFueraDeVentana, MotivoAsistenciaRequerido,
+│                                TurnoVersionConflicto, ConfiguracionAsistenciaNoDisponible,
+│                                ExportacionAsistenciaNoDisponible
+├── Http/                        Controllers/Asistencia, Requests/Asistencia, Resources/Asistencia
+├── Listeners/                   RecordAsistenciaAudit
+├── Providers/                   AsistenciaTurnosServiceProvider
+├── Queries/Asistencia/          GetAsistenciaTurno, GetIndicadoresAsistencia,
+│                                GetResumenDiarioAsistencia, ExportarAsistenciaCsv
+├── Rules/                       TransicionAsistencia, TurnoAsistible, VentanaEdicionAsistencia,
+│                                MotivoAsistencia, PorcentajeAsistencia, RangoIndicadores
+├── Support/                     AsistenciaAcceso, AsistenciaCalculadora, AsistenciaClock,
+│                                AsistenciaTurnosModule, AsistenciaTurnosPermission,
+│                                SaldoAsistenciaResolver, IndicadorAsistenciaResolver
+└── routes-asistencia.php
+```
+
+### Schema
+
+- `2026_11_29_000100_add_version_to_turno_table.php`: agrega `turno.version` (`unsignedInteger`, default 1). Es la versión optimista de 07.04; 07.03 no la incrementa, pero el estado `cancelado/reprogramado` bloquea la asistencia.
+- No se crean columnas de asistencia: `usuario_asistencia_id` y `asistencia_registrada_en` ya existen desde la tabla base.
+- No se crea tabla de historial: la bitácora es el historial (`entidad='turno'`, `accion=ASISTIO|FALTO`, `datos_nuevos.evento`, `fuera_ventana`, `motivo`).
+- El saldo sigue siendo derivado de 06.02; 07.04 no escribe contadores ni tablas de Inscripciones.
+
+### Máquina de estados
+
+| Desde | Hacia | Quién |
+|---|---|---|
+| `programado` | `asistio` / `falto` | 07.04 |
+| `asistio` | `falto` | 07.04 (corrección) |
+| `falto` | `asistio` | 07.04 (corrección) |
+| `cancelado` / `reprogramado` | cualquier asistencia | bloqueado |
+| `asistio` / `falto` | `programado` | no permitido |
+
+`reprogramado` es terminal para el turno original; el turno nuevo nace `programado`. 07.04 solo escribe `ASISTIO`/`FALTO`.
+
+### Ventana y motivo
+
+- `ventana_edicion_asistencia_horas` se lee de Configuración. `0` = sin ventana: toda corrección requiere permiso especial.
+- La ventana corre desde `asistencia_registrada_en` (primer registro) y no se reinicia con cada corrección.
+- Primer registro: desde `fecha + hora_inicio` en `zona_horaria`; no se permite antes. Sin límite superior por defecto (registro tardío permitido).
+- Dentro de ventana: `asistencia.registrar`, motivo opcional.
+- Fuera de ventana: `asistencia.corregir_fuera_ventana`, motivo obligatorio, bitácora crítica.
+- `zona_horaria` se lee con `ParameterReaderContract`; `asistencia_registrada_en` se guarda como timestamp UTC.
+
+### Endpoints
+
+Prefijo **`/api/agenda-turnos/asistencia`**:
+
+| Método | Ruta | Query/Action | Permiso |
+|---|---|---|---|
+| GET | `/turnos/{id}` | `GetAsistenciaTurno` | `asistencia.ver` |
+| POST | `/turnos/{id}/registrar` | `RegistrarAsistencia` | `asistencia.registrar` |
+| POST | `/turnos/{id}/corregir` | `CorregirAsistencia` | `asistencia.registrar`; fuera de ventana exige `asistencia.corregir_fuera_ventana` |
+| GET | `/indicadores` | `GetIndicadoresAsistencia` | `asistencia.ver_indicadores` |
+| GET | `/resumen-diario` | `GetResumenDiarioAsistencia` | `asistencia.resumen_diario` |
+| GET | `/exportar` | `ExportarAsistenciaCsv` / PDF 503 | `asistencia.exportar` |
+
+El historial se reutiliza de 07.03: `GET /api/agenda-turnos/cambios-turnos/turnos/{id}/historial` (`turno.historial`). La bitácora ya incluía `ASISTIO`/`FALTO`; 07.04 agrega `evento` y `fuera_ventana` al presenter. No existe `DELETE`.
+
+### Permisos
+
+Seeder `AsistenciaTurnosPermissionSeeder` (marcador `agenda.asistencia_turnos`):
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `asistencia.ver` | sí | sí | sí |
+| `asistencia.registrar` | sí | sí | sí |
+| `asistencia.corregir_fuera_ventana` | sí | sí | no |
+| `asistencia.ver_indicadores` | sí | sí | sí |
+| `asistencia.resumen_diario` | sí | sí | sí |
+| `asistencia.exportar` | sí | sí | no (SUPUESTO: FP-04 menciona Recepción) |
+
+El backend revalida permisos, sucursal, estado y ventana; `can` por turno se calcula en backend y un turno fuera de alcance responde 404.
+
+### Contratos
+
+- Implementa `AsistenciaInscripcionContract` (06.01), `ConsumoPaqueteContract` y `ConsumoPaqueteBatchContract` (06.02) y `PatientAttendanceSummaryContract` (04.04).
+- Los bindings se hacen en `InscripcionesAtencionesServiceProvider` y `PacientesServiceProvider`.
+- `OrigenTurnosContract` aporta estado efectivo, período y cantidad de sesiones.
+- No hay escritura cruzada: 06.02 sigue calculando el saldo.
+
+### Bitácora
+
+- Registro: `ASISTIO`/`FALTO`, `datos_nuevos.evento=registro`.
+- Corrección: `evento=correccion` o `correccion_fuera_ventana`; `fuera_ventana`; `motivo`.
+- `RecordAsistenciaAudit` es síncrono y fail-closed.
+- No guarda nombres de pacientes, servicios ni datos clínicos. Las lecturas del listado no se auditan.
+- Catálogo `accion_auditada`: `(agenda, turno, ASISTIO)` y `(agenda, turno, FALTO)`.
+
+### Frontend
+
+- Registro rápido en `app-agenda-calendario` (FullCalendar) con botones ✓/✕ en turnos `programado` ya iniciados; refresco con `AgendaRefreshService`.
+- Panel de detalle: `AsistenciaTurnoAccionesComponent` con estado actual, registro, corrección e historial.
+- Corrección: `CorregirAsistenciaModalComponent` con motivo, confirmación y efecto en saldo/indicadores.
+- Ruta `/agenda-turnos/asistencia` con tabs **Indicadores** y **Resumen diario**; exportación CSV solo agregada, sin PDF.
+- Sin dependencias nuevas, sin NgModules.
+
+### Tests
+
+- Unit: transiciones, turno asistible (futuro, origen, período), ventana (borde exacto y 0), motivo, porcentaje, rango.
+- Feature: registro, idempotencia, conflicto de versión, cancelado/reprogramado, futuro, sucursal 404, bitácora fail-closed, corrección dentro/fuera de ventana, motivo, ventana 0, contratos 06.01/06.02/04.04, indicadores, resumen diario, CSV, PDF 503.
+- SQLite y `phpunit.pgsql.xml` para locks/constraints.
+
+### Checklist 07.04
+
+| RF | Estado | Evidencia |
+|---|---|---|
+| 07.04/RF-001 | Completo | `RegistrarAsistencia` + UI agenda/detalle |
+| 07.04/RF-002 | Completo | Saldo derivado + `EloquentConsumoPaquete` |
+| 07.04/RF-003 | Completo | `EstadoTurno` + `TransicionAsistenciaRule` |
+| 07.04/RF-004 | Completo | `VentanaEdicionAsistenciaRule` |
+| 07.04/RF-005 | Completo | `CorregirAsistencia` + `MotivoAsistenciaRule` |
+| 07.04/RF-006 | Completo | Bitácora + historial de 07.03 |
+| 07.04/RF-007 | Completo | Botones ✓/✕ en FullCalendar |
+| 07.04/RF-008 | Completo | `TurnoNoAsistibleException` |
+| 07.04/RF-009 | Completo | `GetIndicadoresAsistencia` |
+| 07.04/RF-010 | Parcial | CSV; PDF 503 |
+| 07.04/RF-011 | Completo | `RecordAsistenciaAudit` |
+| 07.04/RF-012 | Completo | `AsistenciaAcceso` 404 + filtros |
+| 07.04/RF-013 | Completo | Efecto saldo/indicadores en GET |
+| 07.04/RF-014 | Completo | `GetResumenDiarioAsistencia` |
+| 07.04/RF-015 | Completo | `EloquentPatientAttendanceSummary` |
+
+| RN/CU/CA | Estado |
+|---|---|
+| 07.04/RN-001, 07.04/RN-002, 07.04/RN-003, 07.04/RN-005, 07.04/RN-006, 07.04/RN-007, 07.04/RN-008, 07.04/RN-009 | Completos |
+| 07.04/RN-004 | Completo |
+| 07.04/RN-010 | Completo |
+| 07.04/CU-01, 07.04/CU-02, 07.04/CU-03 | Completos |
+| 07.04/CA-001 a 07.04/CA-010 | Completos; 07.04/CA-002/003 visibles vía 06.02 |
+
+**Pendientes:** PDF de 07.04/RF-010 (503), exportación por paciente (privacidad; requiere decisión), “pasar lista” masivo en sala grupal (no implementado), fórmula/período de indicadores marcados PROPUESTO - VALIDAR, y decisión sobre cancelaciones 07.03 con `consume_saldo` en el saldo de 06.02.
+
+---
+
+## Módulo 07 — Agenda y turnos (submódulo 05: diagnóstico con varios profesionales)
+
+Implementación de `docs/07_AGENDA_TURNOS/05_diagnostico_varios_profesionales.md`. El documento numera **07.05/RF-001 a 07.05/RF-015** (15 RF, aunque el pedido inicial menciona 14) y **07.05/RN-001 a 07.05/RN-010**. Reutiliza 05.03, 06.03, 07.1, 07.2, 07.3 y 07.4. No crea diagnósticos, no asigna profesionales, no registra asistencia ni reprograma: esas responsabilidades siguen en sus módulos.
+
+### Estructura
+
+```text
+app/Modules/AgendaTurnos/
+├── Actions/Diagnosticos/        ProgramarTurnoDiagnostico,
+│                                ActualizarEstadoGeneralDiagnostico, CancelarDiagnostico
+├── Contracts/                   EloquentProfessionalSchedule,
+│                                DiagnosticosPdfExporterContract,
+│                                UnavailableDiagnosticosPdfExporter
+├── Enums/                       EstadoGeneralDiagnostico
+├── Events/                      TurnoDiagnosticoProgramado,
+│                                EstadoGeneralDiagnosticoCambiado, DiagnosticoCancelado
+├── Exceptions/                  DiagnosticoNoEncontrado/NoCoordinable/FueraDePeriodo,
+│                                ProfesionalNoAsignado/NoCubreRequisito,
+│                                TurnoDiagnosticoDuplicado, EstadoGeneralInvalido,
+│                                CierreDiagnosticoIncompleto, DisponibilidadDiagnostico,
+│                                ConfiguracionDiagnosticoNoDisponible,
+│                                WhatsappDiagnosticoNoDisponible,
+│                                ExportacionDiagnosticosNoDisponible
+├── Http/Controllers/Diagnosticos/ DiagnosticoCoordinacionController
+├── Http/Requests/Diagnosticos/  Index, Exportar, Opciones, Programar,
+│                                ActualizarEstadoGeneral, Cancelar
+├── Listeners/                   RecordDiagnosticoAudit
+├── Providers/                   DiagnosticosServiceProvider
+├── Queries/Diagnosticos/        ListDiagnosticosCoordinacion, GetCoordinacionDiagnostico,
+│                                GetOpcionesDiagnosticos, GetWhatsappDiagnostico,
+│                                ExportarDiagnosticosCsv
+├── Rules/                       EstadoGeneralDiagnosticoRule, DiasHabilitadosRule,
+│                                HorarioAgendaRule, IntervaloMinimoRule
+├── Support/                     DiagnosticosModule, DiagnosticosPermission,
+│                                DiagnosticoClock, DiagnosticoParametros,
+│                                DiagnosticoTurnosResolver,
+│                                DiagnosticoEstadoSincronizador,
+│                                EstadoGeneralResultado, WhatsappDiagnosticoLink,
+│                                DiagnosticoAuditAction
+└── routes-diagnosticos.php
+app/Modules/InscripcionesAtenciones/Contracts/
+├── DiagnosticoAtencionContract.php
+├── DiagnosticoAtencionResumen.php
+├── DiagnosticoAtencionPagina.php
+└── EloquentDiagnosticoAtencion.php
+```
+
+### Schema
+
+- `2026_11_30_000100_add_diagnosticos_indexes.php` agrega `turno(atencion_diagnostico_id, fecha, hora_inicio)` y `atencion_diagnostico(sucursal_id, estado_general, fecha_inicio)`.
+- No se crean tablas ni columnas: `atencion_diagnostico.estado_general` ya existía con `CHECK IN ('incompleto','en_proceso','completo','cancelado')`.
+- `turno_profesional` **no se usa**: un turno por profesional con `turno.profesional_id`, igual que 07.2/07.3/07.4.
+- Seeder `DiagnosticoMotivoTurnoSeeder`: agrega el motivo `cancelacion_diagnostico` (no pisa configuraciones existentes).
+- `atencion_diagnostico.estado` se conserva `activa` al cancelar la coordinación; `retirada` sigue siendo la baja de 06.03.
+
+### Estado general
+
+`estado_general` se persiste y se recalcula en la misma transacción del cambio del turno. La regla pura `EstadoGeneralDiagnosticoRule` recibe requisitos, turnos y especialidades por profesional:
+
+| Estado | Regla |
+|---|---|
+| `cancelado` | Solo cancelación manual con motivo; terminal. |
+| `completo` | Todos los puestos requeridos tienen al menos un turno `asistio`. |
+| `en_proceso` | Todos los puestos tienen turno `programado` o `asistio`, pero no todos asistieron. |
+| `incompleto` | Al menos un puesto no tiene turno vigente. `falto`, `cancelado` y `reprogramado` dejan el puesto descubierto. |
+
+- Un puesto se cubre con profesionales distintos que tengan la especialidad requerida; `cantidad_minima` se respeta por especialidad.
+- RF-011 se expone como `faltantes` (`sin_turno`/`sin_asistencia`); el estado general no se cambia solo por una advertencia.
+- Un turno `falto` se muestra con su estado en el puesto y habilita programar un reemplazo, pero no cubre el puesto: el estado general sigue incompleto hasta que exista un turno vigente.
+- `DiagnosticoEstadoSincronizador` se invoca desde `ProgramarTurnoDiagnostico`, `ReprogramarTurno` (07.3), `CancelarTurno` (07.3), `CancelarTurnosMasivo` (07.3), `RegistrarAsistencia` (07.4) y `CorregirAsistencia` (07.4).
+- El cierre manual a `completo` exige todas las asistencias (RF-012). La actualización manual solo acepta el estado calculado; si no coincide, responde 409 con `faltantes`.
+
+### Programación y disponibilidad
+
+- Solo se programa a profesionales ya asociados al diagnóstico por 06.03. 07.05 no crea la asociación (RF-001 se cubre en 06.03).
+- El profesional debe estar activo y asignado a la sucursal (`ProgramacionGuard`), cubrir alguna especialidad requerida y no tener otro turno vigente en el mismo diagnóstico.
+- El turno debe caer dentro de `fecha_inicio..fecha_fin` del diagnóstico.
+- Días habilitados: `agenda.dias_semana_habilitados` (ISO 1–7). Horario: `agenda.horario_apertura`/`agenda.horario_cierre`. Intervalo: `agenda.intervalo_minimo_entre_turnos_minutos`.
+- Solapamiento global por profesional: `ProfessionalScheduleContract::haySolapamiento` (incluye otras sucursales; el mensaje es genérico). Solapamiento de paciente: `TurnoSolapamientoRule`.
+- Duración (RN-010): `ServicioResumen.duracionMinutos` si es > 0; si no, `duracion_sesion_minutos`. El request admite `duracion_minutos` opcional por turno (RF-015 parcial). No se hardcodea 50.
+- Fechas y horas se guardan en la zona local de la agenda (`zona_horaria` para el cálculo y la agenda); el contrato de 03 recibe UTC y lo convierte.
+- No se agrega `version` a `atencion_diagnostico`: la concurrencia de programar/actualizar/cancelar se resuelve con `lockForUpdate` sobre la fila del diagnóstico. La reprogramación y la asistencia siguen usando `turno.version`/`estado_esperado` de 07.3/07.4.
+- La reprogramación de un turno de diagnóstico (07.3) conserva el profesional y fuerza `sala_id=NULL`; el CHECK de origen único no admite sala y diagnóstico en el mismo turno. El modal de 07.3 refleja esa restricción.
+
+### Endpoints
+
+Prefijo **`/api/agenda-turnos/diagnosticos`**:
+
+| Método | Ruta | Action/Query | Permiso |
+|---|---|---|---|
+| GET | `/` | `ListDiagnosticosCoordinacion` | `asignacion.ver` |
+| GET | `/opciones` | `GetOpcionesDiagnosticos` | `asignacion.ver` |
+| GET | `/exportar` | `ExportarDiagnosticosCsv` / PDF 503 | `asignacion.exportar` |
+| GET | `/{id}` | `GetCoordinacionDiagnostico` (audita) | `asignacion.ver` |
+| POST | `/{id}/turnos` | `ProgramarTurnoDiagnostico` | `asignacion.crear` |
+| PATCH | `/{id}/estado-general` | `ActualizarEstadoGeneralDiagnostico` | `diagnostico_agenda.actualizar_estado` |
+| POST | `/{id}/cancelar` | `CancelarDiagnostico` | `diagnostico_agenda.cancelar` |
+| GET | `/{id}/whatsapp` | `GetWhatsappDiagnostico` | `tutor.ver_contacto` |
+
+Acciones reutilizadas por la UI (no reimplementadas): reprogramación de 07.3 y registro/corrección de asistencia de 07.4. No existe `DELETE`.
+
+### Permisos
+
+Seeder `DiagnosticosPermissionSeeder` (marcador `agenda.diagnosticos`). Solo crea los códigos nuevos; reutiliza los de 03.
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `asignacion.ver` | sí | sí | sí |
+| `asignacion.crear` | sí | sí | sí |
+| `asignacion.exportar` | sí | sí | no |
+| `diagnostico.asignar_profesionales` (06.03) | sí | sí | sí |
+| `diagnostico_agenda.cancelar` | sí | sí | no |
+| `diagnostico_agenda.actualizar_estado` | sí | sí | no |
+| `tutor.ver_contacto` | sí | sí | sí |
+| `turno.reprogramar`, `asistencia.registrar` (07.3/07.4) | sí | sí | según matriz vigente |
+
+El backend revalida permiso, sucursal y estado. Un diagnóstico de otra sucursal responde 404 en el detalle (CA-009); el listado con `sucursal_id` ajeno responde 403.
+
+> **02 no se modifica:** los códigos `diagnostico_agenda.*` se muestran con la etiqueta de fallback de `PermissionCatalog`; `AuditModuleResolver` sigue resolviendo `atencion_diagnostico` como `inscripciones` para la auditoría de consulta. La bitácora del listener usa `modulo='agenda'` explícitamente.
+
+### Contratos
+
+- **`DiagnosticoAtencionContract` (06.03):** `buscar`, `resumen`, `resumenParaActualizar`, `actualizarEstadoGeneral`, `tiposDiagnostico`. Implementación `EloquentDiagnosticoAtencion`; bind en `InscripcionesAtencionesServiceProvider`.
+- **`ProfessionalScheduleContract` (03):** implementación real `EloquentProfessionalSchedule` en Agenda; bind en `ProfesionalesServiceProvider`. Reemplaza el stub; el test de stubs de 03 ahora verifica la implementación real.
+- **`PatientDirectoryContract` / `ProfessionalDirectoryContract` / `BranchDirectoryContract` / `ParameterReaderContract` / `AuditRecorderContract` / `TutorDirectoryContract`:** se consumen sin cambios.
+- **`DiagnosticosPdfExporterContract`:** `UnavailableDiagnosticosPdfExporter` responde 503. No hay botón de PDF.
+- `ProfessionalDiagnosticRequirementsContract` ya estaba implementado por `EloquentProfessionalDiagnosticRequirements`; 07.05 no lo necesita porque usa el snapshot `atencion_diagnostico_requisito` de 06.03.
+
+### Bitácora y auditoría
+
+- `RecordDiagnosticoAudit` es síncrono y fail-closed:
+  - `turno` / `PROGRAMAR_DIAGNOSTICO` (no crítico);
+  - `atencion_diagnostico` / `ACTUALIZAR_ESTADO_GENERAL` (crítico);
+  - `atencion_diagnostico` / `CANCELAR` (crítico).
+- La reprogramación y la asistencia siguen escribiendo su bitácora en 07.3/07.4.
+- El detalle de coordinación se audita con `AuditRecorderContract::registrarConsultaSensible(entidad='atencion_diagnostico', contexto=['recurso'=>'diagnostico_coordinacion'])`; si falla, responde 503 `AUDIT_UNAVAILABLE`. El listado **no** se audita.
+- `AuditModuleResolver` resuelve `atencion_diagnostico` al módulo `inscripciones`; la fila de bitácora del listener usa `modulo='agenda'`. Es el fallback vigente; no se modifica 02.
+- Catálogo `accion_auditada`: `DiagnosticosAccionAuditadaSeeder`.
+
+### WhatsApp
+
+- `WhatsappDiagnosticoLink` construye `wa.me` con el tutor principal (`TutorDirectoryContract`), `TutorPhoneRule` y `whatsapp.prefijo_pais` (si está vacío o no existe, usa `591`).
+- El mensaje lista fechas, horas y profesionales; no incluye tipo de diagnóstico ni datos clínicos. No envía nada.
+- Sin `tutor.ver_contacto` no se devuelve teléfono ni URL. No se escribe el teléfono en bitácora ni logs.
+
+### Cancelación
+
+- `CancelarDiagnostico` exige motivo (3–500 caracteres), bloquea la fila del diagnóstico y cancela solo turnos futuros `programado` reutilizando `CancelarTurno` de 07.3.
+- Los turnos pasados (`asistio`/`falto`), cancelados o reprogramados se conservan.
+- `estado_general=cancelado`; `atencion_diagnostico.estado` sigue `activa`.
+- Motivo de catálogo: `cancelacion_diagnostico` (`requiere_texto=false`, `aplica_cancelar=true`).
+
+### Reporte y exportación
+
+- Filtros: sucursal (alcance), período, tipo, estado general y profesional. `per_page` máximo 50.
+- CSV compatible con Excel: BOM UTF-8, delimitador `;`, escape de fórmulas `=+-@`, una fila por profesional. Límite `MAX_FILAS_EXPORTACION = 5000` (422 si lo supera).
+- La exportación se audita con `registrarExportacion` (filtros seguros y cantidad; no datos de pacientes).
+- PDF: contrato `Unavailable` → 503; sin botón.
+
+### Frontend
+
+- Rutas: `/agenda-turnos/diagnosticos` (listado/reporte) y `/agenda-turnos/diagnosticos/:id` (coordinación), con `permissionGuard` `asignacion.ver` y carga diferida.
+- Sidebar: “Diagnósticos” después de “Agenda”.
+- Botón “Coordinar” en la fila de diagnóstico de 06.03.
+- Listado: filtros, tabla, paginación y exportación CSV. Estado general con `app-badge`; advertencia de puesto faltante.
+- Coordinación: puestos por especialidad, profesionales asignados, turnos, semáforo, advertencias, programar turno, reprogramar (modal 07.3), asistencia (componente 07.4), WhatsApp, actualización manual y cancelación.
+- Se reutilizan `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-modal`, `app-pagination`, `TABLE_IMPORTS`, `app-select-field`, `input[app-input]`, `textarea[app-textarea]`, `InscripcionDateInputComponent` (Flatpickr), `ReprogramarTurnoModalComponent`, `AsistenciaTurnoAccionesComponent` y `ToastService`.
+- Errores: 422 por campo, 409 de regla/estado con mensaje, 403/404/503 con `app-alert`; 503 `AUDIT_UNAVAILABLE` no muestra el detalle. Sin botón de PDF.
+
+### Tests
+
+- Unit: `EstadoGeneralDiagnosticoRuleTest`, `HorarioAgendaRuleTest`, `DiasHabilitadosRuleTest`, `IntervaloMinimoRuleTest`.
+- Feature: `DiagnosticoProgramacionTest`, `DiagnosticoCoordinacionTest`, `DiagnosticoCancelacionExportTest`, `DiagnosticoReprogramacionTest` (CA-001 a CA-010, permisos, alcance, auditoría fail-closed, CSV, PDF 503, WhatsApp, reprogramación 07.3).
+- SQLite y `phpunit.pgsql.xml` (locks, joins y `FOR UPDATE`).
+- `npm run build` y `npx tsc --noEmit`.
+
+### Checklist 07.05
+
+| RF | Estado | Evidencia |
+|---|---|---|
+| 07.05/RF-001 | Cubierto por 06.03; 07.05 lo consume | `CreateDiagnosticoAction`/`UpdateDiagnosticoAction`; la coordinación valida profesionales asociados |
+| 07.05/RF-002 | Completo | `ProgramarTurnoDiagnostico` + modal |
+| 07.05/RF-003 | Completo | `ProfessionalScheduleContract` + `HorarioAgendaRule`, `DiasHabilitadosRule`, `IntervaloMinimoRule` |
+| 07.05/RF-004 | Completo (reutiliza 07.4) | Estado por turno y panel de asistencia |
+| 07.05/RF-005 | Completo | `EstadoGeneralDiagnosticoRule` + sincronizador |
+| 07.05/RF-006 | Completo | `GetCoordinacionDiagnostico` + pantalla |
+| 07.05/RF-007 | Completo | `ActualizarEstadoGeneralDiagnostico`, `CancelarDiagnostico` |
+| 07.05/RF-008 | Completo CSV; PDF 503 | `ExportarDiagnosticosCsv`, `UnavailableDiagnosticosPdfExporter` |
+| 07.05/RF-009 | Completo | `RecordDiagnosticoAudit` + bitácora 07.3/07.4 |
+| 07.05/RF-010 | Completo | `AgendaAccessScope`; detalle 404, listado 403 |
+| 07.05/RF-011 | Completo | `faltantes` de la regla + alertas |
+| 07.05/RF-012 | Completo | `CierreDiagnosticoIncompletoException` |
+| 07.05/RF-013 | Completo (reutiliza 07.3) | `ReprogramarTurnoModalComponent` |
+| 07.05/RF-014 | Completo | `WhatsappDiagnosticoLink` + botón |
+| 07.05/RF-015 | Parcial | Duración por turno (`duracion_minutos`) y default servicio > parámetro; no hay configuración por profesional |
+
+| RN | Estado |
+|---|---|
+| 07.05/RN-001, RN-002 | Completos: requisitos y advertencias |
+| 07.05/RN-003 | Completo: disponibilidad global + agenda |
+| 07.05/RN-004, RN-005 | Completos: regla y cierre |
+| 07.05/RN-006 | Completo: reprogramación 07.3 |
+| 07.05/RN-007 | Completo: bitácora con usuario/fecha/motivo |
+| 07.05/RN-008 | Completo: alcance por sucursal |
+| 07.05/RN-009 | Completo: asignación manual; 07.05 no asigna |
+| 07.05/RN-010 | Completo: servicio > parámetro; RF-015 parcial |
+
+**Pendientes:** PDF de RF-008 (503), límite de exportación como parámetro configurable (hoy constante 5000), duración distinta por profesional (RF-015) y cancelación automática de turnos al retirar un diagnóstico desde 06.03 (`BajaAtencionAction` no toca turnos; queda como TODO). `RT-004` (unicidad de diagnóstico por tipo/período) no tiene RF y no se implementó.
+
+---
+
 ## Notas
 
-- No se agregaron librerías de PDF/Excel ni se modificó ningún otro módulo de negocio.
+- No se agregaron librerías de PDF/Excel. Los únicos cambios en módulos existentes son métodos batch de lectura acordados en `PatientDirectoryContract`, `ProfessionalDirectoryContract`, `SalaDirectoryContract` y `BranchDirectoryContract`, con tests propios; no se alteró su comportamiento previo.
 - El login real está implementado en la Fase 1 del módulo 02 y el alcance real por sucursal está activo desde la Fase 2. La UI obtiene token mediante el interceptor y las páginas de 01/02/03 ya respetan las sucursales asignadas.
 - `database/database.md` y `database/talitacumi_schema.sql` se actualizaron con la implementación real: `users` es la tabla física, Spatie administra roles/permisos y Sanctum usa `personal_access_tokens`. Las definiciones `usuario`/`rol`/`permiso`/`sesion` del SQL quedan como referencia aspiracional.
 - Si se reconstruye la imagen con `--no-dev`, volver a ejecutar `composer install` dentro del contenedor para correr tests.

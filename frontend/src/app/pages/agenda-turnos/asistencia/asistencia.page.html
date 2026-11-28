@@ -1,0 +1,56 @@
+<div class="space-y-5 sm:space-y-6">
+  <app-page-breadcrumb pageTitle="Asistencia" />
+
+  <div>
+    <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">Asistencia</h1>
+    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+      Indicadores por período y resumen diario por sucursal. El registro de asistencia se hace
+      desde la agenda o desde la ficha del turno.
+    </p>
+  </div>
+
+  <div class="flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-800">
+    @if (puedeIndicadores()) {
+      <button
+        type="button"
+        class="border-b-2 px-3 py-2 text-sm font-medium"
+        [class.border-brand-500]="pestana() === 'indicadores'"
+        [class.text-brand-600]="pestana() === 'indicadores'"
+        [class.border-transparent]="pestana() !== 'indicadores'"
+        [class.text-gray-500]="pestana() !== 'indicadores'"
+        (click)="cambiarPestana('indicadores')"
+      >
+        Indicadores
+      </button>
+    }
+    @if (puedeResumen()) {
+      <button
+        type="button"
+        class="border-b-2 px-3 py-2 text-sm font-medium"
+        [class.border-brand-500]="pestana() === 'resumen'"
+        [class.text-brand-600]="pestana() === 'resumen'"
+        [class.border-transparent]="pestana() !== 'resumen'"
+        [class.text-gray-500]="pestana() !== 'resumen'"
+        (click)="cambiarPestana('resumen')"
+      >
+        Resumen diario
+      </button>
+    }
+  </div>
+
+  @if (!puedeIndicadores() && !puedeResumen()) {
+    <app-alert
+      variant="warning"
+      title="Sin permisos"
+      message="No tenés permisos para consultar indicadores ni el resumen diario de asistencia."
+    />
+  } @else if (pestana() === 'indicadores' && puedeIndicadores()) {
+    <app-component-card title="Indicadores de asistencia">
+      <app-indicadores-asistencia />
+    </app-component-card>
+  } @else if (pestana() === 'resumen' && puedeResumen()) {
+    <app-component-card title="Resumen diario">
+      <app-resumen-diario-asistencia />
+    </app-component-card>
+  }
+</div>

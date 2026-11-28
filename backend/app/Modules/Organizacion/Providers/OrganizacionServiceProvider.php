@@ -12,6 +12,8 @@ use App\Modules\Organizacion\Contracts\EloquentSalaDirectory;
 use App\Modules\Organizacion\Contracts\ParameterAdminContract;
 use App\Modules\Organizacion\Contracts\ParameterReaderContract;
 use App\Modules\Organizacion\Contracts\SalaDirectoryContract;
+use App\Modules\Organizacion\Contracts\SalaPatronContract;
+use App\Modules\Organizacion\Contracts\StubSalaPatronContract;
 use App\Modules\Organizacion\Events\AmbienteCreated;
 use App\Modules\Organizacion\Events\AmbienteStatusChanged;
 use App\Modules\Organizacion\Events\AmbienteUpdated;
@@ -51,6 +53,7 @@ final class OrganizacionServiceProvider extends ServiceProvider
         $this->app->bind(AmbienteDirectoryContract::class, EloquentAmbienteDirectory::class);
         $this->app->bind(ParameterReaderContract::class, EloquentParameterReader::class);
         $this->app->bind(ParameterAdminContract::class, EloquentParameterAdmin::class);
+        $this->app->bind(SalaPatronContract::class, StubSalaPatronContract::class);
     }
 
     public function boot(): void

@@ -1,0 +1,289 @@
+<div class="space-y-6">
+  <app-page-breadcrumb pageTitle="Coordinación del diagnóstico" />
+
+  @if (loading()) {
+    <app-component-card title="Coordinación del diagnóstico">
+      <p class="text-sm text-gray-500 dark:text-gray-400">Cargando la coordinación del diagnóstico…</p>
+    </app-component-card>
+  }
+
+  @if (error(); as message) {
+    <app-alert variant="error" title="No se pudo cargar el diagnóstico" [message]="message" />
+    @if (errorCode() === 'AUDIT_UNAVAILABLE') {
+      <app-alert variant="warning" message="No se muestra el detalle porque la auditoría no está disponible. Reintentá en unos minutos." />
+    }
+  }
+
+  @if (data(); as data) {
+    <app-component-card title="Resumen del diagnóstico">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">{{ data.paciente.nombre_completo }}</h1>
+            @if (data.paciente.codigo) {
+              <app-badge color="gray" variant="light" size="sm">{{ data.paciente.codigo }}</app-badge>
+            }
+            <app-badge [color]="estadoGeneralColor(data.estado_general)" variant="light" size="sm">
+              {{ data.estado_general_label }}
+            </app-badge>
+            @if (data.estado !== 'activa') {
+              <app-badge color="gray" variant="light" size="sm">{{ data.estado_label }}</app-badge>
+            }
+          </div>
+          <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+            {{ data.tipo_diagnostico.nombre }} · {{ data.servicio.nombre }} · {{ data.sucursal.nombre }}
+          </p>
+          <p class="text-sm text-gray-500 dark:text-gray-400">
+            Período: {{ fechaLegible(data.fecha_inicio) }} — {{ fechaLegible(data.fecha_fin) }}
+          </p>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <button app-button variant="outline" size="sm" type="button" (click)="cargar()">Recargar</button>
+          @if (can()?.whatsapp && data.whatsapp.disponible) {
+            <button app-button variant="outline" size="sm" type="button" (click)="abrirWhatsapp()">
+              Avisar por WhatsApp
+            </button>
+          }
+          @if (can()?.programar && data.puestos.length === 0) {
+            <button app-button variant="outline" size="sm" type="button" (click)="abrirProgramarSinPuesto()">
+              Programar turno
+            </button>
+          }
+          @if (can()?.actualizar_estado) {
+            <button app-button variant="outline" size="sm" type="button" (click)="abrirEstado()">Actualizar estado</button>
+          }
+          @if (can()?.cancelar) {
+            <button app-button variant="link" size="sm" type="button" className="text-error-500 hover:text-error-600" (click)="abrirCancelar()">
+              Cancelar diagnóstico
+            </button>
+          }
+        </div>
+      </div>
+
+      @if (data.estado === 'retirada') {
+        <app-alert class="mt-4" variant="warning" message="El diagnóstico está retirado; no admite nuevos turnos." />
+      }
+      @if (data.estado_general === 'cancelado') {
+        <app-alert class="mt-4" variant="error" message="El diagnóstico está cancelado. Los turnos futuros fueron cancelados y los pasados se conservaron." />
+      }
+      @if (data.whatsapp.mensaje && !data.whatsapp.disponible && can()?.whatsapp) {
+        <app-alert class="mt-4" variant="info" [message]="data.whatsapp.mensaje" />
+      }
+    </app-component-card>
+
+    @if (data.faltantes.length > 0) {
+      <div class="space-y-2">
+        @for (faltante of data.faltantes; track faltante.tipo + '-' + faltante.especialidad_id) {
+          <app-alert
+            [variant]="faltante.tipo === 'sin_turno' ? 'warning' : 'info'"
+            [message]="faltante.mensaje"
+          />
+        }
+      </div>
+    }
+
+    <app-component-card title="Puestos requeridos" desc="Cobertura por especialidad y profesionales asociados al diagnóstico.">
+      <div class="space-y-4">
+        @for (puesto of data.puestos; track puesto.especialidad_id) {
+          <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p class="text-sm font-semibold text-gray-800 dark:text-white/90">{{ puesto.especialidad_nombre }}</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ puesto.vigentes }} de {{ puesto.cantidad_minima }} con turno · {{ puesto.asistidos }} asistieron
+                </p>
+              </div>
+              <div class="flex items-center gap-2">
+                <app-badge [color]="puesto.cubierto ? 'success' : 'warning'" variant="light" size="sm">
+                  {{ puesto.cubierto ? 'Cubierto' : 'Falta turno' }}
+                </app-badge>
+                @if (can()?.programar && puesto.vigentes < puesto.cantidad_minima) {
+                  <button app-button size="sm" type="button" (click)="abrirProgramar(puesto)">Programar</button>
+                }
+              </div>
+            </div>
+
+            <div class="mt-3 space-y-2">
+              @for (profesional of puesto.profesionales; track profesional.id) {
+                <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-800/60">
+                  <div class="min-w-0">
+                    <p class="text-sm text-gray-800 dark:text-white/90">{{ profesional.nombre_completo }}</p>
+                    @if (profesional.turno; as turno) {
+                      <p class="text-xs text-gray-500 dark:text-gray-400">
+                        {{ fechaLegible(turno.fecha) }} · {{ horaLegible(turno.hora_inicio) }}–{{ horaLegible(turno.hora_fin) }}
+                      </p>
+                    } @else {
+                      <p class="text-xs text-warning-600 dark:text-warning-400">Sin turno asignado</p>
+                    }
+                  </div>
+                  <div class="flex items-center gap-2">
+                    @if (profesional.turno; as turno) {
+                      <app-badge [color]="estadoTurnoColor(turno.estado)" variant="light" size="sm">{{ turno.estado_label }}</app-badge>
+                    } @else if (can()?.programar && profesional.disponible_para_programar) {
+                      <button app-button variant="outline" size="sm" type="button" (click)="abrirProgramar(puesto)">Programar turno</button>
+                    } @else {
+                      <app-badge color="gray" variant="light" size="sm">No disponible en la sucursal</app-badge>
+                    }
+                  </div>
+                </div>
+              } @empty {
+                <app-alert
+                  variant="warning"
+                  message="No hay profesionales asociados a esta especialidad. Asigná el profesional en la ficha del diagnóstico (06.03)."
+                />
+              }
+            </div>
+          </div>
+        } @empty {
+          <app-alert variant="warning" message="El tipo de diagnóstico no tiene especialidades requeridas; no se puede calcular la cobertura." />
+        }
+      </div>
+    </app-component-card>
+
+    <app-component-card title="Turnos del diagnóstico" desc="Reprogramación y asistencia se gestionan con 07.3 y 07.4; esta pantalla solo refleja el resultado.">
+      <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+        <table app-table class="min-w-full">
+          <thead>
+            <tr>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Profesional</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Fecha</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Hora</th>
+              <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Estado</th>
+              <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
+            </tr>
+          </thead>
+          <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+            @for (turno of data.turnos; track turno.id) {
+              <tr app-table-row>
+                <td app-table-cell class="px-4 py-3 text-sm text-gray-800 dark:text-white/90">{{ turno.profesional_nombre }}</td>
+                <td app-table-cell class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">{{ fechaLegible(turno.fecha) }}</td>
+                <td app-table-cell class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">{{ horaLegible(turno.hora_inicio) }}–{{ horaLegible(turno.hora_fin) }}</td>
+                <td app-table-cell class="px-4 py-3">
+                  <app-badge [color]="estadoTurnoColor(turno.estado)" variant="light" size="sm">{{ turno.estado_label }}</app-badge>
+                </td>
+                <td app-table-cell class="px-4 py-3 text-end">
+                  <div class="flex flex-wrap justify-end gap-1">
+                    @if (turno.puede_reprogramar) {
+                      <button app-button variant="ghost" size="sm" type="button" (click)="abrirReprogramar(turno)">Reprogramar</button>
+                    }
+                    @if (turno.puede_registrar_asistencia) {
+                      <button app-button variant="ghost" size="sm" type="button" (click)="toggleAsistencia(turno.id)">
+                        {{ estaAsistenciaAbierta(turno.id) ? 'Ocultar asistencia' : 'Asistencia' }}
+                      </button>
+                    }
+                  </div>
+                </td>
+              </tr>
+            } @empty {
+              <tr app-table-row>
+                <td app-table-cell colspan="5" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                  Todavía no hay turnos programados para este diagnóstico.
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="mt-4 space-y-3">
+        @for (turno of data.turnos; track turno.id) {
+          @if (estaAsistenciaAbierta(turno.id)) {
+            <app-asistencia-turno-acciones [turnoId]="turno.id" (actualizado)="cargar()" />
+          }
+        }
+      </div>
+    </app-component-card>
+
+    <app-programar-turno-diagnostico-modal
+      [open]="programarOpen()"
+      [diagnosticoId]="data.id"
+      [profesionales]="data.profesionales"
+      [especialidadId]="programarEspecialidadId()"
+      [fechaInicio]="data.fecha_inicio"
+      [fechaFin]="data.fecha_fin"
+      [hoy]="hoy()"
+      (closed)="programarOpen.set(false)"
+      (completed)="onProgramado()"
+    />
+
+    <app-reprogramar-turno-modal
+      [open]="reprogramarOpen()"
+      [turnoId]="reprogramarTurnoId()"
+      (closed)="reprogramarOpen.set(false)"
+      (completed)="onReprogramado()"
+    />
+
+    <app-modal [open]="cancelarOpen()" title="Cancelar diagnóstico" size="md" (closed)="cancelarOpen.set(false)">
+      <div modal-body class="space-y-4">
+        <app-alert
+          variant="warning"
+          message="Se cancelarán los turnos futuros programados. Los turnos pasados (asistió/faltó) se conservan. La acción queda en bitácora."
+        />
+        @if (cancelarError(); as message) {
+          <app-alert variant="error" [message]="message" />
+        }
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Motivo *</label>
+          <textarea
+            app-textarea
+            rows="3"
+            placeholder="Motivo de la cancelación"
+            [value]="cancelarMotivo()"
+            (input)="cancelarMotivo.set($any($event.target).value)"
+          ></textarea>
+        </div>
+      </div>
+      <div modal-footer class="flex justify-end gap-2">
+        <button app-button variant="outline" type="button" [disabled]="cancelando()" (click)="cancelarOpen.set(false)">Volver</button>
+        <button app-button type="button" [disabled]="cancelando()" (click)="confirmarCancelar()">
+          {{ cancelando() ? 'Cancelando…' : 'Confirmar cancelación' }}
+        </button>
+      </div>
+    </app-modal>
+
+    <app-modal [open]="estadoOpen()" title="Actualizar estado general" size="md" (closed)="estadoOpen.set(false)">
+      <div modal-body class="space-y-4">
+        <app-alert
+          variant="info"
+          message="El estado debe coincidir con la cobertura y las asistencias reales. Para cerrar como Completo, todos los puestos deben tener un turno con estado Asistió."
+        />
+        @if (estadoError(); as message) {
+          <app-alert variant="error" [message]="message" />
+        }
+        @if (estadoFaltantes().length > 0) {
+          <ul class="list-disc space-y-1 ps-5 text-sm text-gray-600 dark:text-gray-300">
+            @for (faltante of estadoFaltantes(); track $index) {
+              <li>{{ faltante }}</li>
+            }
+          </ul>
+        }
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Estado general *</label>
+          <app-select-field
+            [options]="estadoOpciones"
+            [value]="estadoSolicitado()"
+            ariaLabel="Estado general del diagnóstico"
+            (valueChange)="estadoSolicitado.set($any($event))"
+          />
+        </div>
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Motivo *</label>
+          <textarea
+            app-textarea
+            rows="3"
+            placeholder="Motivo del cambio de estado"
+            [value]="estadoMotivo()"
+            (input)="estadoMotivo.set($any($event.target).value)"
+          ></textarea>
+        </div>
+      </div>
+      <div modal-footer class="flex justify-end gap-2">
+        <button app-button variant="outline" type="button" [disabled]="guardandoEstado()" (click)="estadoOpen.set(false)">Volver</button>
+        <button app-button type="button" [disabled]="guardandoEstado()" (click)="guardarEstado()">
+          {{ guardandoEstado() ? 'Guardando…' : 'Guardar estado' }}
+        </button>
+      </div>
+    </app-modal>
+  }
+</div>

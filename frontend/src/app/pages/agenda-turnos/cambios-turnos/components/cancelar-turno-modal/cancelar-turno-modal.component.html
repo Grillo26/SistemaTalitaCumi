@@ -1,0 +1,128 @@
+<app-modal
+  [open]="open()"
+  size="md"
+  [title]="texts.cancelTitle"
+  [subtitle]="turno()?.paciente?.nombre ?? ''"
+  [showFooter]="true"
+  (closed)="cerrar()"
+>
+  <div modal-body class="space-y-4">
+    @if (loading()) {
+      <p class="text-sm text-gray-500 dark:text-gray-400">Cargando turno…</p>
+    }
+
+    @if (error(); as message) {
+      <app-alert variant="error" title="No se pudo cancelar" [message]="message" />
+    }
+
+    @if (resultado(); as resultado) {
+      <app-alert variant="success" title="Turno cancelado" [message]="texts.successCancel" />
+      <div class="rounded-xl border border-gray-200 p-4 text-sm dark:border-gray-800">
+        <p class="font-medium text-gray-800 dark:text-white/90">{{ resultado.turno.paciente?.nombre }}</p>
+        <p class="mt-1 text-gray-600 dark:text-gray-300">
+          {{ fechaLegible(resultado.turno.fecha) }} · {{ resultado.turno.hora_inicio }}–{{ resultado.turno.hora_fin }}
+        </p>
+        <p class="mt-1 text-gray-600 dark:text-gray-300">{{ resultado.motivo.nombre }}</p>
+      </div>
+
+      @if (resultado.saldo.disponible) {
+        <p class="text-sm text-gray-600 dark:text-gray-300">
+          {{ texts.saldoActual }}: {{ resultado.saldo.saldo_actual }} ·
+          {{ texts.saldoResultante }}: {{ resultado.saldo.saldo_resultante }}
+        </p>
+      } @else {
+        <p class="text-xs text-gray-500 dark:text-gray-400">{{ resultado.saldo.mensaje }}</p>
+      }
+
+      @if (whatsapp(); as whatsapp) {
+        @if (whatsapp.disponible && whatsapp.whatsapp_url) {
+          <button app-button variant="outline" type="button" (click)="abrirWhatsapp()">
+            {{ texts.whatsapp }}
+          </button>
+        } @else if (whatsapp.mensaje) {
+          <p class="text-xs text-gray-500 dark:text-gray-400">{{ whatsapp.mensaje }}</p>
+        }
+      }
+    } @else if (!loading() && turno(); as turno) {
+      <div class="rounded-xl border border-gray-200 p-4 text-sm dark:border-gray-800">
+        <p class="font-medium text-gray-800 dark:text-white/90">{{ turno.paciente.nombre }}</p>
+        <p class="mt-1 text-gray-600 dark:text-gray-300">
+          {{ turno.servicio.nombre }} · {{ fechaLegible(turno.fecha) }} ·
+          {{ turno.hora_inicio }}–{{ turno.hora_fin }}
+        </p>
+        <p class="mt-1 text-gray-600 dark:text-gray-300">
+          {{ turno.profesional?.nombre ?? texts.unassigned }} ·
+          {{ turno.sala?.nombre ?? texts.sinSala }}
+        </p>
+      </div>
+
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          {{ texts.motive }} *
+        </label>
+        <app-select-field
+          [options]="motivoOpciones()"
+          [value]="motivoId()"
+          [placeholder]="texts.motivePlaceholder"
+          ariaLabel="Motivo de la cancelación"
+          (valueChange)="motivoId.set($event); preview.set(null)"
+        />
+      </div>
+
+      @if (requiereTexto()) {
+        <div>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            {{ texts.otherDetail }} *
+          </label>
+          <textarea
+            app-textarea
+            rows="2"
+            maxlength="500"
+            [value]="motivoTexto()"
+            (input)="motivoTexto.set($any($event.target).value); preview.set(null)"
+          ></textarea>
+        </div>
+      }
+
+      <div class="flex justify-end">
+        <button app-button variant="outline" type="button" [disabled]="previewLoading()" (click)="previsualizar()">
+          {{ previewLoading() ? texts.processing : texts.preview }}
+        </button>
+      </div>
+
+      @if (preview(); as preview) {
+        <div class="rounded-xl border border-gray-200 p-4 text-sm dark:border-gray-800">
+          <p class="font-semibold text-gray-800 dark:text-white/90">{{ texts.previewTitle }}</p>
+          <p class="mt-1 text-gray-600 dark:text-gray-300">{{ preview.motivo.nombre }}</p>
+
+          @if (preview.saldo.disponible) {
+            <p class="mt-2 text-gray-600 dark:text-gray-300">
+              {{ texts.saldoActual }}: {{ preview.saldo.saldo_actual }} ·
+              {{ texts.saldoResultante }}: {{ preview.saldo.saldo_resultante }}
+            </p>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ preview.saldo.mensaje }}</p>
+          } @else {
+            <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ preview.saldo.mensaje }}</p>
+          }
+        </div>
+      }
+    }
+  </div>
+
+  <div modal-footer class="flex flex-wrap justify-end gap-2">
+    <button app-button variant="outline" type="button" [disabled]="saving()" (click)="cerrar()">
+      {{ resultado() ? texts.close : texts.cancel }}
+    </button>
+    @if (!resultado() && turno() !== null) {
+      <button
+        app-button
+        variant="destructive"
+        type="button"
+        [disabled]="saving() || previewLoading() || !puedeConfirmar()"
+        (click)="confirmar()"
+      >
+        {{ saving() ? texts.processing : texts.confirm }}
+      </button>
+    }
+  </div>
+</app-modal>

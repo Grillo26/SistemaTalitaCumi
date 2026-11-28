@@ -2,6 +2,7 @@
 
 namespace App\Modules\Pacientes\Providers;
 
+use App\Modules\AgendaTurnos\Contracts\EloquentPatientAttendanceSummary;
 use App\Modules\Pacientes\Contracts\DiagnosticTypeDirectoryContract;
 use App\Modules\Pacientes\Contracts\EloquentFichaIngresoDirectory;
 use App\Modules\Pacientes\Contracts\EloquentPatientConsent;
@@ -21,7 +22,6 @@ use App\Modules\Pacientes\Contracts\PatientPaymentStatusContract;
 use App\Modules\Pacientes\Contracts\PatientServicesSummaryContract;
 use App\Modules\Pacientes\Contracts\StubDiagnosticTypeDirectoryContract;
 use App\Modules\Pacientes\Contracts\StubEntrevistaDirectoryContract;
-use App\Modules\Pacientes\Contracts\StubPatientAttendanceSummaryContract;
 use App\Modules\Pacientes\Contracts\StubPatientEnrollmentDirectoryContract;
 use App\Modules\Pacientes\Contracts\StubPatientPaymentAlertContract;
 use App\Modules\Pacientes\Contracts\StubPatientPaymentStatusContract;
@@ -76,7 +76,7 @@ final class PacientesServiceProvider extends ServiceProvider
         $this->app->bind(PatientConsentContract::class, EloquentPatientConsent::class);
         $this->app->bind(PatientServicesSummaryContract::class, StubPatientServicesSummaryContract::class);
         $this->app->bind(PatientPaymentStatusContract::class, StubPatientPaymentStatusContract::class);
-        $this->app->bind(PatientAttendanceSummaryContract::class, StubPatientAttendanceSummaryContract::class);
+        $this->app->bind(PatientAttendanceSummaryContract::class, EloquentPatientAttendanceSummary::class);
         $this->app->bind(TutorContactContract::class, StubTutorContactContract::class);
         $this->app->bind(PatientPaymentAlertContract::class, StubPatientPaymentAlertContract::class);
         $this->app->bind(EntrevistaDirectoryContract::class, StubEntrevistaDirectoryContract::class);

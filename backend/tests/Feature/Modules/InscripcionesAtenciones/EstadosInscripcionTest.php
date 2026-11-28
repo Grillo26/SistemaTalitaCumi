@@ -148,7 +148,9 @@ final class EstadosInscripcionTest extends PaquetesSesionesTestCase
             '/api/inscripciones-atenciones/estados/inscripciones/inscripcion_sala/'.$creada['id'].'/prechequeo-pausa',
         )
             ->assertOk()
-            ->assertJsonPath('data.turnos.disponible', false)
+            ->assertJsonPath('data.turnos.disponible', true)
+            ->assertJsonPath('data.turnos.data.cantidad', 0)
+            ->assertJsonPath('data.turnos.data.fechas', [])
             ->assertJsonPath('data.pago', null);
 
         $this->postJson(

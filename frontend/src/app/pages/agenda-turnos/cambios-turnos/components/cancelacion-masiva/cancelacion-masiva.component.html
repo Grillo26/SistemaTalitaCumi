@@ -1,0 +1,200 @@
+<div class="space-y-4">
+  @if (error(); as message) {
+    <app-alert variant="error" title="No se pudo completar la operación" [message]="message" />
+  }
+
+  @if (resultado(); as resultado) {
+    <app-alert
+      variant="success"
+      title="Cancelación masiva completada"
+      [message]="resultado.cantidad + ' turnos cancelados. Lote ' + resultado.lote_id"
+    />
+    <p class="text-sm text-gray-600 dark:text-gray-300">
+      {{ resultado.motivo.nombre }} ·
+      {{ resultado.consume_saldo ? 'Descuenta saldo' : 'No descuenta saldo' }}
+    </p>
+  } @else {
+    <div>
+      <app-inscripcion-paciente-search
+        [selected]="paciente()"
+        (selectedChange)="onPaciente($event)"
+        [required]="true"
+      />
+    </div>
+
+    @if (paciente() !== null) {
+      <div class="flex flex-wrap items-end justify-between gap-3">
+        <p class="text-sm text-gray-600 dark:text-gray-300">{{ texts.massHint }}</p>
+        <div class="min-w-52">
+          <app-select-field
+            [options]="servicios()"
+            [value]="servicioFiltro()"
+            ariaLabel="Filtrar por servicio"
+            (valueChange)="cambiarServicio($event)"
+          />
+        </div>
+      </div>
+
+      @if (loading()) {
+        <p class="text-sm text-gray-500 dark:text-gray-400">Cargando orígenes…</p>
+      } @else if (origenesVisibles().length === 0) {
+        <app-alert variant="info" [message]="texts.noOrigins" />
+      } @else {
+        <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+          <table class="min-w-full text-left text-sm">
+            <thead class="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800/60 dark:text-gray-400">
+              <tr>
+                <th class="px-3 py-2"></th>
+                <th class="px-3 py-2">{{ texts.origin }}</th>
+                <th class="px-3 py-2">{{ texts.service }}</th>
+                <th class="px-3 py-2">{{ texts.room }}</th>
+                <th class="px-3 py-2">{{ texts.period }}</th>
+                <th class="px-3 py-2">{{ texts.eligible }}</th>
+                <th class="px-3 py-2">{{ texts.excluded }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (origen of origenesVisibles(); track origen.tipo + ':' + origen.id) {
+                <tr class="border-t border-gray-100 dark:border-gray-800">
+                  <td class="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      class="size-4"
+                      [checked]="isSelected(origen)"
+                      (change)="toggle(origen)"
+                    />
+                  </td>
+                  <td class="px-3 py-2 text-gray-800 dark:text-white/90">
+                    {{ origen.tipo === 'paquete_sesiones' ? 'Paquete' : 'Sala' }} #{{ origen.id }}
+                  </td>
+                  <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ origen.servicio.nombre }}</td>
+                  <td class="px-3 py-2 text-gray-600 dark:text-gray-300">
+                    {{ origen.sala?.nombre ?? texts.sinSala }}
+                  </td>
+                  <td class="px-3 py-2 text-gray-600 dark:text-gray-300">
+                    {{ fechaLegible(origen.fecha_inicio) }} – {{ fechaLegible(origen.fecha_fin) }}
+                  </td>
+                  <td class="px-3 py-2 font-medium text-gray-800 dark:text-white/90">{{ origen.elegibles }}</td>
+                  <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ origen.excluidos }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <div class="grid gap-3 sm:grid-cols-[1fr_2fr_auto] sm:items-end">
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              {{ texts.motive }} *
+            </label>
+            <app-select-field
+              [options]="motivoOpciones()"
+              [value]="motivoId()"
+              [placeholder]="texts.motivePlaceholder"
+              ariaLabel="Motivo de la cancelación masiva"
+              (valueChange)="motivoId.set($event); preview.set(null); confirmar.set(false)"
+            />
+          </div>
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              {{ texts.otherDetail }}
+            </label>
+            <textarea
+              app-textarea
+              rows="1"
+              maxlength="500"
+              [value]="motivoTexto()"
+              (input)="motivoTexto.set($any($event.target).value); preview.set(null)"
+            ></textarea>
+          </div>
+          <button app-button variant="outline" type="button" [disabled]="previewLoading()" (click)="previsualizar()">
+            {{ previewLoading() ? texts.processing : texts.preview }}
+          </button>
+        </div>
+      }
+
+      @if (preview(); as preview) {
+        <div class="space-y-3 rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+          <div class="flex flex-wrap items-center gap-3 text-sm">
+            <span class="font-semibold text-gray-800 dark:text-white/90">{{ texts.previewTitle }}</span>
+            <span class="rounded-full bg-warning-50 px-2 py-0.5 text-xs text-warning-700 dark:bg-warning-500/10 dark:text-warning-400">
+              {{ texts.eligible }}: {{ preview.cantidades.elegibles }}
+            </span>
+            <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+              {{ texts.excluded }}: {{ preview.cantidades.excluidos }}
+            </span>
+          </div>
+
+          <p class="text-sm text-gray-600 dark:text-gray-300">{{ preview.efecto_saldo }}</p>
+
+          <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800">
+            <table class="min-w-full text-left text-sm">
+              <thead class="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800/60 dark:text-gray-400">
+                <tr>
+                  <th class="px-3 py-2">{{ texts.date }}</th>
+                  <th class="px-3 py-2">{{ texts.startTime }}</th>
+                  <th class="px-3 py-2">{{ texts.service }}</th>
+                  <th class="px-3 py-2">{{ texts.professional }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (turno of preview.elegibles; track turno.id) {
+                  <tr class="border-t border-gray-100 dark:border-gray-800">
+                    <td class="px-3 py-2 text-gray-800 dark:text-white/90">{{ fechaLegible(turno.fecha) }}</td>
+                    <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ turno.hora_inicio }}</td>
+                    <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ turno.servicio.nombre }}</td>
+                    <td class="px-3 py-2 text-gray-600 dark:text-gray-300">
+                      {{ turno.profesional?.nombre ?? texts.unassigned }}
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="4" class="px-3 py-3 text-center text-sm text-gray-500">{{ texts.noEligible }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          @if (preview.excluidos.length > 0) {
+            <div class="rounded-lg bg-gray-50 p-3 text-xs text-gray-600 dark:bg-gray-800/60 dark:text-gray-300">
+              <p class="font-medium">{{ texts.excluded }}</p>
+              @for (excluido of preview.excluidos; track excluido.turno_id) {
+                <p class="mt-1">
+                  {{ fechaLegible(excluido.fecha) }} · {{ excluido.hora_inicio }} ·
+                  {{ excluido.estado_label }}: {{ excluido.motivo }}
+                </p>
+              }
+            </div>
+          }
+
+          @if (preview.puede_confirmar) {
+            <label class="flex items-start gap-2 rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800 dark:border-warning-500/30 dark:bg-warning-500/10 dark:text-warning-300">
+              <input
+                type="checkbox"
+                class="mt-0.5 size-4"
+                [checked]="confirmar()"
+                (change)="confirmar.set($any($event.target).checked)"
+              />
+              <span>{{ texts.massConfirm }} ({{ preview.cantidades.elegibles }} turnos)</span>
+            </label>
+          }
+        </div>
+      }
+    }
+  }
+</div>
+
+@if (preview() !== null || resultado() !== null) {
+  <div class="mt-4 flex justify-end">
+    <button
+      app-button
+      variant="destructive"
+      type="button"
+      [disabled]="!puedeConfirmar()"
+      (click)="ejecutar()"
+    >
+      {{ saving() ? texts.processing : texts.confirmMass }}
+    </button>
+  </div>
+}

@@ -18,6 +18,14 @@ interface BranchDirectoryContract
     public function estaActiva(int $sucursalId): bool;
 
     /**
+     * Resúmenes en lote para selectores de módulos consumidores.
+     *
+     * @param  list<int>  $sucursalIds
+     * @return array<int, BranchResumen>
+     */
+    public function resumenes(array $sucursalIds): array;
+
+    /**
      * @throws InactiveBranchException
      * @throws BranchNotFoundException
      */

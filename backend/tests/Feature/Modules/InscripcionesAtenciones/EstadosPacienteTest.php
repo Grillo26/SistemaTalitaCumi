@@ -139,7 +139,7 @@ final class EstadosPacienteTest extends InscripcionesAtencionesTestCase
             '/api/inscripciones-atenciones/estados/pacientes/'.$escenario['paciente']->id.'/retiro/prechequeo',
         )
             ->assertOk()
-            ->assertJsonPath('data.prechequeo.turnos.disponible', false)
+            ->assertJsonPath('data.prechequeo.turnos.disponible', true)
             ->assertJsonPath('data.prechequeo.pago.disponible', false)
             ->assertJsonPath('data.preview.conteos.total', 1);
     }

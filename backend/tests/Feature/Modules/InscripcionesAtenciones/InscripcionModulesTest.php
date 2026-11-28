@@ -6,7 +6,7 @@ use Spatie\Permission\Models\Role;
 
 final class InscripcionModulesTest extends InscripcionesAtencionesTestCase
 {
-    public function test_ficha_works_while_payment_and_attendance_are_unavailable(): void
+    public function test_ficha_works_while_payment_is_unavailable(): void
     {
         $scenario = $this->scenario();
         $created = $this->crearInscripcion($scenario)->assertCreated()->json('data');
@@ -14,8 +14,8 @@ final class InscripcionModulesTest extends InscripcionesAtencionesTestCase
         $this->getJson('/api/inscripciones-atenciones/salas-grupales/'.$created['id'])
             ->assertOk()
             ->assertJsonPath('can.pago_disponible', false)
-            ->assertJsonPath('can.asistencia_disponible', false)
-            ->assertJsonPath('can.turnos_futuros_disponible', false)
+            ->assertJsonPath('can.asistencia_disponible', true)
+            ->assertJsonPath('can.turnos_futuros_disponible', true)
             ->assertJsonPath('can.pdf', false)
             ->assertJsonPath('can.export', false);
     }
@@ -35,18 +35,22 @@ final class InscripcionModulesTest extends InscripcionesAtencionesTestCase
             ->assertJsonPath('modulo', 'Pagos y caja');
     }
 
-    public function test_attendance_and_future_turns_endpoints_are_unavailable(): void
+    public function test_attendance_returns_counts_and_future_turns_returns_count(): void
     {
         $scenario = $this->scenario('administracion');
         $created = $this->crearInscripcion($scenario)->assertCreated()->json('data');
 
         $this->getJson('/api/inscripciones-atenciones/salas-grupales/'.$created['id'].'/asistencia')
-            ->assertStatus(503)
-            ->assertJsonPath('modulo', 'Agenda y turnos');
+            ->assertOk()
+            ->assertJsonPath('data.asistencias', 0)
+            ->assertJsonPath('data.faltas', 0)
+            ->assertJsonPath('data.cancelados', 0)
+            ->assertJsonPath('data.total', 0);
 
         $this->getJson('/api/inscripciones-atenciones/salas-grupales/'.$created['id'].'/turnos-futuros')
-            ->assertStatus(503)
-            ->assertJsonPath('modulo', 'Agenda y turnos');
+            ->assertOk()
+            ->assertJsonPath('data.cantidad', 0)
+            ->assertJsonPath('data.fechas', []);
     }
 
     public function test_receipt_data_uses_center_configuration_and_legend(): void

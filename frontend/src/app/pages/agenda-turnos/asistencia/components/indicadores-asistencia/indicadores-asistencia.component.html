@@ -1,0 +1,158 @@
+<div class="space-y-4">
+  @if (error(); as message) {
+    <app-alert variant="error" title="No se pudieron cargar los indicadores" [message]="message" />
+  }
+
+  <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div>
+      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Desde</label>
+      <input app-input type="date" [value]="desde()" (input)="desde.set($any($event.target).value)" />
+    </div>
+    <div>
+      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Hasta</label>
+      <input app-input type="date" [value]="hasta()" (input)="hasta.set($any($event.target).value)" />
+    </div>
+    <div>
+      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Sucursal</label>
+      <app-select-field
+        [options]="sucursalOpciones()"
+        [value]="sucursalId()"
+        ariaLabel="Sucursal de los indicadores"
+        (valueChange)="cambiarSucursal($event)"
+      />
+    </div>
+    <div>
+      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Agrupar por</label>
+      <app-select-field
+        [options]="agrupacionOpciones"
+        [value]="agrupacion()"
+        ariaLabel="Agrupar indicadores"
+        (valueChange)="agrupacion.set($event)"
+      />
+    </div>
+    <div>
+      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Sala</label>
+      <app-select-field
+        [options]="salaOpciones()"
+        [value]="salaId()"
+        ariaLabel="Filtrar por sala"
+        (valueChange)="salaId.set($event)"
+      />
+    </div>
+    <div>
+      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Servicio</label>
+      <app-select-field
+        [options]="servicioOpciones()"
+        [value]="servicioId()"
+        ariaLabel="Filtrar por servicio"
+        (valueChange)="servicioId.set($event)"
+      />
+    </div>
+    <div>
+      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Profesional</label>
+      <app-select-field
+        [options]="profesionalOpciones()"
+        [value]="profesionalId()"
+        ariaLabel="Filtrar por profesional"
+        (valueChange)="profesionalId.set($event)"
+      />
+    </div>
+    <div class="flex items-end gap-2">
+      <button app-button type="button" [disabled]="loading()" (click)="cargar(1)">
+        {{ loading() ? 'Consultando…' : 'Consultar' }}
+      </button>
+      @if (puedeExportar() && canExportar()) {
+        <button app-button variant="outline" type="button" [disabled]="exporting()" (click)="exportar()">
+          {{ exporting() ? 'Exportando…' : 'Exportar CSV' }}
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (agrupacion() === 'paciente') {
+    <app-alert
+      variant="info"
+      message="La exportación por paciente no está habilitada por privacidad. Para exportar, agrupá por sala, servicio, profesional, sucursal o día."
+    />
+  }
+
+  @if (data(); as data) {
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+        <p class="text-xs uppercase tracking-wide text-gray-400">Atendidos</p>
+        <p class="mt-1 text-xl font-semibold text-gray-800 dark:text-white/90">{{ data.totales.asistidos }}</p>
+      </div>
+      <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+        <p class="text-xs uppercase tracking-wide text-gray-400">Faltaron</p>
+        <p class="mt-1 text-xl font-semibold text-gray-800 dark:text-white/90">{{ data.totales.faltos }}</p>
+      </div>
+      <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+        <p class="text-xs uppercase tracking-wide text-gray-400">Cancelados</p>
+        <p class="mt-1 text-xl font-semibold text-gray-800 dark:text-white/90">{{ data.totales.cancelados }}</p>
+      </div>
+      <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+        <p class="text-xs uppercase tracking-wide text-gray-400">Pendientes</p>
+        <p class="mt-1 text-xl font-semibold text-gray-800 dark:text-white/90">{{ data.totales.pendientes }}</p>
+      </div>
+      <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+        <p class="text-xs uppercase tracking-wide text-gray-400">{{ texts.percentage }}</p>
+        <p class="mt-1 text-xl font-semibold text-gray-800 dark:text-white/90">
+          {{ porcentaje(data.totales.porcentaje) }}
+        </p>
+      </div>
+    </div>
+
+    <p class="text-sm text-gray-500 dark:text-gray-400">
+      {{ data.sucursal.nombre }} · {{ data.periodo.desde }} al {{ data.periodo.hasta }} ·
+      {{ data.meta.total }} grupos
+    </p>
+
+    <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+      <table class="min-w-full text-left text-sm">
+        <thead class="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800/60 dark:text-gray-400">
+          <tr>
+            <th class="px-3 py-2">Grupo</th>
+            <th class="px-3 py-2">Total</th>
+            <th class="px-3 py-2">Asistidos</th>
+            <th class="px-3 py-2">Faltos</th>
+            <th class="px-3 py-2">Cancelados</th>
+            <th class="px-3 py-2">Pendientes</th>
+            <th class="px-3 py-2">Porcentaje</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (fila of data.filas; track fila.clave) {
+            <tr class="border-t border-gray-100 dark:border-gray-800">
+              <td class="px-3 py-2 text-gray-800 dark:text-white/90">{{ fila.etiqueta }}</td>
+              <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ fila.total }}</td>
+              <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ fila.asistidos }}</td>
+              <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ fila.faltos }}</td>
+              <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ fila.cancelados }}</td>
+              <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ fila.pendientes }}</td>
+              <td class="px-3 py-2 font-medium text-gray-800 dark:text-white/90">
+                {{ porcentaje(fila.porcentaje) }}
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="7" class="px-3 py-4 text-center text-sm text-gray-500">
+                {{ texts.noData }} Probá ampliar el rango de fechas.
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    @if (data.meta.last_page > 1) {
+      <app-pagination
+        [currentPage]="data.meta.current_page"
+        [totalPages]="data.meta.last_page"
+        variant="text-icon"
+        (pageChange)="cargar($event)"
+      />
+    }
+  } @else if (loading()) {
+    <p class="text-sm text-gray-500 dark:text-gray-400">Cargando indicadores…</p>
+  }
+</div>

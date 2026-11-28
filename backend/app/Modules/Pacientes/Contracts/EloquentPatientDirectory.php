@@ -24,6 +24,32 @@ final class EloquentPatientDirectory implements PatientDirectoryContract
         return Paciente::query()->whereKey($pacienteId)->exists();
     }
 
+    /**
+     * @param  list<int>  $pacienteIds
+     * @return array<int, string>
+     */
+    public function nombres(array $pacienteIds): array
+    {
+        $ids = array_values(array_unique(array_map(
+            static fn (mixed $id): int => (int) $id,
+            array_filter($pacienteIds, static fn (mixed $id): bool => (int) $id > 0),
+        )));
+
+        if ($ids === []) {
+            return [];
+        }
+
+        return Paciente::query()
+            ->whereIn('id', $ids)
+            ->get(['id', 'nombre', 'apellido_paterno', 'apellido_materno'])
+            ->mapWithKeys(
+                static fn (Paciente $paciente): array => [
+                    (int) $paciente->id => $paciente->nombre_completo,
+                ],
+            )
+            ->all();
+    }
+
     public function resumen(int $pacienteId): PacienteResumen
     {
         $paciente = $this->find($pacienteId);

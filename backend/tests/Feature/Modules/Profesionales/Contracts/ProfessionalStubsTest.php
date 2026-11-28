@@ -2,12 +2,12 @@
 
 namespace Tests\Feature\Modules\Profesionales\Contracts;
 
+use App\Modules\AgendaTurnos\Contracts\EloquentProfessionalSchedule;
 use App\Modules\CatalogoServicios\Contracts\EloquentProfessionalDiagnosticRequirements;
 use App\Modules\Profesionales\Actions\Directorio\DeactivateProfesionalAction;
 use App\Modules\Profesionales\Contracts\ProfessionalDiagnosticRequirementsContract;
 use App\Modules\Profesionales\Contracts\ProfessionalExporterContract;
 use App\Modules\Profesionales\Contracts\ProfessionalScheduleContract;
-use App\Modules\Profesionales\Contracts\StubProfessionalScheduleContract;
 use App\Modules\Profesionales\Contracts\UnavailableProfessionalExporter;
 use Carbon\CarbonImmutable;
 use LogicException;
@@ -15,26 +15,20 @@ use Tests\Feature\Modules\Profesionales\ProfesionalesTestCase;
 
 final class ProfessionalStubsTest extends ProfesionalesTestCase
 {
-    public function test_schedule_contract_is_bound_to_clear_stub(): void
+    public function test_schedule_contract_is_bound_to_agenda_implementation(): void
     {
         $contract = app(ProfessionalScheduleContract::class);
 
-        $this->assertInstanceOf(StubProfessionalScheduleContract::class, $contract);
-
-        $this->expectException(LogicException::class);
-        $this->expectExceptionMessage('Módulo 07 — Agenda y turnos no implementado todavía.');
-
-        $contract->haySolapamiento(1, CarbonImmutable::now(), CarbonImmutable::now()->addHour());
-    }
-
-    public function test_future_assignments_stub_is_explicit(): void
-    {
-        $contract = app(ProfessionalScheduleContract::class);
-
-        $this->expectException(LogicException::class);
-        $this->expectExceptionMessage('Módulo 07 — Agenda y turnos no implementado todavía.');
-
-        $contract->tieneAsignacionesFuturas(1, CarbonImmutable::now());
+        $this->assertInstanceOf(EloquentProfessionalSchedule::class, $contract);
+        $this->assertFalse($contract->haySolapamiento(
+            999999,
+            CarbonImmutable::now(),
+            CarbonImmutable::now()->addHour(),
+        ));
+        $this->assertFalse($contract->tieneAsignacionesFuturas(
+            999999,
+            CarbonImmutable::now(),
+        ));
     }
 
     public function test_diagnostic_requirements_are_provided_by_catalog(): void

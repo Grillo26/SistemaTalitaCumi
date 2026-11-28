@@ -4,7 +4,6 @@ import { guestGuard } from './core/guards/guest.guard';
 import { permissionGuard } from './core/guards/permission.guard';
 import { AppLayoutComponent } from './layout/shell/app-layout/app-layout.component';
 import { HomeComponent } from './pages/home/home.component';
-import { AgendaComponent } from './pages/agenda/agenda.component';
 import { PagosComponent } from './pages/pagos/pagos.component';
 import { ReportesComponent } from './pages/reportes/reportes.component';
 import { InventarioComponent } from './pages/inventario/inventario.component';
@@ -30,8 +29,58 @@ export const routes: Routes = [
       },
       {
         path: 'agenda',
-        component: AgendaComponent,
-        title: 'Agenda | TalitaCumi',
+        redirectTo: 'agenda-turnos/agenda-semanal',
+        pathMatch: 'full',
+      },
+      {
+        path: 'agenda-turnos/agenda-semanal',
+        canActivate: [permissionGuard],
+        data: { permission: 'turno.ver' },
+        loadChildren: () =>
+          import('./pages/agenda-turnos/agenda-semanal/agenda-semanal.routes').then(
+            (m) => m.AGENDA_SEMANAL_ROUTES,
+          ),
+        title: 'Agenda semanal | TalitaCumi',
+      },
+      {
+        path: 'agenda-turnos/programacion-turnos',
+        canActivate: [permissionGuard],
+        data: { permission: 'turno.ver' },
+        loadChildren: () =>
+          import('./pages/agenda-turnos/programacion-turnos/programacion-turnos.routes').then(
+            (m) => m.PROGRAMACION_TURNOS_ROUTES,
+          ),
+        title: 'Programación de turnos | TalitaCumi',
+      },
+      {
+        path: 'agenda-turnos/cambios-turnos',
+        canActivate: [permissionGuard],
+        data: { permissions: ['turno.cancelar_masivo', 'turno.reporte_cambios'] },
+        loadChildren: () =>
+          import('./pages/agenda-turnos/cambios-turnos/cambios-turnos.routes').then(
+            (m) => m.CAMBIOS_TURNOS_ROUTES,
+          ),
+        title: 'Cambios de turnos | TalitaCumi',
+      },
+      {
+        path: 'agenda-turnos/asistencia',
+        canActivate: [permissionGuard],
+        data: { permissions: ['asistencia.ver_indicadores', 'asistencia.resumen_diario'] },
+        loadChildren: () =>
+          import('./pages/agenda-turnos/asistencia/asistencia.routes').then(
+            (m) => m.ASISTENCIA_ROUTES,
+          ),
+        title: 'Asistencia | TalitaCumi',
+      },
+      {
+        path: 'agenda-turnos/diagnosticos',
+        canActivate: [permissionGuard],
+        data: { permission: 'asignacion.ver' },
+        loadChildren: () =>
+          import('./pages/agenda-turnos/diagnosticos/diagnosticos.routes').then(
+            (m) => m.DIAGNOSTICOS_ROUTES,
+          ),
+        title: 'Diagnósticos | TalitaCumi',
       },
       {
         path: 'pacientes',

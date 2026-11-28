@@ -79,7 +79,8 @@ Todas las rutas están dentro del layout principal y protegidas por `authGuard`.
 | Ruta | Módulo |
 |---|---|
 | `/` | Inicio |
-| `/agenda` | Agenda |
+| `/agenda-turnos/agenda-semanal` | Agenda semanal por sucursal (solo consulta) |
+| `/agenda` | Redirige a `/agenda-turnos/agenda-semanal` |
 | `/pacientes` | Pacientes: listado, ficha, alta/edición, estados y tutores principales |
 | `/pacientes/:id` | Ficha del paciente |
 | `/pacientes/:id/resumen` | Ficha resumen de solo lectura con indicadores y acciones frecuentes (04.04) |
@@ -108,7 +109,7 @@ Todas las rutas están dentro del layout principal y protegidas por `authGuard`.
 | `/seguridad/roles-permisos` | Matriz de roles y permisos |
 | `/seguridad/bitacora` | Consulta y reconstrucción de bitácora |
 
-Las rutas `/pacientes`, `/profesionales`, `/organizacion/sucursales`, `/organizacion/salas-ambientes`, `/organizacion/configuracion`, `/seguridad/usuarios`, `/seguridad/roles-permisos`, `/seguridad/bitacora` y `/inscripciones-atenciones/salas-grupales` ya están implementadas y consumen la API real del backend. Los módulos sin implementar muestran un estado vacío reutilizable (`app-module-placeholder`). `/pacientes` usa `permissionGuard` con `paciente.ver` y el sidebar oculta la entrada sin permiso.
+Las rutas `/pacientes`, `/profesionales`, `/organizacion/sucursales`, `/organizacion/salas-ambientes`, `/organizacion/configuracion`, `/seguridad/usuarios`, `/seguridad/roles-permisos`, `/seguridad/bitacora`, `/inscripciones-atenciones/salas-grupales` y `/agenda-turnos/agenda-semanal` ya están implementadas y consumen la API real del backend. Los módulos sin implementar muestran un estado vacío reutilizable (`app-module-placeholder`). `/pacientes` usa `permissionGuard` con `paciente.ver` y el sidebar oculta la entrada sin permiso.
 
 ### Páginas de referencia
 
@@ -1596,3 +1597,236 @@ Reutiliza `InscripcionPacienteSearchComponent` y `InscripcionDateInputComponent`
 **Permisos:** `estado.ver`, `estado.reportes`, `estado.exportar`, `inscripcion.pausar`, `inscripcion.reactivar`; el retiro de inscripción exige `inscripcion.retirar`/`paquete.retirar`; el paciente exige `paciente.cambiar_estado` o `paciente.retirar`. Recepción consulta y pausa/reactiva inscripciones; Administración ejecuta los cambios de paciente y los retiros.
 
 **Estado:** implementado contra API real. Pendientes: integración de los componentes en las fichas de Pacientes/Salas/Paquetes, motivos administrables en tabla, Agenda (07), Pagos (08), alertas de próximo pago y PDF/Excel.
+
+### 35. Agenda semanal por sucursal
+
+**Ruta:** `/agenda-turnos/agenda-semanal` (con redirect desde `/agenda`).
+**Entrada de sidebar:** `Agenda` (visible con `turno.ver`).
+**Guard:** `permissionGuard` con `turno.ver`.
+
+**Archivos:**
+
+- `src/app/pages/agenda-turnos/agenda-semanal/agenda-semanal.page.ts`
+- `src/app/pages/agenda-turnos/agenda-semanal/agenda-semanal.page.html`
+- `src/app/pages/agenda-turnos/agenda-semanal/agenda-semanal.routes.ts`
+- `src/app/pages/agenda-turnos/agenda-semanal/agenda-semanal.service.ts`
+- `src/app/pages/agenda-turnos/agenda-semanal/agenda-semanal.models.ts`
+- `src/app/pages/agenda-turnos/agenda-semanal/agenda-semanal.constants.ts`
+- `src/app/pages/agenda-turnos/agenda-semanal/agenda-semanal.utils.ts`
+- `components/agenda-toolbar`, `agenda-filtros`, `agenda-calendario`, `agenda-vista-agrupada`, `turno-detalle-panel`, `resumen-semana`, `agenda-impresion`
+- `src/app/core/services/agenda-refresh.service.ts`
+
+**API consumida:**
+
+| Método | Endpoint | Acción |
+|---|---|---|
+| GET | `/api/agenda-turnos/agenda-semanal` | Semana, turnos, resumen y avisos |
+| GET | `/api/agenda-turnos/agenda-semanal/opciones` | Áreas, salas, servicios, profesionales y estados |
+| GET | `/api/agenda-turnos/agenda-semanal/sucursales` | Sucursales asignadas y predeterminada |
+| GET | `/api/agenda-turnos/agenda-semanal/turnos/{id}` | Detalle y acciones disponibles |
+| GET | `/api/agenda-turnos/agenda-semanal/exportar` | PDF (503 mientras falta infraestructura) |
+
+**Funcionalidad:**
+
+- Selector de sucursal solo con las asignadas; navegación semana anterior/siguiente/hoy; día actual destacado.
+- Grilla semanal FullCalendar 7 con plugins gratuitos (`timegrid`); sin `resource-timegrid` premium.
+- Vistas **Semana**, **Por profesional** y **Por sala** con el mismo conjunto de datos agrupado. Grupos “Sin asignar” y “Sin sala”.
+- Turnos con paciente, servicio, sala, estado con texto/icono, marca “Sin asignar” y color del área del Catálogo con texto de contraste. El color solo se aplica al bloque y se valida como hex.
+- Filtros por área, sala, profesional (con “Sin asignar”), servicio y estado; debounce de 300 ms. Una sola fuente de verdad en backend.
+- Resumen al pie por estado sobre turnos filtrados visibles.
+- Detalle en panel lateral con datos operativos; sin edición directa ni drag-and-drop. Las acciones de 7.3 y 7.4 ya están integradas.
+- Exportar PDF solo con `turno.exportar`; si falta infraestructura muestra el error del backend. Botón **Imprimir** con vista `@media print` de respaldo.
+- Refresco sin recargar la página: `AgendaRefreshService` + polling configurable (`environment.agendaRefreshSeconds`, 60 s; 0 lo desactiva). Sin websockets.
+- Mensajes “Sin turnos para esta semana”, “Sin turnos para este profesional” y error de sucursales no asignadas.
+- Si un contrato de Pacientes/Profesionales/Salas falla, los campos muestran “No disponible” y la agenda sigue funcionando.
+
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-select-field`, `input[app-input]`, `ToastService`, `FullCalendarModule` y `AgendaRefreshService`.
+
+**Permisos:** `turno.ver` para la ruta y las consultas; `turno.exportar` para el botón PDF. El backend revalida siempre.
+
+**Estado:** implementado contra API real. Pendientes: PDF backend y 7.5 multi-profesional. Las acciones de asistencia, reprogramación y cancelación están integradas.
+
+### 36. Programación de turnos y patrones de días
+
+**Ruta:** `/agenda-turnos/programacion-turnos`.
+**Entrada de sidebar:** `Programación` (visible con `turno.ver`).
+**Guard:** `permissionGuard` con `turno.ver`.
+
+**Archivos:**
+
+- `src/app/pages/agenda-turnos/programacion-turnos/programacion-turnos.page.ts`
+- `src/app/pages/agenda-turnos/programacion-turnos/programacion-turnos.page.html`
+- `src/app/pages/agenda-turnos/programacion-turnos/programacion-turnos.routes.ts`
+- `src/app/pages/agenda-turnos/programacion-turnos/programacion-turnos.service.ts`
+- `src/app/pages/agenda-turnos/programacion-turnos/programacion-turnos.models.ts`
+- `components/generar-turnos-wizard/generar-turnos-wizard.component.ts|html`
+
+**API consumida:**
+
+| Método | Endpoint | Acción |
+|---|---|---|
+| GET | `/api/agenda-turnos/programacion-turnos/origenes/{tipo}/{id}` | Datos del origen y si puede generar/regenerar |
+| GET | `.../origenes/{tipo}/{id}/turnos` | Turnos ya generados |
+| GET | `.../origenes/{tipo}/{id}/preview-generacion` | Previsualización sin persistir |
+| POST | `.../origenes/{tipo}/{id}/generar` | Generación manual con idempotencia |
+| GET | `.../origenes/{tipo}/{id}/preview-regeneracion` | Turnos a cancelar/preservar y nuevos |
+| POST | `.../origenes/{tipo}/{id}/regenerar` | Regeneración transaccional |
+| POST | `.../turnos/asignar-profesional` | Asignación por lote o subconjunto |
+| GET/POST/PATCH | `.../feriados` | Catálogo de feriados |
+
+`{tipo}` es `inscripcion_sala` o `paquete_sesiones`.
+
+**Funcionalidad:**
+
+- Pestaña **Programación**: carga un origen por tipo/ID o por query params (`tipo`, `id`, `accion`) desde las fichas; muestra paciente, servicio, sala, profesional, período, cantidad, estado, patrón y turnos existentes. Si el origen ya tiene turnos, ofrece Regenerar; si no, Generar.
+- `GenerarTurnosWizardComponent` autocontenido y reutilizable, máximo 4 pasos:
+  1. patrón y período del origen (solo lectura);
+  2. previsualización con fecha, día, horas, estado y hallazgos (bloqueo/advertencia/informativo) con texto, no solo color; los bloqueos impiden continuar;
+  3. profesional opcional con “Sin asignar” y “Profesional del origen”; el cambio recalcula la previsualización;
+  4. confirmación con resumen, checkbox obligatorio si hay advertencias o sesiones faltantes, botón deshabilitado durante el guardado y clave de idempotencia por intento.
+- Regeneración: muestra cantidades y listas de turnos a cancelar/preservar, incluidos asistidos, faltados y programados pasados sin marcar.
+- Resultado final con creados, cancelados y preservados; al cerrar se recarga el origen y se llama a `AgendaRefreshService.notificarCambio()` para refrescar la agenda semanal.
+- Pestaña **Feriados** (solo `turno.feriados`): filtro por año/sucursal, alta global o por sucursal y baja lógica. Sin precarga.
+- Mensajes claros para sala sin patrón (“generación pendiente”), origen vencido/pausado/retirado, sucursal no asignada, advertencias no confirmadas y conflictos aparecidos entre preview y confirmación.
+- Si Pacientes/Profesionales/Salas/Catálogo fallan, los nombres muestran “No disponible” sin romper el cálculo.
+
+**Integración en fichas:** las fichas de Salas Grupales y Paquetes muestran “Generar turnos” con `turno.generar` o `turno.regenerar` y navegan con `tipo`, `id` y `accion=generar`. No se generan turnos automáticamente al crear, renovar o editar.
+
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-alert`, `app-select-field`, `input[app-input]`, `app-modal`, `ToastService`, `AgendaRefreshService` y los tokens de color de `styles.css`.
+
+**Permisos:** `turno.ver` para la ruta; `turno.generar`, `turno.regenerar`, `turno.asignar_profesional` y `turno.feriados` para las acciones. El backend revalida permisos, origen y sucursal.
+
+**Estado:** implementado contra API real. Pendiente: generación desde sala cuando Organización exponga el patrón (`SalaPatronContract`), PDF del preview (RNF-010) y la implementación real de los contratos de turnos futuros/consumo de Inscripciones.
+
+### 37. Reprogramación y cancelación de turnos
+
+**Ruta:** `/agenda-turnos/cambios-turnos`.
+**Entrada de sidebar:** `Cambios de turnos` (visible con `turno.cancelar_masivo`).
+**Guard:** `permissionGuard` con cualquiera de `turno.cancelar_masivo` o `turno.reporte_cambios`.
+
+**Archivos:**
+
+- `src/app/pages/agenda-turnos/cambios-turnos/cambios-turnos.page.ts|html|routes.ts|service.ts|models.ts`
+- `components/reprogramar-turno-modal/`
+- `components/cancelar-turno-modal/`
+- `components/historial-turno/`
+- `components/cancelacion-masiva/`
+- `components/reporte-cambios/`
+
+**API consumida:**
+
+| Método | Endpoint | Acción |
+|---|---|---|
+| GET | `/api/agenda-turnos/cambios-turnos/turnos/{id}` | Turno, origen, profesionales, salas y motivos |
+| POST | `.../turnos/{id}/preview-reprogramacion` | Resumen y disponibilidad sin persistir |
+| POST | `.../turnos/{id}/reprogramar` | Reprogramación transaccional |
+| POST | `.../turnos/{id}/preview-cancelacion` | Efecto en saldo y motivo |
+| POST | `.../turnos/{id}/cancelar` | Cancelación individual |
+| GET | `.../turnos/{id}/historial` | Línea de tiempo |
+| GET | `.../turnos/{id}/contacto-whatsapp` | Enlace wa.me |
+| GET | `.../pacientes/{id}/origenes-cancelables` | Orígenes con turnos futuros |
+| POST | `.../cancelacion-masiva/preview` | Elegibles/excluidos |
+| POST | `.../cancelacion-masiva` | Cancelación masiva exacta |
+| GET | `.../reporte-cambios` | Reporte paginado |
+| GET | `.../reporte-cambios/exportar` | PDF/Excel (503 mientras falte infraestructura) |
+
+**Funcionalidad:**
+
+- El panel de detalle de 7.1 ahora muestra botones **Reprogramar**, **Cancelar** y **Ver historial** según estado y permisos; abre los modales de 7.3 sin salir de la agenda.
+- `ReprogramarTurnoModalComponent`: motivo, nueva fecha/hora, profesional con “Sin asignar”, sala; preview con bloqueos/advertencias; confirmación; WhatsApp manual.
+- `CancelarTurnoModalComponent`: motivo, preview de saldo o “Efecto en saldo no disponible”, confirmación y WhatsApp opcional.
+- `HistorialTurnoComponent`: línea de tiempo con usuario, fecha, acción, motivo, snapshot de saldo y vínculo original↔nuevo navegable.
+- **Cancelación masiva:** búsqueda de paciente, selección de inscripciones/paquetes, filtro por servicio, preview de elegibles y excluidos con razón, un solo motivo, confirmación con cantidad y resultado con lote.
+- **Reporte de cambios:** filtros período, sucursal, tipo, motivo, servicio y paciente; conteos, paginación y exportación con error 503 claro.
+- Protección de doble clic, estados con texto/icono, tokens de color de `styles.css`, “No disponible” si fallan contratos y `AgendaRefreshService` tras cada cambio.
+
+**Componentes reutilizados:** `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-alert`, `app-badge`, `app-select-field`, `input[app-input]`, `textarea[app-textarea]`, `app-modal`, `app-pagination`, `app-inscripcion-paciente-search`, `ToastService`, `AgendaRefreshService`.
+
+**Permisos:** `turno.reprogramar`, `turno.cancelar`, `turno.historial` (Recepción/Administración); `turno.cancelar_masivo`, `turno.reporte_cambios`, `turno.exportar_cambios` (Administración); `tutor.ver_contacto` para WhatsApp. El backend revalida permisos y sucursal.
+
+**Estado:** implementado contra API real. Pendientes: exportación PDF/Excel (infraestructura) y autorización expresa de Administración para reprogramar Faltó (fuera de alcance). El saldo real y el historial de asistencias/faltas quedaron integrados con 07.04.
+
+### 38. Registro de asistencia por turno
+
+**Ruta:** `/agenda-turnos/asistencia`.
+**Entrada de sidebar:** `Asistencia` (visible con `asistencia.ver_indicadores`).
+**Guard:** `permissionGuard` con cualquiera de `asistencia.ver_indicadores` o `asistencia.resumen_diario`.
+
+**Archivos:**
+
+- `src/app/pages/agenda-turnos/asistencia-turno/asistencia-turno.models.ts|service.ts`
+- `.../components/asistencia-turno-acciones/`
+- `.../components/corregir-asistencia-modal/`
+- `src/app/pages/agenda-turnos/asistencia/asistencia.page.ts|html|routes.ts`
+- `.../components/indicadores-asistencia/`
+- `.../components/resumen-diario-asistencia/`
+
+**API consumida:**
+
+| Método | Endpoint | Acción |
+|---|---|---|
+| GET | `/api/agenda-turnos/asistencia/turnos/{id}` | Estado, `can` por ventana y efecto de corrección |
+| POST | `.../turnos/{id}/registrar` | Asistió/Faltó en un clic |
+| POST | `.../turnos/{id}/corregir` | Corrección con versión y motivo |
+| GET | `.../indicadores` | Agregados por paciente/sala/servicio/profesional/sucursal/día |
+| GET | `.../resumen-diario` | Atendidos, faltados, cancelados y pendientes |
+| GET | `.../exportar` | CSV compatible con Excel; PDF 503 |
+
+**Funcionalidad:**
+
+- Botones ✓/✕ directamente en el evento de FullCalendar para turnos `programado` ya iniciados. Un clic, botón bloqueado durante el envío, toast y refresco de la agenda.
+- `AsistenciaTurnoAccionesComponent` en el panel de detalle: estado actual, registro, corrección e historial. Si la ventana venció y el usuario no tiene permiso, muestra “Contactá a Administración”.
+- `CorregirAsistenciaModalComponent`: aviso de efecto en saldo/indicadores, motivo obligatorio fuera de ventana, confirmación explícita y manejo de 409 por versión.
+- Página de indicadores con filtros de período, sucursal y agrupación; tabla, totales y paginación; sin resultados sugiere ampliar el rango. Resumen diario con tarjetas y detalle por sala.
+- Exportación CSV solo por agregados (no por paciente), con BOM UTF-8 y `;`. Sin botón PDF; si se pide PDF, el backend responde 503.
+- Errores 401/403/404/409/422/503 con `app-alert` y mensajes del backend. Reutiliza `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-alert`, `app-badge`, `app-modal`, `app-pagination`, `app-select-field`, `input[app-input]`, `textarea[app-textarea]`, `ToastService` y `AgendaRefreshService`.
+
+**Permisos:** `asistencia.ver`, `asistencia.registrar` (Recepción/Administración); `asistencia.corregir_fuera_ventana` y `asistencia.exportar` (Administración); `asistencia.ver_indicadores` y `asistencia.resumen_diario` (Recepción/Administración). El backend revalida permisos, sucursal, estado y ventana.
+
+**Estado:** implementado contra API real. Pendientes: PDF (infraestructura), exportación por paciente (decisión de privacidad), “pasar lista” masivo en sala grupal y validación funcional de la fórmula/período de indicadores.
+
+### 39. Diagnóstico con varios profesionales
+
+**Rutas:** `/agenda-turnos/diagnosticos` (listado/reporte) y `/agenda-turnos/diagnosticos/:id` (coordinación).
+**Entrada de sidebar:** `Diagnósticos` (visible con `asignacion.ver`).
+**Guard:** `permissionGuard` con `asignacion.ver`.
+
+**Archivos:**
+
+- `src/app/pages/agenda-turnos/diagnosticos/diagnosticos.page.ts|html|routes.ts|models.ts|service.ts`
+- `.../diagnostico-coordinacion/diagnostico-coordinacion.page.ts|html`
+- `.../components/programar-turno-diagnostico-modal/`
+- Botón “Coordinar” en `src/app/pages/inscripciones-atenciones/entrevista-diagnostico/entrevista-diagnostico.page.html`.
+
+**API consumida:**
+
+| Método | Endpoint | Acción |
+|---|---|---|
+| GET | `/api/agenda-turnos/diagnosticos` | Listado/reporte con filtros y alcance |
+| GET | `.../opciones` | Sucursales, tipos, profesionales y estados |
+| GET | `.../exportar` | CSV compatible con Excel; PDF 503 |
+| GET | `.../{id}` | Coordinación, puestos, turnos, advertencias y WhatsApp |
+| POST | `.../{id}/turnos` | Programar turno de un profesional |
+| PATCH | `.../{id}/estado-general` | Actualización manual validada |
+| POST | `.../{id}/cancelar` | Cancelar diagnóstico con motivo |
+| GET | `.../{id}/whatsapp` | Enlace `wa.me` (sin envío automático) |
+
+Acciones reutilizadas: `POST /api/agenda-turnos/cambios-turnos/turnos/{id}/reprogramar` (07.3) y `POST /api/agenda-turnos/asistencia/turnos/{id}/registrar|corregir` (07.4).
+
+**Funcionalidad:**
+
+- Listado con filtros de sucursal, período, tipo, estado general y profesional; paginación de 25; exportación CSV solo con `asignacion.exportar`.
+- Tabla con estado general y, por profesional, fecha, hora y estado del turno. Sin resultados sugiere ampliar el período.
+- Coordinación en una sola pantalla: puestos requeridos por especialidad, cobertura, profesionales asignados, turnos, advertencias de puesto faltante, estado general y acciones.
+- Programar turno: modal con profesional (solo disponibles de la sucursal), fecha Flatpickr limitada al período del diagnóstico y hora. La duración se calcula en backend; se puede indicar una duración opcional.
+- Reprogramar: reutiliza `ReprogramarTurnoModalComponent` de 07.3; al completar, recarga la coordinación. Para turnos de diagnóstico el modal conserva el profesional y no permite asignar sala.
+- Asistencia: reutiliza `AsistenciaTurnoAccionesComponent` de 07.4 en un panel expandible por turno.
+- Cancelar: motivo obligatorio, aviso de que se cancelan turnos futuros y se conservan los pasados.
+- Actualizar estado: solo los estados coherentes con la cobertura; 409 muestra los faltantes.
+- WhatsApp: botón solo con `tutor.ver_contacto` y teléfono disponible; abre `wa.me` en otra pestaña, sin envío automático.
+- Errores 422 por campo, 409 de reglas/estado, 403/404/503 con `app-alert`; 503 `AUDIT_UNAVAILABLE` no muestra el detalle. Sin botón de PDF.
+- Reutiliza `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-modal`, `app-pagination`, `TABLE_IMPORTS`, `app-select-field`, `input[app-input]`, `textarea[app-textarea]`, `InscripcionDateInputComponent`, `ToastService`, `ReprogramarTurnoModalComponent` y `AsistenciaTurnoAccionesComponent`.
+
+**Permisos:** `asignacion.ver` (listado/coordinación), `asignacion.crear` (programar), `asignacion.exportar` (CSV), `diagnostico_agenda.actualizar_estado` y `diagnostico_agenda.cancelar` (Administración/Superadmin), `tutor.ver_contacto` (WhatsApp). El backend revalida permiso, sucursal y estado.
+
+**Estado:** implementado contra API real. Pendientes: PDF (503), duración distinta por profesional (RF-015 parcial) y cancelación automática al retirar el diagnóstico desde 06.03.

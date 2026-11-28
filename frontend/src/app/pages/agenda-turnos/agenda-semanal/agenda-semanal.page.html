@@ -1,0 +1,160 @@
+<div class="agenda-semanal-page space-y-5 sm:space-y-6">
+  <app-page-breadcrumb [pageTitle]="texts.title" />
+
+  @if (noBranches()) {
+    <app-alert
+      variant="error"
+      [title]="texts.noBranchesTitle"
+      [message]="texts.noBranchesMessage"
+    />
+  } @else {
+    @if (error(); as message) {
+      <app-alert variant="error" [title]="texts.loadErrorTitle" [message]="message">
+        <button app-button variant="outline" size="sm" type="button" (click)="recargar()">
+          Reintentar
+        </button>
+      </app-alert>
+    }
+
+    <app-component-card [title]="texts.title" [desc]="texts.subtitle">
+      <app-agenda-toolbar
+        [sucursales]="sucursales()"
+        [sucursalId]="sucursalId()"
+        [weekLabel]="weekLabel()"
+        [weekSubtitle]="weekSubtitle()"
+        [vista]="vista()"
+        [canExportar]="canExportar()"
+        [loading]="loading()"
+        [exporting]="exporting()"
+        (sucursalChange)="onSucursalChange($event)"
+        (previous)="semanaAnterior()"
+        (next)="semanaSiguiente()"
+        (today)="irAHoy()"
+        (vistaChange)="onVistaChange($event)"
+        (exportar)="exportar()"
+        (imprimir)="imprimir()"
+        (refresh)="actualizar()"
+      />
+
+      @if (filtrosError(); as message) {
+        <app-alert
+          variant="warning"
+          title="No se pudieron cargar todas las opciones de filtros"
+          [message]="message"
+        />
+      }
+
+      <app-agenda-filtros
+        [opciones]="opciones()"
+        [filtros]="filtros()"
+        [disabled]="loading() || loadingOpciones()"
+        (filtrosChange)="onFiltrosChange($event)"
+        (limpiar)="limpiarFiltros()"
+      />
+
+      @if (data(); as agenda) {
+        @for (aviso of agenda.avisos; track aviso.codigo + aviso.mensaje) {
+          <app-alert
+            variant="warning"
+            [title]="texts.hiddenDaysTitle"
+            [message]="aviso.mensaje"
+          />
+        }
+
+        @if (disponibilidadParcial()) {
+          <app-alert
+            variant="warning"
+            [title]="texts.partialDataTitle"
+            [message]="texts.partialDataMessage"
+          />
+        }
+
+        @if (loading()) {
+          <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.loading }}</p>
+        }
+
+        @if (agenda.turnos.length === 0) {
+          <app-alert variant="info" [message]="emptyMessage()" />
+        }
+
+        @switch (vista()) {
+          @case ('semana') {
+            <app-agenda-calendario
+              [data]="agenda"
+              [puedeRegistrar]="puedeRegistrarAhora()"
+              (turnoClick)="verDetalle($event)"
+              (asistenciaRapida)="onAsistenciaRapida($event)"
+            />
+          }
+          @case ('profesional') {
+            <app-agenda-vista-agrupada
+              [turnos]="agenda.turnos"
+              [dias]="visibleDays()"
+              grupo="profesional"
+              (turnoClick)="verDetalle($event)"
+            />
+          }
+          @case ('sala') {
+            <app-agenda-vista-agrupada
+              [turnos]="agenda.turnos"
+              [dias]="visibleDays()"
+              grupo="sala"
+              (turnoClick)="verDetalle($event)"
+            />
+          }
+        }
+
+        <app-resumen-semana [resumen]="agenda.resumen" />
+
+        @if (lastUpdatedLabel() !== '') {
+          <p class="text-end text-[11px] text-gray-400">
+            {{ texts.generatedAt }} {{ lastUpdatedLabel() }}
+          </p>
+        }
+      } @else if (loading()) {
+        <div class="space-y-3">
+          <div class="h-24 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800"></div>
+          <div class="h-64 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800"></div>
+        </div>
+      }
+    </app-component-card>
+  }
+
+  <app-turno-detalle-panel
+    [open]="detalleOpen()"
+    [detalle]="detalle()"
+    [loading]="detalleLoading()"
+    [error]="detalleError()"
+    (close)="cerrarDetalle()"
+    (accionSeleccionada)="onAccionTurno($event)"
+    (asistenciaActualizada)="onAsistenciaActualizada()"
+    (verHistorialAsistencia)="verHistorialAsistencia($event)"
+  />
+
+  <app-reprogramar-turno-modal
+    [open]="reprogramarOpen()"
+    [turnoId]="reprogramarTurnoId()"
+    (closed)="cerrarReprogramar()"
+    (completed)="onCambioCompletado()"
+  />
+
+  <app-cancelar-turno-modal
+    [open]="cancelarOpen()"
+    [turnoId]="cancelarTurnoId()"
+    (closed)="cerrarCancelar()"
+    (completed)="onCambioCompletado()"
+  />
+
+  <app-historial-turno
+    [open]="historialOpen()"
+    [turnoId]="historialTurnoId()"
+    (closed)="cerrarHistorial()"
+    (verTurno)="verTurnoDesdeHistorial($event)"
+  />
+
+  <app-agenda-impresion
+    [data]="data()"
+    [filtros]="filtros()"
+    [opciones]="opciones()"
+  />
+</div>

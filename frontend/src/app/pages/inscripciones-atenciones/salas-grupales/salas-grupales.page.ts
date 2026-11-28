@@ -1,7 +1,9 @@
 import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Router } from '@angular/router';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { forkJoin, of, switchMap } from 'rxjs';
+import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { environment } from '../../../../environments/environment';
 import { PageBreadcrumbComponent } from '../../../shared/components/common/page-breadcrumb/page-breadcrumb.component';
@@ -85,6 +87,8 @@ export class SalasGrupalesPageComponent implements OnInit {
   private readonly tarifasService = inject(TarifasService);
   private readonly pacientesService = inject(PacientesService);
   private readonly toast = inject(ToastService);
+  private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -95,6 +99,11 @@ export class SalasGrupalesPageComponent implements OnInit {
   readonly monthOptions = MONTH_OPTIONS;
   readonly formatBs = formatBs;
   readonly formatDate = formatDate;
+
+  readonly canProgramarTurnos = computed(
+    () =>
+      this.auth.hasPermission('turno.generar') || this.auth.hasPermission('turno.regenerar'),
+  );
 
   readonly rows = signal<InscripcionRow[]>([]);
   readonly abilities = signal<InscripcionAbilities>(EMPTY_ABILITIES);
@@ -730,6 +739,16 @@ export class SalasGrupalesPageComponent implements OnInit {
     this.fichaOpen.set(false);
     this.ficha.set(null);
     this.fichaError.set(null);
+  }
+
+  abrirProgramacionTurnos(inscripcionId: number): void {
+    void this.router.navigate(['/agenda-turnos/programacion-turnos'], {
+      queryParams: {
+        tipo: 'inscripcion_sala',
+        id: inscripcionId,
+        accion: 'generar',
+      },
+    });
   }
 
   setFichaTab(tab: FichaTab): void {

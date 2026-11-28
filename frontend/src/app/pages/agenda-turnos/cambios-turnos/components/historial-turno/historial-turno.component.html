@@ -1,0 +1,102 @@
+<app-modal
+  [open]="open()"
+  size="md"
+  [title]="texts.historyTitle"
+  [showFooter]="true"
+  (closed)="cerrar()"
+>
+  <div modal-body class="space-y-4">
+    @if (loading()) {
+      <p class="text-sm text-gray-500 dark:text-gray-400">Cargando historial…</p>
+    }
+
+    @if (error(); as message) {
+      <app-alert variant="error" title="No se pudo cargar el historial" [message]="message" />
+    }
+
+    @if (data(); as data) {
+      <p class="text-xs text-gray-500 dark:text-gray-400">
+        {{ texts.state }}: {{ data.estado_actual_label }} · Turno #{{ data.turno_id }}
+      </p>
+
+      @if (data.items.length === 0) {
+        <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.noHistory }}</p>
+      } @else {
+        <ol class="relative space-y-4 border-s border-gray-200 ps-5 dark:border-gray-800">
+          @for (item of data.items; track item.id) {
+            <li class="relative">
+              <span
+                class="absolute -start-[1.65rem] top-1 size-3 rounded-full border-2 border-white bg-brand-500 dark:border-gray-900"
+              ></span>
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-sm font-medium text-gray-800 dark:text-white/90">
+                  {{ item.accion_label }}
+                </span>
+                @if (item.estado_anterior_label) {
+                  <span class="text-xs text-gray-500">{{ item.estado_anterior_label }}</span>
+                  <span class="text-xs text-gray-400">→</span>
+                }
+                <span class="text-xs text-gray-600 dark:text-gray-300">
+                  {{ item.estado_nuevo_label || '—' }}
+                </span>
+              </div>
+
+              @if (item.motivo_nombre) {
+                <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                  {{ item.motivo_nombre }}
+                  @if (item.motivo_texto) {
+                    · {{ item.motivo_texto }}
+                  }
+                </p>
+              }
+
+              @if (item.fuera_ventana) {
+                <span class="mt-1 inline-flex rounded-full bg-warning-50 px-2 py-0.5 text-[11px] font-medium text-warning-700 dark:bg-warning-500/10 dark:text-warning-400">
+                  Fuera de ventana
+                </span>
+              } @else if (item.evento === 'correccion') {
+                <span class="mt-1 inline-flex rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-400">
+                  Corrección
+                </span>
+              }
+
+              @if (item.consume_saldo !== null) {
+                <p class="mt-1 text-xs text-gray-500">
+                  {{ item.consume_saldo ? 'Descuenta saldo' : 'No descuenta saldo' }}
+                </p>
+              }
+
+              <p class="mt-1 text-xs text-gray-500">
+                {{ fechaHoraLegible(item.fecha) }}
+                @if (item.usuario) {
+                  · {{ item.usuario }}
+                }
+              </p>
+
+              @if (item.turno_vinculado_id !== null) {
+                <button
+                  app-button
+                  variant="link"
+                  size="xs"
+                  type="button"
+                  class="mt-1 px-0"
+                  (click)="abrirVinculado(item.turno_vinculado_id)"
+                >
+                  {{ texts.historyChain }} #{{ item.turno_vinculado_id }}
+                </button>
+              }
+
+              @if (item.lote_id) {
+                <p class="mt-1 text-[11px] text-gray-400">Lote {{ item.lote_id }}</p>
+              }
+            </li>
+          }
+        </ol>
+      }
+    }
+  </div>
+
+  <div modal-footer class="flex justify-end">
+    <button app-button type="button" (click)="cerrar()">{{ texts.close }}</button>
+  </div>
+</app-modal>

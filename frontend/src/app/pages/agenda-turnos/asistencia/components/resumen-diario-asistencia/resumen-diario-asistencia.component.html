@@ -1,0 +1,86 @@
+<div class="space-y-4">
+  @if (error(); as message) {
+    <app-alert variant="error" title="No se pudo cargar el resumen" [message]="message" />
+  }
+
+  <div class="grid gap-3 sm:grid-cols-3">
+    <div>
+      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Fecha</label>
+      <input app-input type="date" [value]="fecha()" (input)="fecha.set($any($event.target).value)" />
+    </div>
+    <div>
+      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Sucursal</label>
+      <app-select-field
+        [options]="sucursalOpciones()"
+        [value]="sucursalId()"
+        ariaLabel="Sucursal del resumen diario"
+        (valueChange)="sucursalId.set($event)"
+      />
+    </div>
+    <div class="flex items-end">
+      <button app-button type="button" [disabled]="loading()" (click)="cargar()">
+        {{ loading() ? 'Consultando…' : 'Consultar' }}
+      </button>
+    </div>
+  </div>
+
+  @if (data(); as data) {
+    <p class="text-sm text-gray-500 dark:text-gray-400">
+      {{ data.sucursal.nombre }} · {{ fechaLegible(data.fecha) }} · {{ data.zona_horaria }}
+    </p>
+
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="rounded-xl border border-success-200 bg-success-50 p-4 dark:border-success-500/30 dark:bg-success-500/10">
+        <p class="text-xs uppercase tracking-wide text-success-700 dark:text-success-400">Atendidos</p>
+        <p class="mt-1 text-2xl font-semibold text-success-800 dark:text-success-300">{{ data.conteos.atendidos }}</p>
+      </div>
+      <div class="rounded-xl border border-error-200 bg-error-50 p-4 dark:border-error-500/30 dark:bg-error-500/10">
+        <p class="text-xs uppercase tracking-wide text-error-700 dark:text-error-400">Faltaron</p>
+        <p class="mt-1 text-2xl font-semibold text-error-800 dark:text-error-300">{{ data.conteos.faltados }}</p>
+      </div>
+      <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/60">
+        <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Cancelados</p>
+        <p class="mt-1 text-2xl font-semibold text-gray-800 dark:text-gray-200">{{ data.conteos.cancelados }}</p>
+      </div>
+      <div class="rounded-xl border border-warning-200 bg-warning-50 p-4 dark:border-warning-500/30 dark:bg-warning-500/10">
+        <p class="text-xs uppercase tracking-wide text-warning-700 dark:text-warning-400">Pendientes</p>
+        <p class="mt-1 text-2xl font-semibold text-warning-800 dark:text-warning-300">{{ data.conteos.pendientes }}</p>
+      </div>
+    </div>
+
+    @if (data.mensaje) {
+      <app-alert variant="info" [message]="data.mensaje" />
+    }
+
+    @if (data.por_sala.length > 0) {
+      <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+        <table class="min-w-full text-left text-sm">
+          <thead class="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800/60 dark:text-gray-400">
+            <tr>
+              <th class="px-3 py-2">Sala</th>
+              <th class="px-3 py-2">Total</th>
+              <th class="px-3 py-2">Atendidos</th>
+              <th class="px-3 py-2">Faltaron</th>
+              <th class="px-3 py-2">Cancelados</th>
+              <th class="px-3 py-2">Pendientes</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (sala of data.por_sala; track sala.sala_id) {
+              <tr class="border-t border-gray-100 dark:border-gray-800">
+                <td class="px-3 py-2 text-gray-800 dark:text-white/90">{{ sala.sala }}</td>
+                <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ sala.total }}</td>
+                <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ sala.atendidos }}</td>
+                <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ sala.faltados }}</td>
+                <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ sala.cancelados }}</td>
+                <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ sala.pendientes }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  } @else if (loading()) {
+    <p class="text-sm text-gray-500 dark:text-gray-400">Cargando resumen…</p>
+  }
+</div>

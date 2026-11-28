@@ -1,0 +1,484 @@
+<app-modal
+  [open]="open()"
+  size="xl"
+  [title]="modo() === 'regenerar' ? texts.regenerateTurns : texts.generateTurns"
+  [subtitle]="origen()?.paciente?.nombre ?? ''"
+  [showFooter]="true"
+  (closed)="cerrar()"
+>
+  <div modal-body class="space-y-5">
+    @if (loadingOrigen()) {
+      <p class="text-sm text-gray-500 dark:text-gray-400">Cargando origen…</p>
+    }
+
+    @if (error(); as message) {
+      <app-alert variant="error" title="No se pudo completar la operación" [message]="message" />
+    }
+
+    @if (resultado(); as resultado) {
+      <div class="space-y-4">
+        <div class="rounded-xl border border-success-200 bg-success-50 p-4 dark:border-success-500/30 dark:bg-success-500/10">
+          <p class="text-sm font-semibold text-success-700 dark:text-success-400">
+            {{ texts.resultTitle }}
+          </p>
+          <div class="mt-3 grid gap-3 sm:grid-cols-3">
+            <div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.created }}</p>
+              <p class="text-2xl font-semibold text-gray-800 dark:text-white/90">
+                {{ resultado.cantidad_creados }}
+              </p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.cancelled }}</p>
+              <p class="text-2xl font-semibold text-gray-800 dark:text-white/90">
+                {{ resultado.cantidad_cancelados }}
+              </p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.preserved }}</p>
+              <p class="text-2xl font-semibold text-gray-800 dark:text-white/90">
+                {{ resultado.cantidad_preservados }}
+              </p>
+            </div>
+          </div>
+          @if (resultado.reutilizado) {
+            <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+              {{ texts.idempotencyReused }}
+            </p>
+          }
+        </div>
+      </div>
+    } @else if (!loadingOrigen()) {
+      <ol class="flex flex-wrap items-center gap-2 text-xs">
+        @for (item of pasosVisibles(); track item.numero) {
+          <li
+            class="flex items-center gap-2 rounded-full border px-3 py-1.5"
+            [class.border-brand-500]="paso() === item.numero"
+            [class.text-brand-600]="paso() === item.numero"
+            [class.border-gray-200]="paso() !== item.numero"
+            [class.text-gray-500]="paso() !== item.numero"
+          >
+            <span
+              class="inline-flex size-5 items-center justify-center rounded-full text-[11px] font-semibold"
+              [class.bg-brand-500]="paso() === item.numero"
+              [class.text-white]="paso() === item.numero"
+              [class.bg-gray-100]="paso() !== item.numero"
+            >
+              {{ item.numero }}
+            </span>
+            {{ item.etiqueta }}
+          </li>
+        }
+      </ol>
+
+      @switch (paso()) {
+        @case (1) {
+          @if (origen(); as origen) {
+            <div class="grid gap-3 sm:grid-cols-2">
+              <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.patient }}</p>
+                <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+                  {{ origen.paciente.nombre }}
+                </p>
+              </div>
+              <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.service }}</p>
+                <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+                  {{ origen.servicio.nombre }}
+                </p>
+              </div>
+              <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.room }}</p>
+                <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+                  {{ origen.sala?.nombre ?? texts.unassigned }}
+                </p>
+              </div>
+              <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.professional }}</p>
+                <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+                  {{ origen.profesional?.nombre ?? texts.unassigned }}
+                </p>
+              </div>
+              <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.period }}</p>
+                <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+                  {{ fechaLegible(origen.fecha_inicio) }} – {{ fechaLegible(origen.fecha_fin) }}
+                </p>
+              </div>
+              <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.sessions }}</p>
+                <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+                  {{ origen.cantidad_sesiones ?? '—' }}
+                  <span class="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                    {{ origen.estado_efectivo_label }}
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.pattern }}</p>
+              @if (origen.patron; as patron) {
+                <p class="text-sm font-medium text-gray-800 dark:text-white/90">
+                  {{ diasLegibles(patron.dias_semana) }} · {{ patron.hora_inicio }}–{{ patron.hora_fin }}
+                  ({{ patron.duracion_minutos }} min)
+                </p>
+              } @else {
+                <p class="text-sm font-medium text-warning-700 dark:text-warning-400">
+                  {{ origen.patron_no_disponible_motivo ?? texts.patternUnavailable }}
+                </p>
+              }
+            </div>
+
+            @if (!origen.patron_disponible) {
+              <app-alert
+                variant="warning"
+                title="Generación pendiente"
+                [message]="origen.patron_no_disponible_motivo ?? texts.patternUnavailable"
+              />
+            }
+
+            @if (modo() === 'regenerar') {
+              <app-alert
+                variant="info"
+                title="Regeneración de turnos"
+                [message]="texts.regeneratingNote"
+              />
+            }
+          }
+        }
+
+        @case (2) {
+          <div id="programacion-preview-print">
+            <div class="mb-4">
+              <h2 class="text-lg font-semibold text-gray-800 dark:text-white/90">
+                {{ texts.previewTitle }} — {{ origen()?.paciente?.nombre }}
+              </h2>
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                {{ origen()?.servicio?.nombre }} · {{ fechaLegible(origen()?.fecha_inicio ?? '') }} –
+                {{ fechaLegible(origen()?.fecha_fin ?? '') }} · {{ origen()?.estado_efectivo_label }}
+              </p>
+              <div class="mt-2 flex justify-end print:hidden">
+                <button app-button variant="outline" size="xs" type="button" (click)="imprimirPreview()">
+                  Imprimir previsualización
+                </button>
+              </div>
+            </div>
+            @if (previewLoading()) {
+            <p class="text-sm text-gray-500 dark:text-gray-400">{{ texts.generating }}</p>
+          } @else {
+            @if (modo() === 'regenerar') {
+              <div class="grid gap-3 sm:grid-cols-3">
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.cancelCount }}</p>
+                  <p class="text-2xl font-semibold text-gray-800 dark:text-white/90">
+                    {{ resumen()?.cancelar ?? 0 }}
+                  </p>
+                </div>
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.preserveCount }}</p>
+                  <p class="text-2xl font-semibold text-gray-800 dark:text-white/90">
+                    {{ resumen()?.preservar ?? 0 }}
+                  </p>
+                </div>
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.generable }}</p>
+                  <p class="text-2xl font-semibold text-gray-800 dark:text-white/90">
+                    {{ resumen()?.generables ?? 0 }}
+                  </p>
+                </div>
+              </div>
+
+              <details class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                <summary class="cursor-pointer text-sm font-medium text-gray-800 dark:text-white/90">
+                  {{ texts.cancelTitle }} ({{ cancelar().length }})
+                </summary>
+                @for (turno of cancelar(); track turno.id) {
+                  <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                    {{ fechaLegible(turno.fecha) }} · {{ turno.hora_inicio }}–{{ turno.hora_fin }} ·
+                    {{ turno.estado_label }}
+                  </p>
+                } @empty {
+                  <p class="mt-2 text-sm text-gray-500">{{ texts.noCancellations }}</p>
+                }
+              </details>
+
+              <details class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                <summary class="cursor-pointer text-sm font-medium text-gray-800 dark:text-white/90">
+                  {{ texts.preserveTitle }} ({{ preservar().length }})
+                </summary>
+                @for (turno of preservar(); track turno.id) {
+                  <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                    {{ fechaLegible(turno.fecha) }} · {{ turno.hora_inicio }}–{{ turno.hora_fin }} ·
+                    {{ turno.estado_label }}
+                  </p>
+                } @empty {
+                  <p class="mt-2 text-sm text-gray-500">—</p>
+                }
+              </details>
+            }
+
+            @if (hallazgosGlobales().length > 0) {
+              <div class="space-y-2">
+                @for (hallazgo of hallazgosGlobales(); track hallazgo.tipo + hallazgo.mensaje) {
+                  <app-alert
+                    [variant]="hallazgo.severidad === 'advertencia' ? 'warning' : 'info'"
+                    [title]="hallazgo.severidad_label"
+                    [message]="hallazgo.mensaje"
+                  />
+                }
+              </div>
+            }
+
+            <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+              <table class="min-w-full text-left text-sm">
+                <thead class="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800/60 dark:text-gray-400">
+                  <tr>
+                    <th class="px-3 py-2">{{ texts.date }}</th>
+                    <th class="px-3 py-2">{{ texts.day }}</th>
+                    <th class="px-3 py-2">{{ texts.start }}</th>
+                    <th class="px-3 py-2">{{ texts.end }}</th>
+                    <th class="px-3 py-2">{{ texts.status }}</th>
+                    <th class="px-3 py-2">{{ texts.findings }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (fila of filas(); track fila.fecha + fila.hora_inicio) {
+                    <tr class="border-t border-gray-100 dark:border-gray-800">
+                      <td class="px-3 py-2 text-gray-800 dark:text-white/90">
+                        {{ fechaLegible(fila.fecha) }}
+                      </td>
+                      <td class="px-3 py-2 text-gray-600 dark:text-gray-300">
+                        {{ diaSemana(fila.fecha) }}
+                      </td>
+                      <td class="px-3 py-2 text-gray-600 dark:text-gray-300">
+                        {{ fila.hora_inicio }}
+                      </td>
+                      <td class="px-3 py-2 text-gray-600 dark:text-gray-300">
+                        {{ fila.hora_fin }}
+                      </td>
+                      <td class="px-3 py-2">
+                        <span
+                          [class]="'inline-flex rounded-full px-2 py-0.5 text-xs font-medium ' + estadoFilaClase(fila.estado)"
+                        >
+                          {{ estadoFilaLabel(fila.estado) }}
+                        </span>
+                      </td>
+                      <td class="px-3 py-2">
+                        @for (hallazgo of fila.hallazgos; track hallazgo.tipo + hallazgo.mensaje + (hallazgo.turno_id ?? '')) {
+                          <p class="text-xs text-gray-600 dark:text-gray-300">
+                            <span
+                              class="font-semibold"
+                              [class.text-error-600]="hallazgo.severidad === 'bloqueo'"
+                              [class.text-warning-600]="hallazgo.severidad === 'advertencia'"
+                              [class.text-gray-500]="hallazgo.severidad === 'informativo'"
+                            >
+                              {{ hallazgo.severidad_label }}:
+                            </span>
+                            {{ hallazgo.mensaje }}
+                          </p>
+                        } @empty {
+                          <span class="text-xs text-gray-400">—</span>
+                        }
+                      </td>
+                    </tr>
+                  } @empty {
+                    <tr>
+                      <td colspan="6" class="px-3 py-4 text-center text-sm text-gray-500">
+                        {{ texts.noRows }}
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            @if ((resumen()?.bloqueados ?? 0) > 0) {
+              <app-alert
+                variant="error"
+                title="Generación bloqueada"
+                message="Hay bloqueos en una o más fechas. Corregí el patrón o el solapamiento antes de confirmar."
+              />
+            }
+
+            @if (resumen(); as resumen) {
+              <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div class="rounded-lg bg-gray-50 p-3 text-xs dark:bg-gray-800/60">
+                  <span class="block text-gray-500">{{ texts.generable }}</span>
+                  <strong class="text-base text-gray-800 dark:text-white/90">{{ resumen.generables }}</strong>
+                </div>
+                <div class="rounded-lg bg-gray-50 p-3 text-xs dark:bg-gray-800/60">
+                  <span class="block text-gray-500">{{ texts.blockedCount }}</span>
+                  <strong class="text-base text-gray-800 dark:text-white/90">{{ resumen.bloqueados }}</strong>
+                </div>
+                <div class="rounded-lg bg-gray-50 p-3 text-xs dark:bg-gray-800/60">
+                  <span class="block text-gray-500">{{ texts.warningCount }}</span>
+                  <strong class="text-base text-gray-800 dark:text-white/90">{{ resumen.advertencias }}</strong>
+                </div>
+                <div class="rounded-lg bg-gray-50 p-3 text-xs dark:bg-gray-800/60">
+                  <span class="block text-gray-500">{{ texts.missingCount }}</span>
+                  <strong class="text-base text-gray-800 dark:text-white/90">{{ resumen.faltantes }}</strong>
+                </div>
+              </div>
+            }
+          }
+          </div>
+        }
+
+        @case (3) {
+          <div class="space-y-4">
+            <div>
+              <p class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ texts.professional }}
+              </p>
+              <app-select-field
+                [options]="profesionalOpciones()"
+                [value]="profesionalSeleccionado()"
+                [placeholder]="texts.unassigned"
+                ariaLabel="Profesional para los turnos"
+                (valueChange)="cambiarProfesional($event)"
+              />
+              <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                La asignación es opcional. Si elegís un profesional, se validará que esté activo, asignado a la
+                sucursal y sin conflictos de horario.
+              </p>
+            </div>
+
+            @if (previewLoading()) {
+              <p class="text-sm text-gray-500 dark:text-gray-400">Recalculando previsualización…</p>
+            } @else if (resumen(); as resumen) {
+              @if (resumen.bloqueados > 0) {
+                <app-alert
+                  variant="error"
+                  title="El profesional genera conflictos"
+                  message="Elegí otro profesional o dejá el turno sin asignar antes de continuar."
+                />
+              }
+              <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div class="rounded-lg bg-gray-50 p-3 text-xs dark:bg-gray-800/60">
+                  <span class="block text-gray-500">{{ texts.generable }}</span>
+                  <strong class="text-base text-gray-800 dark:text-white/90">{{ resumen.generables }}</strong>
+                </div>
+                <div class="rounded-lg bg-gray-50 p-3 text-xs dark:bg-gray-800/60">
+                  <span class="block text-gray-500">{{ texts.blockedCount }}</span>
+                  <strong class="text-base text-gray-800 dark:text-white/90">{{ resumen.bloqueados }}</strong>
+                </div>
+                <div class="rounded-lg bg-gray-50 p-3 text-xs dark:bg-gray-800/60">
+                  <span class="block text-gray-500">{{ texts.warningCount }}</span>
+                  <strong class="text-base text-gray-800 dark:text-white/90">{{ resumen.advertencias }}</strong>
+                </div>
+                <div class="rounded-lg bg-gray-50 p-3 text-xs dark:bg-gray-800/60">
+                  <span class="block text-gray-500">{{ texts.missingCount }}</span>
+                  <strong class="text-base text-gray-800 dark:text-white/90">{{ resumen.faltantes }}</strong>
+                </div>
+              </div>
+            }
+          </div>
+        }
+
+        @case (4) {
+          <div class="space-y-4">
+            @if (resumen(); as resumen) {
+              <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.generable }}</p>
+                  <p class="text-2xl font-semibold text-gray-800 dark:text-white/90">{{ resumen.generables }}</p>
+                </div>
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.blockedCount }}</p>
+                  <p class="text-2xl font-semibold text-gray-800 dark:text-white/90">{{ resumen.bloqueados }}</p>
+                </div>
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.warningCount }}</p>
+                  <p class="text-2xl font-semibold text-gray-800 dark:text-white/90">{{ resumen.advertencias }}</p>
+                </div>
+                <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.missingCount }}</p>
+                  <p class="text-2xl font-semibold text-gray-800 dark:text-white/90">{{ resumen.faltantes }}</p>
+                </div>
+              </div>
+
+              @if (modo() === 'regenerar') {
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                    <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.cancelCount }}</p>
+                    <p class="text-xl font-semibold text-gray-800 dark:text-white/90">{{ resumen.cancelar ?? 0 }}</p>
+                  </div>
+                  <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                    <p class="text-xs text-gray-500 dark:text-gray-400">{{ texts.preserveCount }}</p>
+                    <p class="text-xl font-semibold text-gray-800 dark:text-white/90">{{ resumen.preservar ?? 0 }}</p>
+                  </div>
+                </div>
+              }
+
+              @if (resumen.requiere_confirmar_advertencias) {
+                <label class="flex items-start gap-2 rounded-xl border border-warning-200 bg-warning-50 p-4 text-sm text-warning-800 dark:border-warning-500/30 dark:bg-warning-500/10 dark:text-warning-300">
+                  <input
+                    type="checkbox"
+                    class="mt-0.5 size-4"
+                    [checked]="confirmarAdvertencias()"
+                    (change)="confirmarAdvertencias.set($any($event.target).checked)"
+                  />
+                  <span>{{ texts.confirmWarnings }}</span>
+                </label>
+              }
+
+              @if (!puedeConfirmar()) {
+                <p class="text-sm text-error-600 dark:text-error-400">
+                  Revisá los bloqueos y las advertencias antes de confirmar.
+                </p>
+              }
+            }
+          </div>
+        }
+      }
+    }
+  </div>
+
+  <div modal-footer class="flex flex-wrap items-center justify-end gap-2">
+    <button app-button variant="outline" type="button" [disabled]="saving()" (click)="cerrar()">
+      {{ resultado() ? texts.close : 'Cancelar' }}
+    </button>
+
+    @if (resultado()) {
+      <button app-button type="button" (click)="finalizar()">
+        {{ texts.finish }}
+      </button>
+    } @else {
+      @if (paso() > 1) {
+        <button app-button variant="outline" type="button" [disabled]="saving()" (click)="anterior()">
+          {{ texts.back }}
+        </button>
+      }
+
+      @if (paso() < 4) {
+        <button
+          app-button
+          type="button"
+          [disabled]="
+            saving() ||
+            previewLoading() ||
+            (paso() === 1 && (!origen()?.patron_disponible || origen() === null)) ||
+            ((paso() === 2 || paso() === 3) && !previewAvanzable())
+          "
+          (click)="siguiente()"
+        >
+          {{ previewLoading() ? texts.processing : texts.next }}
+        </button>
+      } @else {
+        <button
+          app-button
+          type="button"
+          [disabled]="saving() || !puedeConfirmar()"
+          (click)="confirmar()"
+        >
+          {{ saving()
+            ? texts.processing
+            : modo() === 'regenerar'
+              ? texts.confirmRegenerate
+              : texts.confirmGenerate }}
+        </button>
+      }
+    }
+  </div>
+</app-modal>

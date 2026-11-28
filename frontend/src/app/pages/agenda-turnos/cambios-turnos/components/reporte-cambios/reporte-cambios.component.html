@@ -1,0 +1,174 @@
+<div class="space-y-4">
+  @if (error(); as message) {
+    <app-alert variant="error" title="No se pudo cargar el reporte" [message]="message" />
+  }
+
+  <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div>
+      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.from }}</label>
+      <input
+        app-input
+        type="date"
+        [value]="desde()"
+        (input)="desde.set($any($event.target).value)"
+      />
+    </div>
+    <div>
+      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.to }}</label>
+      <input
+        app-input
+        type="date"
+        [value]="hasta()"
+        (input)="hasta.set($any($event.target).value)"
+      />
+    </div>
+    <div>
+      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.branch }}</label>
+      <app-select-field
+        [options]="sucursalOpciones()"
+        [value]="sucursalId()"
+        ariaLabel="Filtrar por sucursal"
+        (valueChange)="sucursalId.set($event)"
+      />
+    </div>
+    <div>
+      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.changeType }}</label>
+      <app-select-field
+        [options]="tipoOpciones"
+        [value]="tipoCambio()"
+        ariaLabel="Filtrar por tipo de cambio"
+        (valueChange)="tipoCambio.set($event)"
+      />
+    </div>
+    <div>
+      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.motivo }}</label>
+      <app-select-field
+        [options]="motivoOpciones()"
+        [value]="motivoId()"
+        ariaLabel="Filtrar por motivo"
+        (valueChange)="motivoId.set($event)"
+      />
+    </div>
+    <div>
+      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ texts.service }}</label>
+      <app-select-field
+        [options]="servicioOpciones()"
+        [value]="servicioId()"
+        ariaLabel="Filtrar por servicio"
+        (valueChange)="servicioId.set($event)"
+      />
+    </div>
+    <div class="sm:col-span-2">
+      <app-inscripcion-paciente-search
+        [selected]="paciente()"
+        (selectedChange)="onPaciente($event)"
+      />
+    </div>
+  </div>
+
+  <div class="flex flex-wrap justify-end gap-2">
+    <button app-button variant="outline" type="button" (click)="limpiar()">{{ texts.clear }}</button>
+    <button app-button type="button" [disabled]="loading()" (click)="filtrar()">
+      {{ loading() ? texts.processing : texts.filter }}
+    </button>
+    <button
+      app-button
+      variant="outline"
+      type="button"
+      [disabled]="exporting() !== null"
+      (click)="exportar('pdf')"
+    >
+      {{ exporting() === 'pdf' ? texts.processing : texts.exportPdf }}
+    </button>
+    <button
+      app-button
+      variant="outline"
+      type="button"
+      [disabled]="exporting() !== null"
+      (click)="exportar('excel')"
+    >
+      {{ exporting() === 'excel' ? texts.processing : texts.exportExcel }}
+    </button>
+  </div>
+
+  @if (reporte(); as reporte) {
+    <div class="flex flex-wrap gap-3 text-sm">
+      <span class="rounded-full bg-brand-50 px-3 py-1 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400">
+        {{ texts.reprogrammed }}: {{ reporte.conteos.reprogramados }}
+      </span>
+      <span class="rounded-full bg-warning-50 px-3 py-1 text-warning-700 dark:bg-warning-500/10 dark:text-warning-400">
+        {{ texts.cancelled }}: {{ reporte.conteos.cancelados }}
+      </span>
+      <span class="text-gray-500">{{ reporte.meta.total }} registros</span>
+    </div>
+
+    <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+      <table class="min-w-full text-left text-sm">
+        <thead class="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800/60 dark:text-gray-400">
+          <tr>
+            <th class="px-3 py-2">{{ texts.changeType }}</th>
+            <th class="px-3 py-2">{{ texts.eventDate }}</th>
+            <th class="px-3 py-2">{{ texts.patient }}</th>
+            <th class="px-3 py-2">{{ texts.service }}</th>
+            <th class="px-3 py-2">{{ texts.turnDate }}</th>
+            <th class="px-3 py-2">{{ texts.newDate }}</th>
+            <th class="px-3 py-2">{{ texts.motivo }}</th>
+            <th class="px-3 py-2">{{ texts.user }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of reporte.data; track row.id) {
+            <tr class="border-t border-gray-100 dark:border-gray-800">
+              <td class="px-3 py-2">
+                <span
+                  [class]="
+                    'inline-flex rounded-full px-2 py-0.5 text-xs font-medium ' +
+                    (row.tipo_cambio === 'reprogramado'
+                      ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400'
+                      : 'bg-warning-50 text-warning-700 dark:bg-warning-500/10 dark:text-warning-400')
+                  "
+                >
+                  {{ row.tipo_cambio === 'reprogramado' ? texts.reprogrammed : texts.cancelled }}
+                </span>
+              </td>
+              <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ fechaHoraLegible(row.fecha_evento) }}</td>
+              <td class="px-3 py-2 text-gray-800 dark:text-white/90">
+                {{ row.paciente?.nombre ?? texts.unavailable }}
+              </td>
+              <td class="px-3 py-2 text-gray-600 dark:text-gray-300">
+                {{ row.servicio?.nombre ?? texts.unavailable }}
+              </td>
+              <td class="px-3 py-2 text-gray-600 dark:text-gray-300">
+                {{ fechaLegible(row.fecha_turno) }} {{ row.hora_inicio ?? '' }}
+              </td>
+              <td class="px-3 py-2 text-gray-600 dark:text-gray-300">
+                @if (row.tipo_cambio === 'reprogramado') {
+                  {{ fechaLegible(row.fecha_nueva) }} {{ row.hora_nueva ?? '' }}
+                } @else {
+                  —
+                }
+              </td>
+              <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ row.motivo ?? '—' }}</td>
+              <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ row.usuario ?? '—' }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="8" class="px-3 py-4 text-center text-sm text-gray-500">{{ texts.noResults }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    @if (reporte.meta.last_page > 1) {
+      <app-pagination
+        [currentPage]="reporte.meta.current_page"
+        [totalPages]="reporte.meta.last_page"
+        variant="text-icon"
+        (pageChange)="cambiarPagina($event)"
+      />
+    }
+  } @else if (loading()) {
+    <p class="text-sm text-gray-500 dark:text-gray-400">Cargando reporte…</p>
+  }
+</div>

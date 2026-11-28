@@ -1,8 +1,10 @@
 import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Router } from '@angular/router';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { forkJoin, of, switchMap } from 'rxjs';
 import { environment } from '../../../../environments/environment';
+import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { PageBreadcrumbComponent } from '../../../shared/components/common/page-breadcrumb/page-breadcrumb.component';
 import { ComponentCardComponent } from '../../../shared/components/common/component-card/component-card.component';
@@ -89,6 +91,8 @@ export class PaquetesSesionesPageComponent implements OnInit {
   private readonly profesionalesService = inject(ProfesionalesService);
   private readonly pacientesService = inject(PacientesService);
   private readonly toast = inject(ToastService);
+  private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -101,6 +105,11 @@ export class PaquetesSesionesPageComponent implements OnInit {
   readonly formatBs = formatBs;
   readonly formatDate = formatDate;
   readonly weekdaysLabel = weekdaysLabel;
+
+  readonly canProgramarTurnos = computed(
+    () =>
+      this.auth.hasPermission('turno.generar') || this.auth.hasPermission('turno.regenerar'),
+  );
 
   readonly rows = signal<PaqueteRow[]>([]);
   readonly abilities = signal<PaqueteAbilities>(EMPTY_ABILITIES);
@@ -794,6 +803,16 @@ export class PaquetesSesionesPageComponent implements OnInit {
     this.fichaOpen.set(false);
     this.ficha.set(null);
     this.fichaError.set(null);
+  }
+
+  abrirProgramacionTurnos(paqueteId: number): void {
+    void this.router.navigate(['/agenda-turnos/programacion-turnos'], {
+      queryParams: {
+        tipo: 'paquete_sesiones',
+        id: paqueteId,
+        accion: 'generar',
+      },
+    });
   }
 
   setFichaTab(tab: FichaTab): void {

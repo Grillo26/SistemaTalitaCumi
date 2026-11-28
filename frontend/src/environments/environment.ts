@@ -6,4 +6,5 @@ export const environment = {
   timezone: 'America/La_Paz',
   currency: 'BOB',
   currencySymbol: 'Bs',
+  agendaRefreshSeconds: 60,
 };

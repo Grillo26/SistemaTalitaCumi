@@ -877,6 +877,11 @@
         <div
           class="flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800"
         >
+          @if (canProgramarTurnos()) {
+            <button app-button variant="outline" type="button" (click)="abrirProgramacionTurnos(detalle.id)">
+              Generar turnos
+            </button>
+          }
           <button app-button variant="outline" type="button" (click)="closeFicha()">
             {{ texts.close }}
           </button>
