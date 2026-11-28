@@ -1,8 +1,10 @@
 import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
 import { forkJoin, of, switchMap } from 'rxjs';
 import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
+import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { PageBreadcrumbComponent } from '../../../shared/components/common/page-breadcrumb/page-breadcrumb.component';
 import { ComponentCardComponent } from '../../../shared/components/common/component-card/component-card.component';
@@ -95,6 +97,8 @@ export class EntrevistaDiagnosticoPageComponent implements OnInit {
   private readonly profesionalesService = inject(ProfesionalesService);
   private readonly pacientesService = inject(PacientesService);
   private readonly toast = inject(ToastService);
+  private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -103,6 +107,7 @@ export class EntrevistaDiagnosticoPageComponent implements OnInit {
   readonly motivoOptions = MOTIVO_BAJA_OPTIONS;
   readonly formatBs = formatBs;
   readonly formatDate = formatDate;
+  readonly puedeCoordinar = computed(() => this.auth.hasPermission('asignacion.ver'));
   readonly todayDate = this.today();
 
   private requirementsRequestSeq = 0;
@@ -782,6 +787,10 @@ export class EntrevistaDiagnosticoPageComponent implements OnInit {
     }
 
     this.selectedProfessionals.set(next);
+  }
+
+  coordinarDiagnostico(id: number): void {
+    this.router.navigate(['/agenda-turnos/diagnosticos', id]);
   }
 
   isProfesionalSelected(profesionalId: number): boolean {

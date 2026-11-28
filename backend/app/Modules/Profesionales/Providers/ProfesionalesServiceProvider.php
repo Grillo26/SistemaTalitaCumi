@@ -2,6 +2,7 @@
 
 namespace App\Modules\Profesionales\Providers;
 
+use App\Modules\AgendaTurnos\Contracts\EloquentProfessionalSchedule;
 use App\Modules\Profesionales\Contracts\EloquentEspecialidadDirectory;
 use App\Modules\Profesionales\Contracts\EloquentProfessionalAssignmentValidator;
 use App\Modules\Profesionales\Contracts\EloquentProfessionalDirectory;
@@ -12,7 +13,6 @@ use App\Modules\Profesionales\Contracts\ProfessionalDirectoryContract;
 use App\Modules\Profesionales\Contracts\ProfessionalExporterContract;
 use App\Modules\Profesionales\Contracts\ProfessionalScheduleContract;
 use App\Modules\Profesionales\Contracts\StubProfessionalDiagnosticRequirementsContract;
-use App\Modules\Profesionales\Contracts\StubProfessionalScheduleContract;
 use App\Modules\Profesionales\Contracts\UnavailableProfessionalExporter;
 use App\Modules\Profesionales\Events\Directorio\ProfesionalCreated;
 use App\Modules\Profesionales\Events\Directorio\ProfesionalEspecialidadesUpdated;
@@ -43,7 +43,7 @@ final class ProfesionalesServiceProvider extends ServiceProvider
         $this->app->bind(ProfessionalDirectoryContract::class, EloquentProfessionalDirectory::class);
         $this->app->bind(EspecialidadDirectoryContract::class, EloquentEspecialidadDirectory::class);
         $this->app->bind(ProfessionalAssignmentValidatorContract::class, EloquentProfessionalAssignmentValidator::class);
-        $this->app->bind(ProfessionalScheduleContract::class, StubProfessionalScheduleContract::class);
+        $this->app->bind(ProfessionalScheduleContract::class, EloquentProfessionalSchedule::class);
         $this->app->bind(ProfessionalDiagnosticRequirementsContract::class, StubProfessionalDiagnosticRequirementsContract::class);
         $this->app->bind(ProfessionalExporterContract::class, UnavailableProfessionalExporter::class);
     }

@@ -38,6 +38,7 @@ export interface TurnoCambio {
   duracion_minutos: number;
   estado: string;
   estado_label: string;
+  atencion_diagnostico_id: number | null;
   turno_origen_id: number | null;
   paciente: PersonaCambio;
   servicio: PersonaCambio;

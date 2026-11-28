@@ -13,6 +13,7 @@ use App\Modules\AgendaTurnos\Rules\TransicionAsistenciaRule;
 use App\Modules\AgendaTurnos\Support\AsistenciaAcceso;
 use App\Modules\AgendaTurnos\Support\AsistenciaCalculadora;
 use App\Modules\AgendaTurnos\Support\AsistenciaClock;
+use App\Modules\AgendaTurnos\Support\DiagnosticoEstadoSincronizador;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -33,6 +34,7 @@ final class RegistrarAsistencia
         private readonly AsistenciaCalculadora $calculadora,
         private readonly TransicionAsistenciaRule $transicion,
         private readonly AsistenciaClock $clock,
+        private readonly DiagnosticoEstadoSincronizador $diagnosticos,
     ) {}
 
     /**
@@ -89,6 +91,14 @@ final class RegistrarAsistencia
                 'asistencia_registrada_en' => $registradaEn,
                 'version' => ((int) ($turno->version ?? 1)) + 1,
             ])->save();
+
+            if ($turno->atencion_diagnostico_id !== null) {
+                $this->diagnosticos->sincronizar(
+                    (int) $turno->atencion_diagnostico_id,
+                    $actor,
+                    $ip,
+                );
+            }
 
             $origen = $this->calculadora->origen($turno);
             $origenTipo = $origen?->tipo

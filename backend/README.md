@@ -1181,7 +1181,7 @@ Fase 3 se entrega como contratos + stubs que fallan de forma explícita. No hay 
 
 | Contrato | Métodos | Implementación actual |
 |---|---|---|
-| `ProfessionalScheduleContract` | `haySolapamiento(profesionalId, inicio, fin)`, `tieneAsignacionesFuturas(profesionalId, desde)` | `StubProfessionalScheduleContract` lanza `LogicException('Módulo 07 — Agenda y turnos no implementado todavía.')` |
+| `ProfessionalScheduleContract` | `haySolapamiento(profesionalId, inicio, fin)`, `tieneAsignacionesFuturas(profesionalId, desde)` | Implementación real en 07.05: `App\Modules\AgendaTurnos\Contracts\EloquentProfessionalSchedule`. Consulta turnos vigentes de todas las sucursales y no expone datos de otras sucursales. |
 | `ProfessionalDiagnosticRequirementsContract` | `especialidadesRequeridas(tipoDiagnosticoId)` | `StubProfessionalDiagnosticRequirementsContract` lanza `LogicException('Módulo 05/06 — Diagnósticos no implementado todavía.')` |
 | `ProfessionalExporterContract` | `exportarDirectorio`, `exportarMatriz`, `exportarAsignaciones` | `UnavailableProfessionalExporter` lanza `LogicException('Exportación PDF/Excel pendiente de infraestructura.')` |
 
@@ -1190,7 +1190,7 @@ Los stubs están bindeados en `ProfesionalesServiceProvider`. Las Actions de des
 #### TODOs exactos para módulos consumidores
 
 - **07 — Agenda y turnos** (`docs/07_AGENDA_TURNOS/02_programacion_turnos_patrones.md`, `03_reprogramacion_cancelacion_turnos.md`, `05_diagnostico_varios_profesionales.md`):
-  - implementar `ProfessionalScheduleContract` con turnos reales;
+  - implementar `ProfessionalScheduleContract` con turnos reales (hecho en 07.05: `EloquentProfessionalSchedule`);
   - persistir `turno.profesional_id` nullable («sin asignar»), reasignación con motivo, desasignación, estado `programado` y `turno_profesional`;
   - llamar a `ProfessionalAssignmentValidatorContract::asegurarAsignable()` antes de guardar;
   - validar solapamiento global incluyendo otras sucursales, sin revelar datos de sucursales fuera del alcance en el mensaje;
@@ -3493,7 +3493,7 @@ app/Modules/AgendaTurnos/
 
 ### Motivos
 
-Seeder `MotivosTurnoSeeder`: cinco motivos de la spec (`enfermedad_paciente`, `ausencia_profesional`, `feriado`, `motivo_familiar`, `otro`), idempotente. `origen` y `descuenta_saldo` quedan NULL hasta confirmación funcional. `otro` exige texto. No hay CRUD administrativo de motivos en esta entrega; el catálogo se administra por seeder/DB.
+Seeder `MotivosTurnoSeeder`: cinco motivos de la spec (`enfermedad_paciente`, `ausencia_profesional`, `feriado`, `motivo_familiar`, `otro`), idempotente. `origen` y `descuenta_saldo` quedan NULL hasta confirmación funcional. `otro` exige texto. No hay CRUD administrativo de motivos en esta entrega; el catálogo se administra por seeder/DB. 07.05 agrega `cancelacion_diagnostico` con `DiagnosticoMotivoTurnoSeeder` (`aplica_cancelar=true`, `aplica_reprogramar=false`, sin texto obligatorio).
 
 ### Endpoints
 
@@ -3706,6 +3706,217 @@ El backend revalida permisos, sucursal, estado y ventana; `can` por turno se cal
 | 07.04/CA-001 a 07.04/CA-010 | Completos; 07.04/CA-002/003 visibles vía 06.02 |
 
 **Pendientes:** PDF de 07.04/RF-010 (503), exportación por paciente (privacidad; requiere decisión), “pasar lista” masivo en sala grupal (no implementado), fórmula/período de indicadores marcados PROPUESTO - VALIDAR, y decisión sobre cancelaciones 07.03 con `consume_saldo` en el saldo de 06.02.
+
+---
+
+## Módulo 07 — Agenda y turnos (submódulo 05: diagnóstico con varios profesionales)
+
+Implementación de `docs/07_AGENDA_TURNOS/05_diagnostico_varios_profesionales.md`. El documento numera **07.05/RF-001 a 07.05/RF-015** (15 RF, aunque el pedido inicial menciona 14) y **07.05/RN-001 a 07.05/RN-010**. Reutiliza 05.03, 06.03, 07.1, 07.2, 07.3 y 07.4. No crea diagnósticos, no asigna profesionales, no registra asistencia ni reprograma: esas responsabilidades siguen en sus módulos.
+
+### Estructura
+
+```text
+app/Modules/AgendaTurnos/
+├── Actions/Diagnosticos/        ProgramarTurnoDiagnostico,
+│                                ActualizarEstadoGeneralDiagnostico, CancelarDiagnostico
+├── Contracts/                   EloquentProfessionalSchedule,
+│                                DiagnosticosPdfExporterContract,
+│                                UnavailableDiagnosticosPdfExporter
+├── Enums/                       EstadoGeneralDiagnostico
+├── Events/                      TurnoDiagnosticoProgramado,
+│                                EstadoGeneralDiagnosticoCambiado, DiagnosticoCancelado
+├── Exceptions/                  DiagnosticoNoEncontrado/NoCoordinable/FueraDePeriodo,
+│                                ProfesionalNoAsignado/NoCubreRequisito,
+│                                TurnoDiagnosticoDuplicado, EstadoGeneralInvalido,
+│                                CierreDiagnosticoIncompleto, DisponibilidadDiagnostico,
+│                                ConfiguracionDiagnosticoNoDisponible,
+│                                WhatsappDiagnosticoNoDisponible,
+│                                ExportacionDiagnosticosNoDisponible
+├── Http/Controllers/Diagnosticos/ DiagnosticoCoordinacionController
+├── Http/Requests/Diagnosticos/  Index, Exportar, Opciones, Programar,
+│                                ActualizarEstadoGeneral, Cancelar
+├── Listeners/                   RecordDiagnosticoAudit
+├── Providers/                   DiagnosticosServiceProvider
+├── Queries/Diagnosticos/        ListDiagnosticosCoordinacion, GetCoordinacionDiagnostico,
+│                                GetOpcionesDiagnosticos, GetWhatsappDiagnostico,
+│                                ExportarDiagnosticosCsv
+├── Rules/                       EstadoGeneralDiagnosticoRule, DiasHabilitadosRule,
+│                                HorarioAgendaRule, IntervaloMinimoRule
+├── Support/                     DiagnosticosModule, DiagnosticosPermission,
+│                                DiagnosticoClock, DiagnosticoParametros,
+│                                DiagnosticoTurnosResolver,
+│                                DiagnosticoEstadoSincronizador,
+│                                EstadoGeneralResultado, WhatsappDiagnosticoLink,
+│                                DiagnosticoAuditAction
+└── routes-diagnosticos.php
+app/Modules/InscripcionesAtenciones/Contracts/
+├── DiagnosticoAtencionContract.php
+├── DiagnosticoAtencionResumen.php
+├── DiagnosticoAtencionPagina.php
+└── EloquentDiagnosticoAtencion.php
+```
+
+### Schema
+
+- `2026_11_30_000100_add_diagnosticos_indexes.php` agrega `turno(atencion_diagnostico_id, fecha, hora_inicio)` y `atencion_diagnostico(sucursal_id, estado_general, fecha_inicio)`.
+- No se crean tablas ni columnas: `atencion_diagnostico.estado_general` ya existía con `CHECK IN ('incompleto','en_proceso','completo','cancelado')`.
+- `turno_profesional` **no se usa**: un turno por profesional con `turno.profesional_id`, igual que 07.2/07.3/07.4.
+- Seeder `DiagnosticoMotivoTurnoSeeder`: agrega el motivo `cancelacion_diagnostico` (no pisa configuraciones existentes).
+- `atencion_diagnostico.estado` se conserva `activa` al cancelar la coordinación; `retirada` sigue siendo la baja de 06.03.
+
+### Estado general
+
+`estado_general` se persiste y se recalcula en la misma transacción del cambio del turno. La regla pura `EstadoGeneralDiagnosticoRule` recibe requisitos, turnos y especialidades por profesional:
+
+| Estado | Regla |
+|---|---|
+| `cancelado` | Solo cancelación manual con motivo; terminal. |
+| `completo` | Todos los puestos requeridos tienen al menos un turno `asistio`. |
+| `en_proceso` | Todos los puestos tienen turno `programado` o `asistio`, pero no todos asistieron. |
+| `incompleto` | Al menos un puesto no tiene turno vigente. `falto`, `cancelado` y `reprogramado` dejan el puesto descubierto. |
+
+- Un puesto se cubre con profesionales distintos que tengan la especialidad requerida; `cantidad_minima` se respeta por especialidad.
+- RF-011 se expone como `faltantes` (`sin_turno`/`sin_asistencia`); el estado general no se cambia solo por una advertencia.
+- Un turno `falto` se muestra con su estado en el puesto y habilita programar un reemplazo, pero no cubre el puesto: el estado general sigue incompleto hasta que exista un turno vigente.
+- `DiagnosticoEstadoSincronizador` se invoca desde `ProgramarTurnoDiagnostico`, `ReprogramarTurno` (07.3), `CancelarTurno` (07.3), `CancelarTurnosMasivo` (07.3), `RegistrarAsistencia` (07.4) y `CorregirAsistencia` (07.4).
+- El cierre manual a `completo` exige todas las asistencias (RF-012). La actualización manual solo acepta el estado calculado; si no coincide, responde 409 con `faltantes`.
+
+### Programación y disponibilidad
+
+- Solo se programa a profesionales ya asociados al diagnóstico por 06.03. 07.05 no crea la asociación (RF-001 se cubre en 06.03).
+- El profesional debe estar activo y asignado a la sucursal (`ProgramacionGuard`), cubrir alguna especialidad requerida y no tener otro turno vigente en el mismo diagnóstico.
+- El turno debe caer dentro de `fecha_inicio..fecha_fin` del diagnóstico.
+- Días habilitados: `agenda.dias_semana_habilitados` (ISO 1–7). Horario: `agenda.horario_apertura`/`agenda.horario_cierre`. Intervalo: `agenda.intervalo_minimo_entre_turnos_minutos`.
+- Solapamiento global por profesional: `ProfessionalScheduleContract::haySolapamiento` (incluye otras sucursales; el mensaje es genérico). Solapamiento de paciente: `TurnoSolapamientoRule`.
+- Duración (RN-010): `ServicioResumen.duracionMinutos` si es > 0; si no, `duracion_sesion_minutos`. El request admite `duracion_minutos` opcional por turno (RF-015 parcial). No se hardcodea 50.
+- Fechas y horas se guardan en la zona local de la agenda (`zona_horaria` para el cálculo y la agenda); el contrato de 03 recibe UTC y lo convierte.
+- No se agrega `version` a `atencion_diagnostico`: la concurrencia de programar/actualizar/cancelar se resuelve con `lockForUpdate` sobre la fila del diagnóstico. La reprogramación y la asistencia siguen usando `turno.version`/`estado_esperado` de 07.3/07.4.
+- La reprogramación de un turno de diagnóstico (07.3) conserva el profesional y fuerza `sala_id=NULL`; el CHECK de origen único no admite sala y diagnóstico en el mismo turno. El modal de 07.3 refleja esa restricción.
+
+### Endpoints
+
+Prefijo **`/api/agenda-turnos/diagnosticos`**:
+
+| Método | Ruta | Action/Query | Permiso |
+|---|---|---|---|
+| GET | `/` | `ListDiagnosticosCoordinacion` | `asignacion.ver` |
+| GET | `/opciones` | `GetOpcionesDiagnosticos` | `asignacion.ver` |
+| GET | `/exportar` | `ExportarDiagnosticosCsv` / PDF 503 | `asignacion.exportar` |
+| GET | `/{id}` | `GetCoordinacionDiagnostico` (audita) | `asignacion.ver` |
+| POST | `/{id}/turnos` | `ProgramarTurnoDiagnostico` | `asignacion.crear` |
+| PATCH | `/{id}/estado-general` | `ActualizarEstadoGeneralDiagnostico` | `diagnostico_agenda.actualizar_estado` |
+| POST | `/{id}/cancelar` | `CancelarDiagnostico` | `diagnostico_agenda.cancelar` |
+| GET | `/{id}/whatsapp` | `GetWhatsappDiagnostico` | `tutor.ver_contacto` |
+
+Acciones reutilizadas por la UI (no reimplementadas): reprogramación de 07.3 y registro/corrección de asistencia de 07.4. No existe `DELETE`.
+
+### Permisos
+
+Seeder `DiagnosticosPermissionSeeder` (marcador `agenda.diagnosticos`). Solo crea los códigos nuevos; reutiliza los de 03.
+
+| Permiso | Superadmin | Administración | Recepción |
+|---|---:|---:|---:|
+| `asignacion.ver` | sí | sí | sí |
+| `asignacion.crear` | sí | sí | sí |
+| `asignacion.exportar` | sí | sí | no |
+| `diagnostico.asignar_profesionales` (06.03) | sí | sí | sí |
+| `diagnostico_agenda.cancelar` | sí | sí | no |
+| `diagnostico_agenda.actualizar_estado` | sí | sí | no |
+| `tutor.ver_contacto` | sí | sí | sí |
+| `turno.reprogramar`, `asistencia.registrar` (07.3/07.4) | sí | sí | según matriz vigente |
+
+El backend revalida permiso, sucursal y estado. Un diagnóstico de otra sucursal responde 404 en el detalle (CA-009); el listado con `sucursal_id` ajeno responde 403.
+
+> **02 no se modifica:** los códigos `diagnostico_agenda.*` se muestran con la etiqueta de fallback de `PermissionCatalog`; `AuditModuleResolver` sigue resolviendo `atencion_diagnostico` como `inscripciones` para la auditoría de consulta. La bitácora del listener usa `modulo='agenda'` explícitamente.
+
+### Contratos
+
+- **`DiagnosticoAtencionContract` (06.03):** `buscar`, `resumen`, `resumenParaActualizar`, `actualizarEstadoGeneral`, `tiposDiagnostico`. Implementación `EloquentDiagnosticoAtencion`; bind en `InscripcionesAtencionesServiceProvider`.
+- **`ProfessionalScheduleContract` (03):** implementación real `EloquentProfessionalSchedule` en Agenda; bind en `ProfesionalesServiceProvider`. Reemplaza el stub; el test de stubs de 03 ahora verifica la implementación real.
+- **`PatientDirectoryContract` / `ProfessionalDirectoryContract` / `BranchDirectoryContract` / `ParameterReaderContract` / `AuditRecorderContract` / `TutorDirectoryContract`:** se consumen sin cambios.
+- **`DiagnosticosPdfExporterContract`:** `UnavailableDiagnosticosPdfExporter` responde 503. No hay botón de PDF.
+- `ProfessionalDiagnosticRequirementsContract` ya estaba implementado por `EloquentProfessionalDiagnosticRequirements`; 07.05 no lo necesita porque usa el snapshot `atencion_diagnostico_requisito` de 06.03.
+
+### Bitácora y auditoría
+
+- `RecordDiagnosticoAudit` es síncrono y fail-closed:
+  - `turno` / `PROGRAMAR_DIAGNOSTICO` (no crítico);
+  - `atencion_diagnostico` / `ACTUALIZAR_ESTADO_GENERAL` (crítico);
+  - `atencion_diagnostico` / `CANCELAR` (crítico).
+- La reprogramación y la asistencia siguen escribiendo su bitácora en 07.3/07.4.
+- El detalle de coordinación se audita con `AuditRecorderContract::registrarConsultaSensible(entidad='atencion_diagnostico', contexto=['recurso'=>'diagnostico_coordinacion'])`; si falla, responde 503 `AUDIT_UNAVAILABLE`. El listado **no** se audita.
+- `AuditModuleResolver` resuelve `atencion_diagnostico` al módulo `inscripciones`; la fila de bitácora del listener usa `modulo='agenda'`. Es el fallback vigente; no se modifica 02.
+- Catálogo `accion_auditada`: `DiagnosticosAccionAuditadaSeeder`.
+
+### WhatsApp
+
+- `WhatsappDiagnosticoLink` construye `wa.me` con el tutor principal (`TutorDirectoryContract`), `TutorPhoneRule` y `whatsapp.prefijo_pais` (si está vacío o no existe, usa `591`).
+- El mensaje lista fechas, horas y profesionales; no incluye tipo de diagnóstico ni datos clínicos. No envía nada.
+- Sin `tutor.ver_contacto` no se devuelve teléfono ni URL. No se escribe el teléfono en bitácora ni logs.
+
+### Cancelación
+
+- `CancelarDiagnostico` exige motivo (3–500 caracteres), bloquea la fila del diagnóstico y cancela solo turnos futuros `programado` reutilizando `CancelarTurno` de 07.3.
+- Los turnos pasados (`asistio`/`falto`), cancelados o reprogramados se conservan.
+- `estado_general=cancelado`; `atencion_diagnostico.estado` sigue `activa`.
+- Motivo de catálogo: `cancelacion_diagnostico` (`requiere_texto=false`, `aplica_cancelar=true`).
+
+### Reporte y exportación
+
+- Filtros: sucursal (alcance), período, tipo, estado general y profesional. `per_page` máximo 50.
+- CSV compatible con Excel: BOM UTF-8, delimitador `;`, escape de fórmulas `=+-@`, una fila por profesional. Límite `MAX_FILAS_EXPORTACION = 5000` (422 si lo supera).
+- La exportación se audita con `registrarExportacion` (filtros seguros y cantidad; no datos de pacientes).
+- PDF: contrato `Unavailable` → 503; sin botón.
+
+### Frontend
+
+- Rutas: `/agenda-turnos/diagnosticos` (listado/reporte) y `/agenda-turnos/diagnosticos/:id` (coordinación), con `permissionGuard` `asignacion.ver` y carga diferida.
+- Sidebar: “Diagnósticos” después de “Agenda”.
+- Botón “Coordinar” en la fila de diagnóstico de 06.03.
+- Listado: filtros, tabla, paginación y exportación CSV. Estado general con `app-badge`; advertencia de puesto faltante.
+- Coordinación: puestos por especialidad, profesionales asignados, turnos, semáforo, advertencias, programar turno, reprogramar (modal 07.3), asistencia (componente 07.4), WhatsApp, actualización manual y cancelación.
+- Se reutilizan `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-modal`, `app-pagination`, `TABLE_IMPORTS`, `app-select-field`, `input[app-input]`, `textarea[app-textarea]`, `InscripcionDateInputComponent` (Flatpickr), `ReprogramarTurnoModalComponent`, `AsistenciaTurnoAccionesComponent` y `ToastService`.
+- Errores: 422 por campo, 409 de regla/estado con mensaje, 403/404/503 con `app-alert`; 503 `AUDIT_UNAVAILABLE` no muestra el detalle. Sin botón de PDF.
+
+### Tests
+
+- Unit: `EstadoGeneralDiagnosticoRuleTest`, `HorarioAgendaRuleTest`, `DiasHabilitadosRuleTest`, `IntervaloMinimoRuleTest`.
+- Feature: `DiagnosticoProgramacionTest`, `DiagnosticoCoordinacionTest`, `DiagnosticoCancelacionExportTest`, `DiagnosticoReprogramacionTest` (CA-001 a CA-010, permisos, alcance, auditoría fail-closed, CSV, PDF 503, WhatsApp, reprogramación 07.3).
+- SQLite y `phpunit.pgsql.xml` (locks, joins y `FOR UPDATE`).
+- `npm run build` y `npx tsc --noEmit`.
+
+### Checklist 07.05
+
+| RF | Estado | Evidencia |
+|---|---|---|
+| 07.05/RF-001 | Cubierto por 06.03; 07.05 lo consume | `CreateDiagnosticoAction`/`UpdateDiagnosticoAction`; la coordinación valida profesionales asociados |
+| 07.05/RF-002 | Completo | `ProgramarTurnoDiagnostico` + modal |
+| 07.05/RF-003 | Completo | `ProfessionalScheduleContract` + `HorarioAgendaRule`, `DiasHabilitadosRule`, `IntervaloMinimoRule` |
+| 07.05/RF-004 | Completo (reutiliza 07.4) | Estado por turno y panel de asistencia |
+| 07.05/RF-005 | Completo | `EstadoGeneralDiagnosticoRule` + sincronizador |
+| 07.05/RF-006 | Completo | `GetCoordinacionDiagnostico` + pantalla |
+| 07.05/RF-007 | Completo | `ActualizarEstadoGeneralDiagnostico`, `CancelarDiagnostico` |
+| 07.05/RF-008 | Completo CSV; PDF 503 | `ExportarDiagnosticosCsv`, `UnavailableDiagnosticosPdfExporter` |
+| 07.05/RF-009 | Completo | `RecordDiagnosticoAudit` + bitácora 07.3/07.4 |
+| 07.05/RF-010 | Completo | `AgendaAccessScope`; detalle 404, listado 403 |
+| 07.05/RF-011 | Completo | `faltantes` de la regla + alertas |
+| 07.05/RF-012 | Completo | `CierreDiagnosticoIncompletoException` |
+| 07.05/RF-013 | Completo (reutiliza 07.3) | `ReprogramarTurnoModalComponent` |
+| 07.05/RF-014 | Completo | `WhatsappDiagnosticoLink` + botón |
+| 07.05/RF-015 | Parcial | Duración por turno (`duracion_minutos`) y default servicio > parámetro; no hay configuración por profesional |
+
+| RN | Estado |
+|---|---|
+| 07.05/RN-001, RN-002 | Completos: requisitos y advertencias |
+| 07.05/RN-003 | Completo: disponibilidad global + agenda |
+| 07.05/RN-004, RN-005 | Completos: regla y cierre |
+| 07.05/RN-006 | Completo: reprogramación 07.3 |
+| 07.05/RN-007 | Completo: bitácora con usuario/fecha/motivo |
+| 07.05/RN-008 | Completo: alcance por sucursal |
+| 07.05/RN-009 | Completo: asignación manual; 07.05 no asigna |
+| 07.05/RN-010 | Completo: servicio > parámetro; RF-015 parcial |
+
+**Pendientes:** PDF de RF-008 (503), límite de exportación como parámetro configurable (hoy constante 5000), duración distinta por profesional (RF-015) y cancelación automática de turnos al retirar un diagnóstico desde 06.03 (`BajaAtencionAction` no toca turnos; queda como TODO). `RT-004` (unicidad de diagnóstico por tipo/período) no tiene RF y no se implementó.
 
 ---
 

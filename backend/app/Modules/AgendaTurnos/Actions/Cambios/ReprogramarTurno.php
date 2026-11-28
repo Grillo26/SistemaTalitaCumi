@@ -10,6 +10,7 @@ use App\Modules\AgendaTurnos\Exceptions\ConflictoDisponibilidadException;
 use App\Modules\AgendaTurnos\Exceptions\TurnoNotFoundException;
 use App\Modules\AgendaTurnos\Models\Turno;
 use App\Modules\AgendaTurnos\Support\AgendaAccessScope;
+use App\Modules\AgendaTurnos\Support\DiagnosticoEstadoSincronizador;
 use App\Modules\AgendaTurnos\Support\Hallazgo;
 use App\Modules\AgendaTurnos\Support\ReprogramacionCalculada;
 use App\Modules\AgendaTurnos\Support\ReprogramacionCalculator;
@@ -31,6 +32,7 @@ final class ReprogramarTurno
         private readonly AgendaAccessScope $access,
         private readonly TurnoLock $lock,
         private readonly ReprogramacionCalculator $calculator,
+        private readonly DiagnosticoEstadoSincronizador $diagnosticos,
     ) {}
 
     /**
@@ -50,6 +52,25 @@ final class ReprogramarTurno
             }
 
             $this->access->assertSucursal($actor, (int) $turno->sucursal_id);
+
+            if ($turno->atencion_diagnostico_id !== null) {
+                // Un turno de diagnóstico conserva su profesional y no lleva
+                // sala: el CHECK de origen único no admite ambos vínculos.
+                $input = new ReprogramacionInput(
+                    fecha: $input->fecha,
+                    horaInicio: $input->horaInicio,
+                    motivoId: $input->motivoId,
+                    motivoTexto: $input->motivoTexto,
+                    estadoEsperado: $input->estadoEsperado,
+                    profesionalProporcionado: true,
+                    profesionalId: $turno->profesional_id === null
+                        ? null
+                        : (int) $turno->profesional_id,
+                    salaProporcionada: true,
+                    salaId: null,
+                    confirmarAdvertencias: $input->confirmarAdvertencias,
+                );
+            }
 
             $profesionalNuevo = $input->profesionalProporcionado
                 ? $input->profesionalId
@@ -113,6 +134,14 @@ final class ReprogramarTurno
                 }
 
                 throw $exception;
+            }
+
+            if ($nuevo->atencion_diagnostico_id !== null) {
+                $this->diagnosticos->sincronizar(
+                    (int) $nuevo->atencion_diagnostico_id,
+                    $actor,
+                    $ip,
+                );
             }
 
             event(new TurnoReprogramado(

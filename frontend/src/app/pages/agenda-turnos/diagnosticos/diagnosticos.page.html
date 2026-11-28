@@ -1,0 +1,164 @@
+<div class="space-y-6">
+  <app-page-breadcrumb pageTitle="Diagnósticos" />
+
+  <app-component-card
+    title="Coordinación de diagnósticos"
+    desc="Diagnósticos con varios profesionales: estado general, turnos y profesionales asignados."
+  >
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Sucursal</label>
+        <app-select-field
+          [options]="sucursalOpciones()"
+          [value]="sucursalId()"
+          ariaLabel="Sucursal del reporte de diagnósticos"
+          (valueChange)="cambiarSucursal($event)"
+        />
+      </div>
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Desde</label>
+        <input app-input type="date" [value]="desde()" (input)="desde.set($any($event.target).value)" />
+      </div>
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Hasta</label>
+        <input app-input type="date" [value]="hasta()" (input)="hasta.set($any($event.target).value)" />
+      </div>
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Tipo</label>
+        <app-select-field
+          [options]="tipoOpciones()"
+          [value]="tipoId()"
+          ariaLabel="Tipo de diagnóstico"
+          (valueChange)="tipoId.set($event)"
+        />
+      </div>
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Estado general</label>
+        <app-select-field
+          [options]="estadoOpciones()"
+          [value]="estadoGeneral()"
+          ariaLabel="Estado general del diagnóstico"
+          (valueChange)="estadoGeneral.set($event)"
+        />
+      </div>
+      <div>
+        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Profesional</label>
+        <app-select-field
+          [options]="profesionalOpciones()"
+          [value]="profesionalId()"
+          ariaLabel="Profesional del diagnóstico"
+          (valueChange)="profesionalId.set($event)"
+        />
+      </div>
+    </div>
+
+    <div class="mt-4 flex flex-wrap items-center justify-between gap-2">
+      <div class="flex flex-wrap gap-2">
+        <button app-button type="button" [disabled]="loading()" (click)="filtrar()">
+          {{ loading() ? 'Consultando…' : 'Consultar' }}
+        </button>
+        <button app-button variant="outline" type="button" [disabled]="loading()" (click)="limpiar()">
+          Limpiar
+        </button>
+      </div>
+      @if (canExportar()) {
+        <button app-button variant="outline" type="button" [disabled]="exporting()" (click)="exportar()">
+          {{ exporting() ? 'Exportando…' : 'Exportar CSV' }}
+        </button>
+      }
+    </div>
+
+    @if (error(); as message) {
+      <app-alert class="mt-4" variant="error" title="No se pudo cargar el reporte" [message]="message" />
+    }
+  </app-component-card>
+
+  <app-component-card title="Diagnósticos del período">
+    <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+      <table app-table class="min-w-full">
+        <thead>
+          <tr>
+            <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Paciente</th>
+            <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Tipo</th>
+            <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Sucursal</th>
+            <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Período</th>
+            <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Estado general</th>
+            <th app-table-cell class="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400">Profesionales</th>
+            <th app-table-cell class="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
+          </tr>
+        </thead>
+        <tbody app-table-body class="divide-y divide-gray-100 dark:divide-gray-800">
+          @if (loading()) {
+            <tr app-table-row>
+              <td app-table-cell colspan="7" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">Cargando diagnósticos…</td>
+            </tr>
+          } @else {
+            @for (row of data(); track row.id) {
+              <tr app-table-row class="transition-colors hover:bg-gray-50/70 dark:hover:bg-white/[0.02]">
+                <td app-table-cell class="px-4 py-4">
+                  <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ row.paciente.nombre_completo }}</p>
+                  @if (row.estado !== 'activa') {
+                    <app-badge color="gray" variant="light" size="sm">{{ row.estado_label }}</app-badge>
+                  }
+                </td>
+                <td app-table-cell class="px-4 py-4">
+                  <p class="text-sm text-gray-700 dark:text-gray-300">{{ row.tipo_diagnostico.nombre }}</p>
+                </td>
+                <td app-table-cell class="px-4 py-4 text-sm text-gray-600 dark:text-gray-300">{{ row.sucursal.nombre }}</td>
+                <td app-table-cell class="whitespace-nowrap px-4 py-4 text-sm text-gray-600 dark:text-gray-300">
+                  {{ fechaLegible(row.fecha_inicio) }} — {{ fechaLegible(row.fecha_fin) }}
+                </td>
+                <td app-table-cell class="whitespace-nowrap px-4 py-4">
+                  <app-badge [color]="estadoColor(row.estado_general)" variant="light" size="sm">
+                    {{ row.estado_general_label }}
+                  </app-badge>
+                  @if (row.faltantes.length > 0) {
+                    <p class="mt-1 text-xs text-warning-600 dark:text-warning-400">{{ row.faltantes[0].mensaje }}</p>
+                  }
+                </td>
+                <td app-table-cell class="px-4 py-4">
+                  @if (row.profesionales.length > 0) {
+                    <div class="flex max-w-sm flex-col gap-1">
+                      @for (profesional of row.profesionales; track profesional.id) {
+                        <div class="flex flex-wrap items-center gap-1">
+                          <span class="text-xs text-gray-700 dark:text-gray-300">{{ profesional.nombre_completo }}</span>
+                          @if (profesional.turno; as turno) {
+                            <app-badge [color]="turno.estado === 'asistio' ? 'success' : turno.estado === 'falto' ? 'error' : 'info'" variant="light" size="sm">
+                              {{ fechaLegible(turno.fecha) }} {{ horaLegible(turno.hora_inicio) }} · {{ turno.estado_label }}
+                            </app-badge>
+                          } @else {
+                            <app-badge color="warning" variant="light" size="sm">Sin turno</app-badge>
+                          }
+                        </div>
+                      }
+                    </div>
+                  } @else {
+                    <app-badge color="warning" variant="light" size="sm">Sin profesionales</app-badge>
+                  }
+                </td>
+                <td app-table-cell class="whitespace-nowrap px-4 py-4 text-end">
+                  <button app-button variant="ghost" size="sm" type="button" (click)="irACoordinar(row.id)">
+                    Coordinar
+                  </button>
+                </td>
+              </tr>
+            } @empty {
+              <tr app-table-row>
+                <td app-table-cell colspan="7" class="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                  No hay diagnósticos para los filtros seleccionados. Probá ampliar el período.
+                </td>
+              </tr>
+            }
+          }
+        </tbody>
+      </table>
+    </div>
+
+    @if (total() > 0) {
+      <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p class="text-sm text-gray-500 dark:text-gray-400">Total: {{ total() }} diagnósticos</p>
+        <app-pagination [currentPage]="page()" [totalPages]="lastPage()" variant="text-icon" (pageChange)="irAPagina($event)" />
+      </div>
+    }
+  </app-component-card>
+</div>

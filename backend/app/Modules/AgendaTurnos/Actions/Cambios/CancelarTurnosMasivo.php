@@ -10,6 +10,7 @@ use App\Modules\AgendaTurnos\Models\Turno;
 use App\Modules\AgendaTurnos\Support\AgendaAccessScope;
 use App\Modules\AgendaTurnos\Support\CancelacionMasivaCalculator;
 use App\Modules\AgendaTurnos\Support\CancelaTurno;
+use App\Modules\AgendaTurnos\Support\DiagnosticoEstadoSincronizador;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -25,6 +26,7 @@ final class CancelarTurnosMasivo
         private readonly AgendaAccessScope $access,
         private readonly CancelacionMasivaCalculator $calculator,
         private readonly CancelaTurno $cancelacion,
+        private readonly DiagnosticoEstadoSincronizador $diagnosticos,
     ) {}
 
     /**
@@ -99,6 +101,7 @@ final class CancelarTurnosMasivo
             $consume = $motivo->descuentaSaldo === true;
             $loteId = (string) Str::uuid();
             $ids = [];
+            $diagnosticos = [];
 
             foreach ($turnos as $turno) {
                 $this->cancelacion->aplicar(
@@ -112,6 +115,10 @@ final class CancelarTurnosMasivo
                 );
 
                 $ids[] = (int) $turno->id;
+
+                if ($turno->atencion_diagnostico_id !== null) {
+                    $diagnosticos[(int) $turno->atencion_diagnostico_id] = true;
+                }
 
                 event(new TurnoCancelado(
                     turnoId: (int) $turno->id,
@@ -129,6 +136,10 @@ final class CancelarTurnosMasivo
                     loteId: $loteId,
                     motivoTexto: $motivoTexto,
                 ));
+            }
+
+            foreach (array_keys($diagnosticos) as $diagnosticoId) {
+                $this->diagnosticos->sincronizar($diagnosticoId, $actor, $ip);
             }
 
             event(new TurnosCanceladosMasivamente(

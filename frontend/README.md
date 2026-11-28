@@ -1784,3 +1784,49 @@ Reutiliza `InscripcionPacienteSearchComponent` y `InscripcionDateInputComponent`
 **Permisos:** `asistencia.ver`, `asistencia.registrar` (Recepción/Administración); `asistencia.corregir_fuera_ventana` y `asistencia.exportar` (Administración); `asistencia.ver_indicadores` y `asistencia.resumen_diario` (Recepción/Administración). El backend revalida permisos, sucursal, estado y ventana.
 
 **Estado:** implementado contra API real. Pendientes: PDF (infraestructura), exportación por paciente (decisión de privacidad), “pasar lista” masivo en sala grupal y validación funcional de la fórmula/período de indicadores.
+
+### 39. Diagnóstico con varios profesionales
+
+**Rutas:** `/agenda-turnos/diagnosticos` (listado/reporte) y `/agenda-turnos/diagnosticos/:id` (coordinación).
+**Entrada de sidebar:** `Diagnósticos` (visible con `asignacion.ver`).
+**Guard:** `permissionGuard` con `asignacion.ver`.
+
+**Archivos:**
+
+- `src/app/pages/agenda-turnos/diagnosticos/diagnosticos.page.ts|html|routes.ts|models.ts|service.ts`
+- `.../diagnostico-coordinacion/diagnostico-coordinacion.page.ts|html`
+- `.../components/programar-turno-diagnostico-modal/`
+- Botón “Coordinar” en `src/app/pages/inscripciones-atenciones/entrevista-diagnostico/entrevista-diagnostico.page.html`.
+
+**API consumida:**
+
+| Método | Endpoint | Acción |
+|---|---|---|
+| GET | `/api/agenda-turnos/diagnosticos` | Listado/reporte con filtros y alcance |
+| GET | `.../opciones` | Sucursales, tipos, profesionales y estados |
+| GET | `.../exportar` | CSV compatible con Excel; PDF 503 |
+| GET | `.../{id}` | Coordinación, puestos, turnos, advertencias y WhatsApp |
+| POST | `.../{id}/turnos` | Programar turno de un profesional |
+| PATCH | `.../{id}/estado-general` | Actualización manual validada |
+| POST | `.../{id}/cancelar` | Cancelar diagnóstico con motivo |
+| GET | `.../{id}/whatsapp` | Enlace `wa.me` (sin envío automático) |
+
+Acciones reutilizadas: `POST /api/agenda-turnos/cambios-turnos/turnos/{id}/reprogramar` (07.3) y `POST /api/agenda-turnos/asistencia/turnos/{id}/registrar|corregir` (07.4).
+
+**Funcionalidad:**
+
+- Listado con filtros de sucursal, período, tipo, estado general y profesional; paginación de 25; exportación CSV solo con `asignacion.exportar`.
+- Tabla con estado general y, por profesional, fecha, hora y estado del turno. Sin resultados sugiere ampliar el período.
+- Coordinación en una sola pantalla: puestos requeridos por especialidad, cobertura, profesionales asignados, turnos, advertencias de puesto faltante, estado general y acciones.
+- Programar turno: modal con profesional (solo disponibles de la sucursal), fecha Flatpickr limitada al período del diagnóstico y hora. La duración se calcula en backend; se puede indicar una duración opcional.
+- Reprogramar: reutiliza `ReprogramarTurnoModalComponent` de 07.3; al completar, recarga la coordinación. Para turnos de diagnóstico el modal conserva el profesional y no permite asignar sala.
+- Asistencia: reutiliza `AsistenciaTurnoAccionesComponent` de 07.4 en un panel expandible por turno.
+- Cancelar: motivo obligatorio, aviso de que se cancelan turnos futuros y se conservan los pasados.
+- Actualizar estado: solo los estados coherentes con la cobertura; 409 muestra los faltantes.
+- WhatsApp: botón solo con `tutor.ver_contacto` y teléfono disponible; abre `wa.me` en otra pestaña, sin envío automático.
+- Errores 422 por campo, 409 de reglas/estado, 403/404/503 con `app-alert`; 503 `AUDIT_UNAVAILABLE` no muestra el detalle. Sin botón de PDF.
+- Reutiliza `app-page-breadcrumb`, `app-component-card`, `app-button`, `app-badge`, `app-alert`, `app-modal`, `app-pagination`, `TABLE_IMPORTS`, `app-select-field`, `input[app-input]`, `textarea[app-textarea]`, `InscripcionDateInputComponent`, `ToastService`, `ReprogramarTurnoModalComponent` y `AsistenciaTurnoAccionesComponent`.
+
+**Permisos:** `asignacion.ver` (listado/coordinación), `asignacion.crear` (programar), `asignacion.exportar` (CSV), `diagnostico_agenda.actualizar_estado` y `diagnostico_agenda.cancelar` (Administración/Superadmin), `tutor.ver_contacto` (WhatsApp). El backend revalida permiso, sucursal y estado.
+
+**Estado:** implementado contra API real. Pendientes: PDF (503), duración distinta por profesional (RF-015 parcial) y cancelación automática al retirar el diagnóstico desde 06.03.

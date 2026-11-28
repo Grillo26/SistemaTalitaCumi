@@ -73,6 +73,9 @@ final class GetTurnoCambio
                 'duracion_minutos' => (int) $turno->duracion_minutos,
                 'estado' => $turno->estado->value,
                 'estado_label' => $turno->estado->label(),
+                'atencion_diagnostico_id' => $turno->atencion_diagnostico_id === null
+                    ? null
+                    : (int) $turno->atencion_diagnostico_id,
                 'turno_origen_id' => $turno->turno_origen_id === null ? null : (int) $turno->turno_origen_id,
                 'paciente' => [
                     'id' => (int) $turno->paciente_id,

@@ -275,6 +275,9 @@
                   <td app-table-cell class="whitespace-nowrap px-4 py-4 text-end">
                     <div class="flex flex-wrap items-center justify-end gap-1">
                       <button app-button variant="ghost" size="sm" type="button" (click)="openDetail('diagnostico', row.id)">{{ texts.view }}</button>
+                      @if (puedeCoordinar()) {
+                        <button app-button variant="ghost" size="sm" type="button" (click)="coordinarDiagnostico(row.id)">Coordinar</button>
+                      }
                       @if (row.can.update) {
                         <button app-button variant="ghost" size="sm" type="button" (click)="openEditDiagnosis(row)">{{ texts.edit }}</button>
                       }

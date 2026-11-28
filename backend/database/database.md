@@ -1578,7 +1578,9 @@ Timestamps: `created_at`, `updated_at`.
 | `estado` | `varchar(20)` |  | `DEFAULT 'activa'`, `CHECK IN ('activa','retirada')` |  |
 | `notas_admin` | `text` | sí |  |  |
 
-Timestamps: `created_at`, `updated_at`.
+Timestamps: `created_at`, `updated_at`. Índice de reporte 07.05: `(sucursal_id, estado_general, fecha_inicio)`.
+
+> **Implementación 07.05:** la migración `2026_11_30_000100_add_diagnosticos_indexes.php` agrega el índice de reporte y `turno(atencion_diagnostico_id, fecha, hora_inicio)`. No se agregan columnas: `estado_general` ya existía con el CHECK de cuatro valores. La vista de coordinación calcula la cobertura con los turnos y persiste `estado_general` en la misma transacción.
 
 #### `atencion_diagnostico_profesional` — Profesionales del diagnóstico
 
@@ -1632,7 +1634,7 @@ Sin `updated_at`.
 | Columna | Tipo | Null | Restricciones | Nota |
 |---|---|---|---|---|
 | `id` | `bigint` |  | `PK identity` |  |
-| `codigo` | `varchar(40)` |  | `UNIQUE` | `enfermedad_paciente`, `ausencia_profesional`, `feriado`, `motivo_familiar`, `otro` |
+| `codigo` | `varchar(40)` |  | `UNIQUE` | `enfermedad_paciente`, `ausencia_profesional`, `feriado`, `motivo_familiar`, `otro`, `cancelacion_diagnostico` |
 | `nombre` | `varchar(120)` |  |  |  |
 | `aplica_reprogramar` | `boolean` |  | `DEFAULT true` |  |
 | `aplica_cancelar` | `boolean` |  | `DEFAULT true` |  |
@@ -1680,7 +1682,7 @@ Sin `updated_at`.
 | `usuario_asistencia_id` | `bigint` | sí | `FK → usuario` |  |
 | `asistencia_registrada_en` | `timestamptz` | sí |  |  |
 
-Índices: `(fecha)`, `(sucursal_id, fecha)`, `(paciente_id)`, `(profesional_id)`, `(estado)`, `(sala_id, fecha)`, `(inscripcion_sala_id)`, `(lote_generacion_id)`, `(sucursal_id, fecha, estado)`, `(motivo_turno_id)`. Único parcial `turno_origen_id` donde no es NULL. CHECK: exactamente uno de `sala_id`, `paquete_sesiones_id` o `atencion_diagnostico_id` no nulo; un turno de sala requiere `sala_id` y no admite paquete/diagnóstico; `consume_saldo` solo con estado `cancelado`. Timestamps: `created_at`, `updated_at`.
+Índices: `(fecha)`, `(sucursal_id, fecha)`, `(paciente_id)`, `(profesional_id)`, `(estado)`, `(sala_id, fecha)`, `(inscripcion_sala_id)`, `(lote_generacion_id)`, `(sucursal_id, fecha, estado)`, `(motivo_turno_id)`, `(atencion_diagnostico_id, fecha, hora_inicio)`. Único parcial `turno_origen_id` donde no es NULL. CHECK: exactamente uno de `sala_id`, `paquete_sesiones_id` o `atencion_diagnostico_id` no nulo; un turno de sala requiere `sala_id` y no admite paquete/diagnóstico; `consume_saldo` solo con estado `cancelado`. Timestamps: `created_at`, `updated_at`.
 
 > **Implementación real 07.1:** la tabla `turno` y el pivote `turno_profesional` ya existen como tablas físicas en la migración `2026_11_26_000600_create_turno_table.php`, con los mismos CHECK e índices de este documento. El submódulo 01 (agenda semanal) solo lee; 7.2 a 7.5 escriben. Las FKs de `usuario_registro_id`/`usuario_asistencia_id` apuntan a `users`, la tabla física real de autenticación. `profesional_id` es nullable («sin asignar») y el estado `reprogramado` también se admite y se muestra.
 

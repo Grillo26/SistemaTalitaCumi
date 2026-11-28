@@ -10,6 +10,7 @@ use App\Modules\AgendaTurnos\Models\Turno;
 use App\Modules\AgendaTurnos\Support\AgendaAccessScope;
 use App\Modules\AgendaTurnos\Support\CancelacionCalculator;
 use App\Modules\AgendaTurnos\Support\CancelaTurno;
+use App\Modules\AgendaTurnos\Support\DiagnosticoEstadoSincronizador;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -22,6 +23,7 @@ final class CancelarTurno
         private readonly AgendaAccessScope $access,
         private readonly CancelacionCalculator $calculator,
         private readonly CancelaTurno $cancelacion,
+        private readonly DiagnosticoEstadoSincronizador $diagnosticos,
     ) {}
 
     /**
@@ -67,6 +69,14 @@ final class CancelarTurno
                 null,
                 false,
             );
+
+            if ($turno->atencion_diagnostico_id !== null) {
+                $this->diagnosticos->sincronizar(
+                    (int) $turno->atencion_diagnostico_id,
+                    $actor,
+                    $ip,
+                );
+            }
 
             event(new TurnoCancelado(
                 turnoId: (int) $turno->id,

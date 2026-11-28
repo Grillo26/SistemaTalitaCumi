@@ -63,6 +63,7 @@ export class ReprogramarTurnoModalComponent {
 
   readonly turno = computed(() => this.detalle()?.turno ?? null);
   readonly esSalaGrupal = computed(() => this.detalle()?.origen?.tipo === 'inscripcion_sala');
+  readonly esDiagnostico = computed(() => this.detalle()?.turno.atencion_diagnostico_id != null);
   readonly motivos = computed<MotivoTurno[]>(() => this.detalle()?.motivos.reprogramar ?? []);
   readonly motivoSeleccionado = computed(
     () => this.motivos().find((motivo) => String(motivo.id) === this.motivoId()) ?? null,
@@ -75,13 +76,19 @@ export class ReprogramarTurnoModalComponent {
       label: profesional.nombre,
     })),
   ]);
-  readonly salaOpciones = computed(() => [
-    ...(this.esSalaGrupal() ? [] : [{ value: 'sin_sala', label: this.texts.sinSala }]),
-    ...(this.detalle()?.salas ?? []).map((sala) => ({
-      value: String(sala.id),
-      label: sala.nombre,
-    })),
-  ]);
+  readonly salaOpciones = computed(() => {
+    if (this.esDiagnostico()) {
+      return [{ value: 'sin_sala', label: this.texts.sinSala }];
+    }
+
+    return [
+      ...(this.esSalaGrupal() ? [] : [{ value: 'sin_sala', label: this.texts.sinSala }]),
+      ...(this.detalle()?.salas ?? []).map((sala) => ({
+        value: String(sala.id),
+        label: sala.nombre,
+      })),
+    ];
+  });
   readonly motivoOpciones = computed(() =>
     this.motivos().map((motivo) => ({ value: String(motivo.id), label: motivo.nombre })),
   );
@@ -137,7 +144,11 @@ export class ReprogramarTurnoModalComponent {
         this.profesionalId.set(
           turno.profesional ? String(turno.profesional.id) : 'sin_asignar',
         );
-        this.salaId.set(turno.sala ? String(turno.sala.id) : 'sin_sala');
+        this.salaId.set(
+          response.data.turno.atencion_diagnostico_id != null
+            ? 'sin_sala'
+            : (turno.sala ? String(turno.sala.id) : 'sin_sala'),
+        );
         this.motivoId.set(
           response.data.motivos.reprogramar[0]
             ? String(response.data.motivos.reprogramar[0].id)

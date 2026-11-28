@@ -73,6 +73,16 @@ export const routes: Routes = [
         title: 'Asistencia | TalitaCumi',
       },
       {
+        path: 'agenda-turnos/diagnosticos',
+        canActivate: [permissionGuard],
+        data: { permission: 'asignacion.ver' },
+        loadChildren: () =>
+          import('./pages/agenda-turnos/diagnosticos/diagnosticos.routes').then(
+            (m) => m.DIAGNOSTICOS_ROUTES,
+          ),
+        title: 'Diagnósticos | TalitaCumi',
+      },
+      {
         path: 'pacientes',
         canActivate: [permissionGuard],
         data: { permissions: ['paciente.ver', 'tutor.ver', 'ficha_ingreso.ver'] },

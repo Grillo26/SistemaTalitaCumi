@@ -89,6 +89,12 @@ export class AppSidebarComponent {
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.25" y="4.75" width="17.5" height="16" rx="2"/><path d="M7.5 2.75v4M16.5 2.75v4M3.25 9.25h17.5"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/></svg>',
     },
     {
+      name: 'Diagnósticos',
+      path: '/agenda-turnos/diagnosticos',
+      permission: 'asignacion.ver',
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3.25h8a2 2 0 0 1 2 2v14.5H6V5.25a2 2 0 0 1 2-2Z"/><path d="M9.5 8h5M9.5 11.5h5"/><path d="m9 16 1.5 1.5L14 14"/></svg>',
+    },
+    {
       name: 'Programación',
       path: '/agenda-turnos/programacion-turnos',
       permission: 'turno.ver',
